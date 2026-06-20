@@ -1,0 +1,17 @@
+# OpenTofu / Terragrunt runtime artifacts
+.terraform/
+.terragrunt-cache/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.tflock
+crash.log
+
+# Local env / secrets
+.env
+*.tfvars.local
+
+# OS / editor noise
+.DS_Store
+
+# Committed lockfile stays tracked — do NOT ignore .terraform.lock.hcl

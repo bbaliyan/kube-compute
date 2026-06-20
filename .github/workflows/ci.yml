@@ -1,0 +1,21 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  tofu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.12.1"
+      - name: Format check
+        run: tofu fmt -check -recursive
+      - name: Validate and test each module
+        run: |
+          for d in modules/*/; do
+            echo "== $d =="
+            ( cd "$d" && tofu init -backend=false && tofu validate && tofu test )
+          done
