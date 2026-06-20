@@ -10,7 +10,7 @@ variable "k8s_version" {
 }
 
 variable "cluster_fqdn" {
-  description = "Optional DNS name for the API/kubeconfig server and an extra TLS SAN. Null = use the node IP only. Provider modules pass this where DNS is managed (e.g. AWS Route53)."
+  description = "Optional DNS name for the API/kubeconfig server and an extra TLS SAN. Null = use the node IP only. This is just a name string; how it resolves (managed DNS, a local resolver, or none) is the caller's concern."
   type        = string
   default     = null
 }
