@@ -15,7 +15,7 @@ locals {
   )
 
   # OS image source: downloaded by this module, or pre-existing file passed in.
-  os_image_file_id = var.os_image_file_id != null ? var.os_image_file_id : one(proxmox_virtual_environment_download_file.os_image[*].id)
+  os_image_file_id = var.os_image_file_id != null ? var.os_image_file_id : one(proxmox_download_file.os_image[*].id)
 }
 
 module "bootstrap" {
@@ -36,7 +36,7 @@ module "bootstrap" {
 # Download OS image to Proxmox iso storage. Skipped when os_image_file_id is provided.
 # The file is renamed to .img — Proxmox rejects .qcow2 as an invalid iso extension.
 # To share one image across clusters, pre-download once and pass os_image_file_id instead.
-resource "proxmox_virtual_environment_download_file" "os_image" {
+resource "proxmox_download_file" "os_image" {
   count = var.os_image_url != null ? 1 : 0
 
   content_type        = "iso"
