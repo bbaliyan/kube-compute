@@ -78,7 +78,7 @@ run "arm64_explicit" {
 }
 
 run "dhcp_ip_from_agent" {
-  command = plan
+  command = apply
   # vm_ip_address omitted → DHCP path; cluster_ip comes from mock agent ipv4_addresses.
   # The 127.0.0.1 loopback entry must be filtered out.
   variables {
