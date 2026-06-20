@@ -34,6 +34,75 @@ write_files:
         registry.k8s.io:
           endpoint: ["${registry_mirror_url}"]
 %{ endif ~}
+%{ if gitops_platform_repo_url != null ~}
+  - path: /etc/kube-node/manifests/00-argocd-helmchart.yaml
+    permissions: "0644"
+    owner: root:root
+    content: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: argocd
+      ---
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: argocd
+        namespace: kube-system
+      spec:
+        repo: https://argoproj.github.io/argo-helm
+        chart: argo-cd
+        targetNamespace: argocd
+        createNamespace: false
+        valuesContent: |-
+          configs:
+            params:
+              server.insecure: "true"
+  - path: /etc/kube-node/manifests/10-platform-app.yaml
+    permissions: "0644"
+    owner: root:root
+    content: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: platform
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: ${gitops_platform_repo_url}
+          targetRevision: ${gitops_platform_revision}
+          path: bootstrap
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: argocd
+        syncPolicy:
+          automated: { prune: true, selfHeal: true }
+          syncOptions: ["CreateNamespace=true"]
+%{ endif ~}
+%{ if gitops_workloads_repo_url != null && gitops_platform_repo_url != null ~}
+  - path: /etc/kube-node/manifests/20-workloads-app.yaml
+    permissions: "0644"
+    owner: root:root
+    content: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: workloads
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: ${gitops_workloads_repo_url}
+          targetRevision: ${gitops_workloads_revision}
+          path: ${gitops_workloads_path}
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: argocd
+        syncPolicy:
+          automated: { prune: true, selfHeal: true }
+          syncOptions: ["CreateNamespace=true"]
+%{ endif ~}
   - path: /usr/local/bin/kube-node-bootstrap.sh
     permissions: "0755"
     owner: root:root
@@ -85,7 +154,16 @@ write_files:
       timeout 300 bash -c 'until kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'
 
       status "stage-6:argo-bootstrap"
-      # (Argo CD body added in a later task; no-op when no gitops repo is set.)
+      %{ if gitops_platform_repo_url != null ~}
+      KC=/etc/rancher/k3s/k3s.yaml
+      kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/00-argocd-helmchart.yaml
+      echo "[bootstrap] waiting for argocd-server to be ready..."
+      timeout 600 bash -c 'until kubectl --kubeconfig '"$KC"' -n argocd rollout status deployment/argocd-server --timeout=30s 2>/dev/null; do sleep 15; done'
+      kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/10-platform-app.yaml
+      %{ if gitops_workloads_repo_url != null ~}
+      kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/20-workloads-app.yaml
+      %{ endif ~}
+      %{ endif ~}
 
       status "stage-7:kubeconfig-publish"
       SERVER="$NODE_IP"; [ -n "$CLUSTER_FQDN" ] && SERVER="$CLUSTER_FQDN"
