@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  # Architecture from instance family prefix (e.g. m7g→arm64, m7i→x86_64).
-  instance_family = split(".", var.instance_type)[0]
-  is_graviton     = can(regex("^(m[0-9]+g|t[0-9]+g|c[0-9]+g|r[0-9]+g|x[0-9]+g|i[0-9]+g|hpc[0-9]+g)", local.instance_family))
-  ami_arch        = local.is_graviton ? "arm64" : "x86_64"
+  # Arch from AWS's own metadata — covers all present and future instance types.
+  ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
 
   effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.al2023[*].id)
 

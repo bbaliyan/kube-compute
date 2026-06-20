@@ -39,7 +39,7 @@ output "aws_region" {
 }
 
 output "node_arch" {
-  description = "CPU architecture derived from instance type."
+  description = "CPU architecture reported by AWS for the instance type (arm64 or x86_64)."
   value       = local.ami_arch
 }
 

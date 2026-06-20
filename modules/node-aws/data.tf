@@ -22,6 +22,12 @@ data "aws_subnet" "selected" {
   id = local.effective_subnet_id
 }
 
+# Authoritative arch lookup: AWS's own API returns supported_architectures for any instance type,
+# past or future. This replaces pattern-matching on the instance type string.
+data "aws_ec2_instance_type" "selected" {
+  instance_type = var.instance_type
+}
+
 # Latest Amazon Linux 2023 for the derived arch — only when no explicit AMI is given.
 data "aws_ami" "al2023" {
   count       = var.os_image_ami_id == null ? 1 : 0
