@@ -57,6 +57,7 @@ write_files:
         valuesContent: |-
           configs:
             params:
+              # Deliberate: TLS terminates upstream (ingress / office network); Argo CD serves plain HTTP behind it.
               server.insecure: "true"
   - path: /etc/kube-node/manifests/10-platform-app.yaml
     permissions: "0644"
@@ -126,7 +127,7 @@ write_files:
       %{ endif ~}
 
       status "stage-2:registry-mirror"
-      # (registry mirror body added in a later task; no-op when no mirror is set.)
+      # No script action needed: the registry mirror config written above (when a mirror is set) is read by K3s at install time in stage-4.
 
       status "stage-3:selinux-prep"
       # RHEL-family: install the k3s SELinux policy so K3s is not blocked.
