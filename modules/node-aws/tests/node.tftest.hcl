@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: Apache-2.0
+mock_provider "aws" {}
+
+run "node_resources" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    k8s_version           = "v1.32.5+k3s1"
+    aws_region            = "eu-west-1"
+    instance_type         = "m7g.large"
+    allowed_ingress_cidrs = ["10.0.0.0/8", "192.168.0.0/16"]
+    subnet_id             = "subnet-abc"
+  }
+
+  assert {
+    condition     = aws_instance.node.metadata_options[0].http_tokens == "required"
+    error_message = "IMDSv2 must be enforced (http_tokens=required)"
+  }
+  assert {
+    condition     = length(aws_instance.node.user_data_base64) > 0
+    error_message = "instance must attach node-bootstrap user-data"
+  }
+  assert {
+    condition     = aws_instance.node.iam_instance_profile == aws_iam_instance_profile.node.name
+    error_message = "instance must use the module instance profile"
+  }
+  assert {
+    condition     = aws_instance.node.root_block_device[0].volume_type == "gp3"
+    error_message = "root volume type must honor the default (gp3)"
+  }
+  assert {
+    condition = contains(concat(
+      [for r in aws_vpc_security_group_ingress_rule.node : r.to_port],
+      [for r in aws_vpc_security_group_ingress_rule.node_extra : r.to_port]
+    ), 6443)
+    error_message = "SG must open the K3s API port 6443 across all CIDRs"
+  }
+  assert {
+    condition = !contains(concat(
+      [for r in aws_vpc_security_group_ingress_rule.node : r.to_port],
+      [for r in aws_vpc_security_group_ingress_rule.node_extra : r.to_port]
+    ), 22)
+    error_message = "SG must NOT open SSH (22) on any CIDR"
+  }
+  assert {
+    condition     = aws_iam_role_policy_attachment.ssm_core.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+    error_message = "IAM role must attach AmazonSSMManagedInstanceCore for the control-plane"
+  }
+}
