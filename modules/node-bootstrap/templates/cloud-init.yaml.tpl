@@ -12,6 +12,28 @@ write_files:
       K8S_VERSION="${k8s_version}"
       CLUSTER_FQDN="${cluster_fqdn == null ? "" : cluster_fqdn}"
 
+%{ if trusted_ca_pem != null ~}
+  - path: /etc/pki/ca-trust/source/anchors/trusted-ca.crt
+    permissions: "0644"
+    owner: root:root
+    encoding: b64
+    content: ${base64encode(trusted_ca_pem)}
+%{ endif ~}
+%{ if registry_mirror_url != null ~}
+  - path: /etc/rancher/k3s/registries.yaml
+    permissions: "0644"
+    owner: root:root
+    content: |
+      mirrors:
+        docker.io:
+          endpoint: ["${registry_mirror_url}"]
+        ghcr.io:
+          endpoint: ["${registry_mirror_url}"]
+        quay.io:
+          endpoint: ["${registry_mirror_url}"]
+        registry.k8s.io:
+          endpoint: ["${registry_mirror_url}"]
+%{ endif ~}
   - path: /usr/local/bin/kube-node-bootstrap.sh
     permissions: "0755"
     owner: root:root
@@ -30,7 +52,9 @@ write_files:
       [ -n "$NODE_IP" ] || { status "FAILED:no-node-ip"; exit 1; }
 
       status "stage-1:os-trust"
-      # (CA trust body added in a later task; no-op when no CA is provided.)
+      %{ if trusted_ca_pem != null ~}
+      update-ca-trust extract
+      %{ endif ~}
 
       status "stage-2:registry-mirror"
       # (registry mirror body added in a later task; no-op when no mirror is set.)
