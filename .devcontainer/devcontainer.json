@@ -1,20 +1,8 @@
 {
-  // kube-node dev container — uses the kube-devenv toolchain image.
-  //
-  // While kube-devenv is not yet published to a registry, this builds from
-  // a sibling checkout (../kube-devenv relative to the kube-node root).
-  // Both repos must be checked out as siblings under the same parent directory.
-  //
-  // Once kube-devenv is published, replace the "build" block with:
-  //   "image": "ghcr.io/bbaliyan/kube-devenv:v0.1.0@sha256:<digest>"
-  // Renovate will keep the digest current.
+  // renovate: datasource=docker depName=ghcr.io/bbaliyan/kube-devenv
+  "image": "ghcr.io/bbaliyan/kube-devenv:0.1.5@sha256:295cb6d26fedbc7487d0265b86c6109638282e51c45d3d4649cf5dda99d65a0c",
   "name": "kube-node",
-  "build": {
-    "context": "../../kube-devenv",
-    "dockerfile": "../../kube-devenv/Dockerfile"
-  },
 
-  // Tasks.json is generated from the image on start; gitignored downstream.
   "postStartCommand": "mkdir -p .vscode && cp /usr/share/kube-devenv/tasks.json .vscode/tasks.json",
   "postCreateCommand": "pre-commit install || true",
 
