@@ -5,7 +5,7 @@ module "bootstrap" {
   source = "../.."
 
   cluster_name              = "render-check"
-  k8s_version               = "v1.32.5+k3s1"
+  k8s_version               = "v1.36.1+k3s1"
   cluster_fqdn              = "api.render-check.example.test"
   trusted_ca_pem            = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
   registry_mirror_url       = "https://harbor.example.test"

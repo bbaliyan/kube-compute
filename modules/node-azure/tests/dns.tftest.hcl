@@ -35,7 +35,7 @@ run "cluster_domain_produces_names" {
   command = plan
   variables {
     cluster_name            = "dns-test"
-    k8s_version             = "v1.32.5+k3s1"
+    k8s_version             = "v1.36.1+k3s1"
     resource_group_name     = "rg-k8s"
     location                = "eastus"
     vnet_name               = "vnet-main"
@@ -69,7 +69,7 @@ run "no_domain_is_ip_only" {
   command = plan
   variables {
     cluster_name          = "dns-test"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"
@@ -99,7 +99,7 @@ run "domain_without_zone_rg_skips_record" {
   # cluster_domain set but dns_zone_resource_group omitted → names produced, no record.
   variables {
     cluster_name          = "dns-test"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"

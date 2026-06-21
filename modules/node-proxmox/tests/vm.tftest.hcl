@@ -18,7 +18,7 @@ run "static_ip_x86" {
   command = plan
   variables {
     cluster_name  = "bharat"
-    k8s_version   = "v1.32.5+k3s1"
+    k8s_version   = "v1.36.1+k3s1"
     proxmox_node  = "pve"
     vm_cores      = 4
     vm_memory_mb  = 8192
@@ -61,7 +61,7 @@ run "arm64_explicit" {
   command = plan
   variables {
     cluster_name  = "arm-lab"
-    k8s_version   = "v1.32.5+k3s1"
+    k8s_version   = "v1.36.1+k3s1"
     proxmox_node  = "pve"
     vm_cores      = 4
     vm_memory_mb  = 8192
@@ -83,7 +83,7 @@ run "dhcp_ip_from_agent" {
   # The 127.0.0.1 loopback entry must be filtered out.
   variables {
     cluster_name = "dhcp-test"
-    k8s_version  = "v1.32.5+k3s1"
+    k8s_version  = "v1.36.1+k3s1"
     proxmox_node = "pve"
     vm_cores     = 2
     vm_memory_mb = 4096
@@ -100,7 +100,7 @@ run "preexisting_image_skips_download" {
   command = plan
   variables {
     cluster_name     = "shared"
-    k8s_version      = "v1.32.5+k3s1"
+    k8s_version      = "v1.36.1+k3s1"
     proxmox_node     = "pve"
     vm_cores         = 4
     vm_memory_mb     = 8192

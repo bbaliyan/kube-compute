@@ -18,7 +18,7 @@ run "cluster_domain_produces_names" {
   command = plan
   variables {
     cluster_name   = "bharat"
-    k8s_version    = "v1.32.5+k3s1"
+    k8s_version    = "v1.36.1+k3s1"
     proxmox_node   = "pve"
     vm_cores       = 4
     vm_memory_mb   = 8192
@@ -42,7 +42,7 @@ run "no_domain_is_ip_only" {
   command = plan
   variables {
     cluster_name  = "bharat"
-    k8s_version   = "v1.32.5+k3s1"
+    k8s_version   = "v1.36.1+k3s1"
     proxmox_node  = "pve"
     vm_cores      = 4
     vm_memory_mb  = 8192

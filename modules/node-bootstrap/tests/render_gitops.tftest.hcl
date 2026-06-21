@@ -3,7 +3,7 @@ run "platform_only" {
   command = plan
   variables {
     cluster_name             = "test1"
-    k8s_version              = "v1.32.5+k3s1"
+    k8s_version              = "v1.36.1+k3s1"
     gitops_platform_repo_url = "https://github.com/example/kube-platform.git"
     gitops_platform_revision = "v1.0.0"
   }
@@ -29,7 +29,7 @@ run "platform_and_workloads" {
   command = plan
   variables {
     cluster_name              = "test1"
-    k8s_version               = "v1.32.5+k3s1"
+    k8s_version               = "v1.36.1+k3s1"
     gitops_platform_repo_url  = "https://github.com/example/kube-platform.git"
     gitops_workloads_repo_url = "https://github.com/example/my-apps.git"
     gitops_workloads_path     = "clusters/home"
@@ -48,7 +48,7 @@ run "no_gitops" {
   command = plan
   variables {
     cluster_name = "test1"
-    k8s_version  = "v1.32.5+k3s1"
+    k8s_version  = "v1.36.1+k3s1"
   }
   assert {
     condition     = !strcontains(nonsensitive(output.cloud_init), "kind: HelmChart")

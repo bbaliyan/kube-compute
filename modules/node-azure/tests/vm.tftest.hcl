@@ -32,7 +32,7 @@ run "static_ip_default_image" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"
@@ -102,7 +102,7 @@ run "arm64_explicit" {
   command = plan
   variables {
     cluster_name          = "arm-lab"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"
@@ -125,7 +125,7 @@ run "dhcp_custom_image" {
   # vm_private_ip omitted → dynamic allocation; cluster_ip comes from mock NIC.
   variables {
     cluster_name          = "dhcp-test"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     resource_group_name   = "rg-k8s"
     location              = "westeurope"
     vnet_name             = "vnet-main"

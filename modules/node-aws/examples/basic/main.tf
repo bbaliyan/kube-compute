@@ -9,7 +9,7 @@ module "cluster" {
   source = "../.."
 
   cluster_name          = "demo"
-  k8s_version           = "v1.32.5+k3s1"
+  k8s_version           = "v1.36.1+k3s1"
   aws_region            = "eu-west-1"
   instance_type         = "m7g.large"
   allowed_ingress_cidrs = ["10.0.0.0/8"]

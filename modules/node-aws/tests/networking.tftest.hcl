@@ -14,7 +14,7 @@ run "explicit_subnet_and_arm64" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
@@ -34,7 +34,7 @@ run "default_vpc_fallback" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
@@ -55,7 +55,7 @@ run "x86_64_derivation" {
   }
   variables {
     cluster_name          = "x86"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     aws_region            = "eu-west-1"
     instance_type         = "m7i.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
@@ -71,7 +71,7 @@ run "explicit_ami_overrides_lookup" {
   command = plan
   variables {
     cluster_name          = "amitest"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
@@ -91,7 +91,7 @@ run "storage_graviton_arm64" {
   command = plan
   variables {
     cluster_name          = "storage"
-    k8s_version           = "v1.32.5+k3s1"
+    k8s_version           = "v1.36.1+k3s1"
     aws_region            = "eu-west-1"
     instance_type         = "im4gn.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]

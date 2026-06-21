@@ -4,7 +4,7 @@ run "core_render" {
 
   variables {
     cluster_name = "test1"
-    k8s_version  = "v1.32.5+k3s1"
+    k8s_version  = "v1.36.1+k3s1"
   }
 
   assert {
@@ -20,7 +20,7 @@ run "core_render" {
     error_message = "kubeconfig-publish stage must be present"
   }
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "INSTALL_K3S_VERSION=\"v1.32.5+k3s1\"")
+    condition     = strcontains(nonsensitive(output.cloud_init), "INSTALL_K3S_VERSION=\"v1.36.1+k3s1\"")
     error_message = "k8s_version must be injected into the K3s install"
   }
 }

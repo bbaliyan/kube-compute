@@ -5,7 +5,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version to install (a K3s release string today, e.g. v1.32.5+k3s1). Neutral name so a future distro hop does not change the interface."
+  description = "K8s distro version to install (a K3s release string today, e.g. v1.36.1+k3s1). Neutral name so a future distro hop does not change the interface."
   type        = string
 }
 

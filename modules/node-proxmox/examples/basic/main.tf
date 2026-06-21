@@ -22,7 +22,7 @@ module "cluster" {
   source = "../.."
 
   cluster_name = "homelab-1"
-  k8s_version  = "v1.32.5+k3s1"
+  k8s_version  = "v1.36.1+k3s1"
   proxmox_node = "pve"
 
   vm_cores     = 4
