@@ -1,0 +1,6 @@
+# Trivy IaC scan suppressions.
+# Each entry must carry an expiry date — no silent forever-suppressions.
+# Format: AVD-XXX-XXXX exp:YYYY-MM-DD reason:<one line>
+#
+# Example:
+# AVD-AWS-0123 exp:2026-12-31 reason:false positive in node-bootstrap vendor_data template

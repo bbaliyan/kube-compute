@@ -1,21 +1,32 @@
 name: CI
+
 on:
   pull_request:
   push:
     branches: [main]
+
 jobs:
   tofu:
     runs-on: ubuntu-latest
+    # renovate: datasource=docker depName=ghcr.io/YOUR_ORG/kube-devenv
+    container: ghcr.io/YOUR_ORG/kube-devenv:v0.1.0
     steps:
       - uses: actions/checkout@v4
-      - uses: opentofu/setup-opentofu@v1
-        with:
-          tofu_version: "1.12.1"
+
       - name: Format check
         run: tofu fmt -check -recursive
+
       - name: Validate and test each module
         run: |
           for d in modules/*/; do
             echo "== $d =="
             ( cd "$d" && tofu init -backend=false && tofu validate && tofu test )
           done
+
+      - name: Trivy IaC scan
+        run: |
+          trivy config \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignorefile .trivyignore \
+            modules/

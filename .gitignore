@@ -14,4 +14,7 @@ crash.log
 # OS / editor noise
 .DS_Store
 
+# devcontainer-generated tasks (copied from kube-devenv image on start)
+.vscode/tasks.json
+
 # Committed lockfile stays tracked — do NOT ignore .terraform.lock.hcl

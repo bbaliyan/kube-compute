@@ -1,0 +1,46 @@
+{
+  // kube-node dev container — uses the kube-devenv toolchain image.
+  //
+  // While kube-devenv is not yet published to a registry, this builds from
+  // a sibling checkout (../kube-devenv relative to the kube-node root).
+  // Both repos must be checked out as siblings under the same parent directory.
+  //
+  // Once kube-devenv is published, replace the "build" block with:
+  //   "image": "ghcr.io/YOUR_ORG/kube-devenv:v0.1.0@sha256:<digest>"
+  // Renovate will keep the digest current.
+  "name": "kube-node",
+  "build": {
+    "context": "../../kube-devenv",
+    "dockerfile": "../../kube-devenv/Dockerfile"
+  },
+
+  // Tasks.json is generated from the image on start; gitignored downstream.
+  "postStartCommand": "mkdir -p .vscode && cp /usr/share/kube-devenv/tasks.json .vscode/tasks.json",
+  "postCreateCommand": "pre-commit install || true",
+
+  "mounts": [
+    "source=${localEnv:HOME}/.aws,target=/root/.aws,type=bind,readonly",
+    "source=${localEnv:HOME}/.kube,target=/root/.kube,type=bind",
+    "source=${localEnv:HOME}/.config/age,target=/root/.config/age,type=bind,readonly",
+    "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"
+  ],
+
+  "remoteEnv": {
+    "SSH_AUTH_SOCK": "/ssh-agent",
+    "PROXMOX_VE_ENDPOINT": "${localEnv:PROXMOX_VE_ENDPOINT}",
+    "PROXMOX_VE_API_TOKEN": "${localEnv:PROXMOX_VE_API_TOKEN}"
+  },
+
+  "remoteUser": "root",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "hashicorp.terraform",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "redhat.vscode-yaml",
+        "mhutchie.git-graph"
+      ]
+    }
+  }
+}
