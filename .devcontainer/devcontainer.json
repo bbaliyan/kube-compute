@@ -6,7 +6,7 @@
   // Both repos must be checked out as siblings under the same parent directory.
   //
   // Once kube-devenv is published, replace the "build" block with:
-  //   "image": "ghcr.io/YOUR_ORG/kube-devenv:v0.1.0@sha256:<digest>"
+  //   "image": "ghcr.io/bbaliyan/kube-devenv:v0.1.0@sha256:<digest>"
   // Renovate will keep the digest current.
   "name": "kube-node",
   "build": {
