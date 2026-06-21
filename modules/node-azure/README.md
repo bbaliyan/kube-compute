@@ -32,7 +32,7 @@ variables (`ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`) or `az login`.
 ## Networking
 
 A node-scoped NSG is created and attached to the VM's NIC. Port 22 (SSH) is explicitly
-denied at priority 50 regardless of `ingress_ports`. `allowed_ingress_cidrs` controls which
+denied at priority 100 regardless of `ingress_ports`. `allowed_ingress_cidrs` controls which
 networks reach the cluster ports. The module does not create VNet, subnet, or route tables.
 
 ## DNS (self-service)

@@ -111,7 +111,7 @@ variable "os_image_urn" {
 }
 
 variable "admin_username" {
-  description = "OS admin user created by Azure at VM provisioning. Azure requires an admin account even when SSH is blocked by NSG. The account is never reachable — port 22 is denied at priority 50."
+  description = "OS admin user created by Azure at VM provisioning. Azure requires an admin account even when SSH is blocked by NSG. The account is never reachable — port 22 is denied at priority 100."
   type        = string
   default     = "azureuser"
 }
@@ -137,7 +137,7 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "ingress_ports" {
-  description = "TCP ports to open inbound from allowed_ingress_cidrs. Port 22 is always denied regardless of this list."
+  description = "TCP ports to open inbound from allowed_ingress_cidrs. Port 22 is always denied regardless of this list. Port order is stable — removing or reordering entries will change rule priorities and trigger rule recreation."
   type        = list(number)
   default     = [80, 443, 6443]
   validation {

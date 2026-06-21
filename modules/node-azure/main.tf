@@ -160,6 +160,6 @@ resource "azurerm_dns_a_record" "wildcard" {
   resource_group_name = var.dns_zone_resource_group
   zone_name           = var.cluster_domain
   ttl                 = 60
-  records             = [azurerm_network_interface.node.private_ip_address]
+  records             = [var.vm_private_ip != null ? var.vm_private_ip : azurerm_network_interface.node.private_ip_address]
   tags                = local.common_tags
 }
