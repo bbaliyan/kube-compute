@@ -80,6 +80,8 @@ resource "proxmox_virtual_environment_vm" "node" {
   on_boot         = true
   started         = true
   stop_on_destroy = true
+  tablet_device   = false        # no USB cursor device needed for a headless server
+  scsi_hardware   = "virtio-scsi-single" # one controller+queue per disk; pairs with iothread=true
 
   lifecycle {
     precondition {
@@ -110,12 +112,15 @@ resource "proxmox_virtual_environment_vm" "node" {
   }
 
   # Import the cloud image into disk storage on VM creation.
-  # import_from (used with content_type="import") uses the PVE 9 import API and avoids
-  # the ipcc ACL-load failure. file_id is used only when os_image_file_id is pre-provided.
+  # Always use import_from (PVE 9 import API path) — never file_id. The file_id path
+  # triggers ipcc_send_rec ACL-load failures with non-root PAM tokens (bpg/proxmox
+  # provider limitation). For a pre-existing image (os_image_file_id), pass the
+  # Proxmox file reference directly to import_from — it accepts both download IDs
+  # and pre-existing content_type=import file references.
   disk {
     datastore_id = var.disk_datastore_id
-    import_from  = var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : null
-    file_id      = var.os_image_file_id
+    import_from  = var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id
+    file_id      = null
     interface    = "scsi0"
     size         = var.vm_disk_gb
     discard      = "on"
@@ -125,6 +130,7 @@ resource "proxmox_virtual_environment_vm" "node" {
   network_device {
     bridge = var.network_bridge
     model  = "virtio"
+    queues = var.vm_cores  # multi-queue: distribute NIC interrupts across all vCPUs
   }
 
   operating_system {
