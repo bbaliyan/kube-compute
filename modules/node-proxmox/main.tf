@@ -32,9 +32,9 @@ module "bootstrap" {
 }
 
 # Download OS image to Proxmox storage as import content type. Skipped when os_image_file_id is provided.
-# content_type="import" uses the PVE 9 import API path (POST .../download-url with content=import),
-# which avoids the ipcc_send_rec / ACL-load failure that occurs with content_type="iso" + file_id
-# when the API token is a non-root PAM token.
+# Uses content_type="import" (PVE 9 import API path) to avoid the ipcc_send_rec ACL-load failure
+# that occurs with content_type="iso" + file_id for non-root PAM tokens.
+# The filename is derived from the URL so multiple clusters sharing the same URL reuse one download.
 resource "proxmox_download_file" "os_image" {
   count = var.os_image_url != null ? 1 : 0
 
@@ -42,7 +42,7 @@ resource "proxmox_download_file" "os_image" {
   datastore_id        = var.iso_datastore_id
   node_name           = var.proxmox_node
   url                 = var.os_image_url
-  file_name           = "${var.cluster_name}.qcow2"
+  file_name           = basename(var.os_image_url)
   overwrite_unmanaged = false
 }
 
