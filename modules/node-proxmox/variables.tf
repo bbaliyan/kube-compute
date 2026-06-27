@@ -142,6 +142,12 @@ variable "os_image_file_id" {
   default     = null
 }
 
+variable "ssh_authorized_keys" {
+  description = "SSH public keys to inject into the default cloud user (rocky) via the Proxmox cloud-init drive. Used for direct VM access without requiring an open SSH port in the node firewall — pair with a jump host or VPN. Null = no keys injected."
+  type        = list(string)
+  default     = null
+}
+
 variable "node_arch" {
   description = "CPU architecture of the VM ('x86_64' or 'arm64'). Declared explicitly — Proxmox has no API equivalent of AWS's aws_ec2_instance_type data source. The operator knows their hardware."
   type        = string

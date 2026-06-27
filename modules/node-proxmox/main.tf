@@ -67,7 +67,22 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
   node_name    = var.proxmox_node
 
   source_raw {
-    data      = "#cloud-config\npackages:\n  - qemu-guest-agent\nruncmd:\n  - systemctl enable --now qemu-guest-agent\n"
+    data = join("\n", concat(
+      [
+        "#cloud-config",
+        "packages:",
+        "  - qemu-guest-agent",
+      ],
+      var.ssh_authorized_keys != null ? concat(
+        ["ssh_authorized_keys:"],
+        [for k in var.ssh_authorized_keys : "  - ${trimspace(k)}"]
+      ) : [],
+      [
+        "runcmd:",
+        "  - systemctl enable --now qemu-guest-agent",
+        "",
+      ]
+    ))
     file_name = "${var.cluster_name}-vendor-data.yaml"
   }
 }
@@ -100,6 +115,7 @@ resource "proxmox_virtual_environment_vm" "node" {
     timeout = "15m"
     trim    = true
   }
+
 
   cpu {
     cores = var.vm_cores
@@ -148,5 +164,6 @@ resource "proxmox_virtual_environment_vm" "node" {
         gateway = var.vm_ip_address != null ? var.vm_gateway : null
       }
     }
+
   }
 }
