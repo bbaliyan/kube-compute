@@ -15,11 +15,14 @@ locals {
   network_rg = coalesce(var.network_resource_group_name, var.resource_group_name)
 
   # OS image: split a user-provided URN (Publisher:Offer:SKU:Version) or default to
-  # Azure Linux 4 gen2. The user must supply an arm64 SKU when node_arch = "arm64".
+  # Ubuntu 26.04 LTS gen2. The user must supply an arm64 SKU when node_arch = "arm64".
+  # Note: the default offer name follows Canonical's LTS convention; verify it is
+  # available in the target region with:
+  #   az vm image list --publisher Canonical --offer ubuntu-26 --all --output table
   image_parts     = var.os_image_urn != null ? split(":", var.os_image_urn) : []
-  image_publisher = var.os_image_urn != null ? local.image_parts[0] : "MicrosoftCBLMariner"
-  image_offer     = var.os_image_urn != null ? local.image_parts[1] : "azure-linux"
-  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "azure-linux-4-gen2"
+  image_publisher = var.os_image_urn != null ? local.image_parts[0] : "Canonical"
+  image_offer     = var.os_image_urn != null ? local.image_parts[1] : "ubuntu-26_04-lts"
+  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "server-gen2"
   image_version   = var.os_image_urn != null ? local.image_parts[3] : "latest"
 
   common_tags = {

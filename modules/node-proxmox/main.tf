@@ -47,6 +47,13 @@ resource "proxmox_download_file" "os_image" {
   url                 = var.os_image_url
   file_name           = coalesce(var.os_image_file_name, basename(var.os_image_url))
   overwrite_unmanaged = false
+
+  lifecycle {
+    precondition {
+      condition     = var.os_image_file_name != null || !endswith(var.os_image_url, ".img")
+      error_message = "os_image_url ends in '.img' which Proxmox rejects as an import extension. Set os_image_file_name to a .qcow2 filename (e.g. 'ubuntu-26.04-server-cloudimg-amd64.qcow2')."
+    }
+  }
 }
 
 # Cloud-init user-data from node-bootstrap, uploaded as a Proxmox snippet.

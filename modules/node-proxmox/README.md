@@ -93,17 +93,20 @@ there is no Proxmox API to derive architecture.
 
 Provide exactly one of:
 
-- `os_image_url` — download Rocky Linux 10 (or any RHEL-family GenericCloud image)
-  to `iso_datastore_id` on first apply. Each cluster downloads its own copy named
-  `<cluster_name>.img`.
+- `os_image_url` + `os_image_file_name` — download the Ubuntu 26.04 LTS cloud image
+  to `iso_datastore_id` on first apply. The file is stored in `local:import/` and
+  survives `terragrunt destroy` — no re-download on subsequent applies.
 - `os_image_file_id` — reference a pre-existing Proxmox file (e.g.
-  `local:iso/rocky10.img`) to share one image across clusters.
+  `local:import/ubuntu-26.04-server-cloudimg-amd64.qcow2`) to share one image across
+  clusters.
 
-Image MUST be RHEL-family: cloud-init uses `dnf` and `update-ca-trust`.
+The tested OS is Ubuntu 26.04 LTS: cloud-init uses `apt-get` and
+`update-ca-certificates`. Supply your own cloud-init template via `cloud_init_template`
+for other distributions — no compatibility guarantee is made.
 
-**Recommended Rocky Linux 10 URL:**
+**Recommended Ubuntu 26.04 LTS URL:**
 ```
-https://dl.rockylinux.org/pub/rocky/10/images/x86_64/Rocky-10-GenericCloud.latest.x86_64.qcow2
+https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img
 ```
 
 ## Out of scope

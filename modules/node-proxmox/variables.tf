@@ -18,7 +18,7 @@ variable "k8s_version" {
 }
 
 variable "trusted_ca_pem" {
-  description = "Optional PEM cert(s) added to the node OS trust store via update-ca-trust. Null = none. Sensitive."
+  description = "Optional PEM cert(s) added to the node OS trust store via update-ca-certificates. Null = none. Sensitive."
   type        = string
   default     = null
   sensitive   = true
@@ -137,7 +137,7 @@ variable "vm_gateway" {
 }
 
 variable "os_image_url" {
-  description = "URL of the OS cloud image to download to Proxmox (e.g. Ubuntu 26.04 LTS GenericCloud qcow2). Must match the cloud_init_template OS family. Set exactly one of os_image_url or os_image_file_id."
+  description = "URL of the OS cloud image to download to Proxmox (e.g. Ubuntu 26.04 LTS cloud image at cloud-images.ubuntu.com). Must match the cloud_init_template OS family. Set exactly one of os_image_url or os_image_file_id."
   type        = string
   default     = null
 }
@@ -149,7 +149,7 @@ variable "os_image_file_name" {
 }
 
 variable "os_image_file_id" {
-  description = "ID of an image already present on Proxmox storage (e.g. 'local:iso/ubuntu-26.04.img'). Use this to share one downloaded image across many clusters instead of downloading per-cluster. Set exactly one of os_image_url or os_image_file_id."
+  description = "ID of an image already present on Proxmox storage (e.g. 'local:import/ubuntu-26.04-server-cloudimg-amd64.qcow2'). Use this to share one downloaded image across many clusters instead of downloading per-cluster. Set exactly one of os_image_url or os_image_file_id."
   type        = string
   default     = null
 }

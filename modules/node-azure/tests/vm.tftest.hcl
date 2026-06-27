@@ -111,7 +111,7 @@ run "arm64_explicit" {
     admin_ssh_public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-node-test"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
     node_arch             = "arm64"
-    os_image_urn          = "MicrosoftCBLMariner:azure-linux:azure-linux-4-arm64:latest"
+    os_image_urn          = "Canonical:ubuntu-26_04-lts:server-gen2:latest"
     vm_private_ip         = "10.0.1.20"
   }
   assert {
@@ -133,7 +133,7 @@ run "dhcp_custom_image" {
     vm_size               = "Standard_D2s_v3"
     admin_ssh_public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-node-test"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
-    os_image_urn          = "MicrosoftCBLMariner:azure-linux:azure-linux-4-gen2:latest"
+    os_image_urn          = "Canonical:ubuntu-26_04-lts:server-gen2:latest"
   }
   assert {
     condition     = output.cluster_ip == "10.0.1.10"

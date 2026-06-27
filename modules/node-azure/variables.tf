@@ -24,7 +24,7 @@ variable "k8s_version" {
 }
 
 variable "trusted_ca_pem" {
-  description = "Optional PEM cert(s) added to the node OS trust store via update-ca-trust. Null = none. Sensitive."
+  description = "Optional PEM cert(s) added to the node OS trust store via update-ca-certificates. Null = none. Sensitive."
   type        = string
   default     = null
   sensitive   = true
@@ -112,7 +112,7 @@ variable "os_disk_type" {
 }
 
 variable "os_image_urn" {
-  description = "Azure Marketplace image URN in Publisher:Offer:SKU:Version format (e.g. 'MicrosoftCBLMariner:azure-linux:azure-linux-4-gen2:latest'). MUST be a RHEL-family image — cloud-init uses dnf and update-ca-trust. Null = Azure Linux 4 gen2 (x86_64). For arm64, pass the arm64 SKU explicitly."
+  description = "Azure Marketplace image URN in Publisher:Offer:SKU:Version format (e.g. 'Canonical:ubuntu-26_04-lts:server-gen2:latest'). The tested OS is Ubuntu 26.04 LTS — cloud-init uses apt-get and update-ca-certificates. Null = Ubuntu 26.04 LTS gen2 (x86_64). For arm64, pass an arm64-compatible SKU explicitly."
   type        = string
   default     = null
 }

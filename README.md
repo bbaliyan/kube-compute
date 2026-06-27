@@ -12,9 +12,9 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 | Module | Purpose |
 |--------|---------|
 | `modules/node-bootstrap` | Provider-agnostic cloud-init renderer (K3s bootstrap). No provider resources. |
-| `modules/node-aws`       | AWS EC2 node (planned). |
-| `modules/node-proxmox`   | Proxmox VM (planned). |
-| `modules/node-azure`     | Azure VM (planned). |
+| `modules/node-aws`       | AWS EC2 node (Amazon Linux 2023). |
+| `modules/node-proxmox`   | Proxmox VM (Ubuntu 26.04 LTS). |
+| `modules/node-azure`     | Azure VM (Ubuntu 26.04 LTS). |
 
 ## License
 

@@ -74,14 +74,16 @@ az vm run-command invoke \
 
 ## OS image
 
-`os_image_urn` defaults to Azure Linux 4 gen2 (`MicrosoftCBLMariner:azure-linux:azure-linux-4-gen2:latest`).
-The image MUST be RHEL-family: cloud-init uses `dnf` and `update-ca-trust`.
+`os_image_urn` defaults to Ubuntu 26.04 LTS gen2
+(`Canonical:ubuntu-26_04-lts:server-gen2:latest`). The tested OS is Ubuntu 26.04 LTS:
+cloud-init uses `apt-get` and `update-ca-certificates`. Supply your own
+`cloud_init_template` for other distributions — no compatibility guarantee is made.
 
-For arm64, set `node_arch = "arm64"` and supply an arm64 SKU explicitly:
+For arm64, set `node_arch = "arm64"` and supply an arm64-compatible SKU:
 ```hcl
 node_arch    = "arm64"
 vm_size      = "Standard_D4ps_v5"
-os_image_urn = "MicrosoftCBLMariner:azure-linux:azure-linux-4-arm64:latest"
+os_image_urn = "Canonical:ubuntu-26_04-lts:server-gen2:latest"
 ```
 
 ## SSH key requirement
