@@ -1,5 +1,5 @@
 #cloud-config
-# K3s node bootstrap — rendered by node-bootstrap. Provider-agnostic.
+# K3s node bootstrap — Amazon Linux 2023.
 # Status is written to a local file and read out-of-band by the control-plane
 # verb-scripts (no inbound port). Stage sequence is fixed; optional stages emit
 # their status line even when their body is skipped.
@@ -58,7 +58,7 @@ write_files:
         valuesContent: |-
           configs:
             params:
-              # Deliberate: TLS terminates upstream (ingress / office network); Argo CD serves plain HTTP behind it.
+              # Deliberate: TLS terminates upstream (ingress / load balancer); Argo CD serves plain HTTP behind it.
               server.insecure: "true"
   - path: /etc/kube-node/manifests/10-platform-app.yaml
     permissions: "0644"
@@ -124,11 +124,6 @@ write_files:
 
       status "stage-0:os-prep"
       dnf update -y
-      . /etc/os-release
-      if [ "$ID" = "rocky" ]; then
-        dnf install -y epel-release
-        dnf config-manager --set-enabled crb
-      fi
 
       status "stage-1:os-trust"
       %{ if trusted_ca_pem != null ~}
@@ -139,33 +134,28 @@ write_files:
       # No script action needed: the registry mirror config written above (when a mirror is set) is read by K3s at install time in stage-4.
 
       status "stage-3:selinux-prep"
-      # RHEL-family: install the k3s SELinux policy so K3s is not blocked.
-      # Best-effort with retry on RPM lock; never hard-fail (per-EL availability varies).
-      if command -v dnf >/dev/null 2>&1; then
-        . /etc/os-release
-        # Rocky Linux does not ship rancher-k3s-common by default. Add it so k3s-selinux
-        # can be pre-installed before the K3s installer runs in stage-4.
-        # K3s installer maps EL9+ (including Rocky 10) to centos/9 — match that here.
-        if [ "$ID" = "rocky" ] && [ ! -f /etc/yum.repos.d/rancher-k3s-common.repo ]; then
-          {
-            echo '[rancher-k3s-common-stable]'
-            echo 'name=Rancher K3s Common (stable)'
-            echo 'baseurl=https://rpm.rancher.io/k3s/stable/common/centos/9/noarch'
-            echo 'enabled=1'
-            echo 'gpgcheck=1'
-            echo 'gpgkey=https://rpm.rancher.io/public.key'
-          } >/etc/yum.repos.d/rancher-k3s-common.repo
-        fi
-        dnf makecache -y || true
-        for a in 1 2 3 4 5; do
-          dnf install -y k3s-selinux && break
-          if [ "$a" = 5 ]; then
-            echo "[bootstrap] WARN: k3s-selinux not installed after retries" >&2
-            break
-          fi
-          sleep 10; pkill -x dnf 2>/dev/null || true; pkill -x rpm 2>/dev/null || true
-        done
+      # Pre-install k3s-selinux so K3s is not blocked by SELinux on first start.
+      # AL2023 maps to centos/9 in the Rancher repo — use that baseurl.
+      # Best-effort with retry on RPM lock; never hard-fail.
+      if [ ! -f /etc/yum.repos.d/rancher-k3s-common.repo ]; then
+        {
+          echo '[rancher-k3s-common-stable]'
+          echo 'name=Rancher K3s Common (stable)'
+          echo 'baseurl=https://rpm.rancher.io/k3s/stable/common/centos/9/noarch'
+          echo 'enabled=1'
+          echo 'gpgcheck=1'
+          echo 'gpgkey=https://rpm.rancher.io/public.key'
+        } >/etc/yum.repos.d/rancher-k3s-common.repo
       fi
+      dnf makecache -y || true
+      for a in 1 2 3 4 5; do
+        dnf install -y k3s-selinux && break
+        if [ "$a" = 5 ]; then
+          echo "[bootstrap] WARN: k3s-selinux not installed after retries" >&2
+          break
+        fi
+        sleep 10; pkill -x dnf 2>/dev/null || true; pkill -x rpm 2>/dev/null || true
+      done
 
       status "stage-4:k8s-install"
       TLS_SANS="--tls-san $NODE_IP"

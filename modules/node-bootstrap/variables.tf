@@ -1,4 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+variable "cloud_init_template" {
+  description = "Absolute path to the cloud-init template to render. Use the bundled templates for AL2023 or Ubuntu 26.04 LTS, or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
+  type        = string
+}
+
 variable "cluster_name" {
   description = "Cluster name. Drives the kubeconfig server SAN and status reporting."
   type        = string

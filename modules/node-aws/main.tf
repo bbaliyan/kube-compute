@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-al2023.yaml.tpl")
+
   # Arch from AWS's own metadata — covers all present and future instance types.
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
 
@@ -24,6 +26,7 @@ locals {
 module "bootstrap" {
   source = "../node-bootstrap"
 
+  cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name
   k8s_version               = var.k8s_version
   cluster_fqdn              = local.cluster_fqdn

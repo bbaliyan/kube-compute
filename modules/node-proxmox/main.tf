@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 locals {
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-ubuntu-2604.yaml.tpl")
+
   # DNS naming — no records are ever created; Proxmox has no managed DNS.
   has_domain    = var.cluster_domain != null
   fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
@@ -19,6 +21,7 @@ locals {
 module "bootstrap" {
   source = "../node-bootstrap"
 
+  cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name
   k8s_version               = var.k8s_version
   trusted_ca_pem            = var.trusted_ca_pem

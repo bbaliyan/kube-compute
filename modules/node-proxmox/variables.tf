@@ -60,6 +60,12 @@ variable "gitops_workloads_path" {
   default     = "apps"
 }
 
+variable "cloud_init_template" {
+  description = "Absolute path to the cloud-init template to render. Defaults to the bundled Ubuntu 26.04 LTS template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+  type        = string
+  default     = null
+}
+
 # ---- Proxmox-specific inputs ----
 
 variable "proxmox_node" {
@@ -131,13 +137,13 @@ variable "vm_gateway" {
 }
 
 variable "os_image_url" {
-  description = "URL of the OS cloud image to download to Proxmox (e.g. Rocky Linux 10 GenericCloud qcow2). MUST be a RHEL-family image — cloud-init uses dnf and update-ca-trust. Set exactly one of os_image_url or os_image_file_id."
+  description = "URL of the OS cloud image to download to Proxmox (e.g. Ubuntu 26.04 LTS GenericCloud qcow2). Must match the cloud_init_template OS family. Set exactly one of os_image_url or os_image_file_id."
   type        = string
   default     = null
 }
 
 variable "os_image_file_id" {
-  description = "ID of an image already present on Proxmox storage (e.g. 'local:iso/rocky10.img'). Use this to share one downloaded image across many clusters instead of downloading per-cluster. Set exactly one of os_image_url or os_image_file_id."
+  description = "ID of an image already present on Proxmox storage (e.g. 'local:iso/ubuntu-26.04.img'). Use this to share one downloaded image across many clusters instead of downloading per-cluster. Set exactly one of os_image_url or os_image_file_id."
   type        = string
   default     = null
 }

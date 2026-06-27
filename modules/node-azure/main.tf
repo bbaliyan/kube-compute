@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 locals {
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-ubuntu-2604.yaml.tpl")
+
   # DNS naming — optional. Creates an Azure DNS wildcard A record only when both
   # cluster_domain and dns_zone_resource_group are provided.
   has_domain    = var.cluster_domain != null
@@ -36,6 +38,7 @@ data "azurerm_subnet" "node" {
 module "bootstrap" {
   source = "../node-bootstrap"
 
+  cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name
   k8s_version               = var.k8s_version
   trusted_ca_pem            = var.trusted_ca_pem

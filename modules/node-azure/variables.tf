@@ -2,6 +2,12 @@
 
 # ---- Common inputs (identical across all provider modules) ----
 
+variable "cloud_init_template" {
+  description = "Absolute path to the cloud-init template to render. Defaults to the bundled Ubuntu 26.04 LTS template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+  type        = string
+  default     = null
+}
+
 variable "cluster_name" {
   description = "Cluster identity. Used in resource names, tags, FQDN, and kubeconfig SAN. Lowercase, starts with a letter."
   type        = string

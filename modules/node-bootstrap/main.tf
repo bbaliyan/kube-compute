@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  cloud_init = templatefile("${path.module}/templates/cloud-init.yaml.tpl", {
+  cloud_init = templatefile(var.cloud_init_template, {
     cluster_name              = var.cluster_name
     k8s_version               = var.k8s_version
     cluster_fqdn              = var.cluster_fqdn

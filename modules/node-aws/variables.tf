@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ---- Common inputs (pass through to node-bootstrap) ----
+variable "cloud_init_template" {
+  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AL2023 template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+  type        = string
+  default     = null
+}
+
 variable "cluster_name" {
   description = "Cluster identity. Used in tags, the FQDN, and the kubeconfig SAN. Lowercase, starts with a letter."
   type        = string
