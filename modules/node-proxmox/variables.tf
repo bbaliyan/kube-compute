@@ -74,7 +74,7 @@ variable "disk_datastore_id" {
 }
 
 variable "iso_datastore_id" {
-  description = "Proxmox storage ID for the OS image download and cloud-init snippet files. Must support 'iso' and 'snippets' content types. In Proxmox UI → Storage → local → Edit → enable Snippets."
+  description = "Proxmox storage ID for the OS image download and cloud-init snippet files. Must support 'iso', 'snippets', and 'import' content types."
   type        = string
   default     = "local"
 }
@@ -110,6 +110,12 @@ variable "vm_cpu_type" {
   description = "QEMU CPU model. 'x86-64-v2-AES' (default) enables live migration between different CPU generations. Use 'host' for maximum performance on a single-node homelab."
   type        = string
   default     = "x86-64-v2-AES"
+}
+
+variable "vm_numa" {
+  description = "Enable NUMA topology. Recommended when vm_cpu_type is 'host' and the physical host has NUMA nodes."
+  type        = bool
+  default     = false
 }
 
 variable "vm_ip_address" {

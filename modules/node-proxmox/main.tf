@@ -14,8 +14,6 @@ locals {
     null
   )
 
-  # OS image source: downloaded by this module, or pre-existing file passed in.
-  os_image_file_id = var.os_image_file_id != null ? var.os_image_file_id : one(proxmox_download_file.os_image[*].id)
 }
 
 module "bootstrap" {
@@ -33,17 +31,18 @@ module "bootstrap" {
   cluster_fqdn              = local.cluster_fqdn
 }
 
-# Download OS image to Proxmox iso storage. Skipped when os_image_file_id is provided.
-# The file is renamed to .img — Proxmox rejects .qcow2 as an invalid iso extension.
-# To share one image across clusters, pre-download once and pass os_image_file_id instead.
+# Download OS image to Proxmox storage as import content type. Skipped when os_image_file_id is provided.
+# content_type="import" uses the PVE 9 import API path (POST .../download-url with content=import),
+# which avoids the ipcc_send_rec / ACL-load failure that occurs with content_type="iso" + file_id
+# when the API token is a non-root PAM token.
 resource "proxmox_download_file" "os_image" {
   count = var.os_image_url != null ? 1 : 0
 
-  content_type        = "iso"
+  content_type        = "import"
   datastore_id        = var.iso_datastore_id
   node_name           = var.proxmox_node
   url                 = var.os_image_url
-  file_name           = "${var.cluster_name}.img"
+  file_name           = "${var.cluster_name}.qcow2"
   overwrite_unmanaged = false
 }
 
@@ -102,6 +101,7 @@ resource "proxmox_virtual_environment_vm" "node" {
 
   cpu {
     cores = var.vm_cores
+    numa  = var.vm_numa
     type  = var.vm_cpu_type
   }
 
@@ -109,10 +109,13 @@ resource "proxmox_virtual_environment_vm" "node" {
     dedicated = var.vm_memory_mb
   }
 
-  # Import the cloud image from iso storage into disk storage on VM creation.
+  # Import the cloud image into disk storage on VM creation.
+  # import_from (used with content_type="import") uses the PVE 9 import API and avoids
+  # the ipcc ACL-load failure. file_id is used only when os_image_file_id is pre-provided.
   disk {
     datastore_id = var.disk_datastore_id
-    file_id      = local.os_image_file_id
+    import_from  = var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : null
+    file_id      = var.os_image_file_id
     interface    = "scsi0"
     size         = var.vm_disk_gb
     discard      = "on"
