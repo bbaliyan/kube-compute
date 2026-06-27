@@ -142,6 +142,12 @@ variable "os_image_url" {
   default     = null
 }
 
+variable "os_image_file_name" {
+  description = "Override for the filename stored on Proxmox when using os_image_url. Required when the URL path does not end in a Proxmox-accepted extension (.qcow2, .iso). Ubuntu cloud images use .img but are QCOW2 format — pass 'ubuntu-26.04-server-cloudimg-amd64.qcow2' here. Null = use the basename of os_image_url."
+  type        = string
+  default     = null
+}
+
 variable "os_image_file_id" {
   description = "ID of an image already present on Proxmox storage (e.g. 'local:iso/ubuntu-26.04.img'). Use this to share one downloaded image across many clusters instead of downloading per-cluster. Set exactly one of os_image_url or os_image_file_id."
   type        = string
@@ -149,7 +155,7 @@ variable "os_image_file_id" {
 }
 
 variable "ssh_authorized_keys" {
-  description = "SSH public keys to inject into the default cloud user (rocky) via the Proxmox cloud-init drive. Used for direct VM access without requiring an open SSH port in the node firewall — pair with a jump host or VPN. Null = no keys injected."
+  description = "SSH public keys to inject into the default cloud user via the Proxmox cloud-init drive. Used for direct VM access without requiring an open SSH port in the node firewall — pair with a jump host or VPN. Null = no keys injected."
   type        = list(string)
   default     = null
 }

@@ -45,7 +45,7 @@ resource "proxmox_download_file" "os_image" {
   datastore_id        = var.iso_datastore_id
   node_name           = var.proxmox_node
   url                 = var.os_image_url
-  file_name           = basename(var.os_image_url)
+  file_name           = coalesce(var.os_image_file_name, basename(var.os_image_url))
   overwrite_unmanaged = false
 }
 
