@@ -121,6 +121,14 @@ write_files:
       NODE_IP="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')"
       [ -n "$NODE_IP" ] || { status "FAILED:no-node-ip"; exit 1; }
 
+      status "stage-0:os-prep"
+      dnf update -y
+      . /etc/os-release
+      if [ "$ID" = "rocky" ]; then
+        dnf install -y epel-release
+        dnf config-manager --set-enabled crb
+      fi
+
       status "stage-1:os-trust"
       %{ if trusted_ca_pem != null ~}
       update-ca-trust extract
@@ -133,6 +141,20 @@ write_files:
       # RHEL-family: install the k3s SELinux policy so K3s is not blocked.
       # Best-effort with retry on RPM lock; never hard-fail (per-EL availability varies).
       if command -v dnf >/dev/null 2>&1; then
+        . /etc/os-release
+        # Rocky Linux does not ship rancher-k3s-common by default. Add it so k3s-selinux
+        # can be pre-installed before the K3s installer runs in stage-4.
+        # K3s installer maps EL9+ (including Rocky 10) to centos/9 — match that here.
+        if [ "$ID" = "rocky" ] && [ ! -f /etc/yum.repos.d/rancher-k3s-common.repo ]; then
+          {
+            echo '[rancher-k3s-common-stable]'
+            echo 'name=Rancher K3s Common (stable)'
+            echo 'baseurl=https://rpm.rancher.io/k3s/stable/common/centos/9/noarch'
+            echo 'enabled=1'
+            echo 'gpgcheck=1'
+            echo 'gpgkey=https://rpm.rancher.io/public.key'
+          } >/etc/yum.repos.d/rancher-k3s-common.repo
+        fi
         dnf makecache -y || true
         for a in 1 2 3 4 5; do
           dnf install -y k3s-selinux && break

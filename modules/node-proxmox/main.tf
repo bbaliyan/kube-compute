@@ -80,6 +80,7 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
       [
         "runcmd:",
         "  - systemctl enable --now qemu-guest-agent",
+        "  - systemctl enable --now serial-getty@ttyS0.service",
         "",
       ]
     ))
@@ -142,6 +143,8 @@ resource "proxmox_virtual_environment_vm" "node" {
     discard      = "on"
     iothread     = true
   }
+
+  serial_device {}
 
   network_device {
     bridge = var.network_bridge
