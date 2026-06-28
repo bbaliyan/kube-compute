@@ -93,18 +93,19 @@ there is no Proxmox API to derive architecture.
 
 Provide exactly one of:
 
-- `os_image_url` + `os_image_file_name` — download the Ubuntu 26.04 LTS cloud image
-  to `iso_datastore_id` on first apply. The file is stored in `local:import/` and
-  survives `terragrunt destroy` — no re-download on subsequent applies.
-- `os_image_file_id` — reference a pre-existing Proxmox file (e.g.
-  `local:import/ubuntu-26.04-server-cloudimg-amd64.qcow2`) to share one image across
-  clusters.
+- `os_image_file_id` — **recommended**. Reference an image already present on Proxmox
+  storage (e.g. `local:import/ubuntu-26.04-server-cloudimg-amd64.qcow2`). The file lives
+  outside Tofu state and survives `terragrunt destroy` — no re-download on subsequent
+  applies. Pre-stage it once on the PVE host with `pvesh create .../download-url`.
+- `os_image_url` + `os_image_file_name` — the module downloads the image on first apply.
+  Convenient for a first run, but the file is deleted on `terragrunt destroy` and
+  re-downloaded (~820 MB) on the next apply.
 
 The tested OS is Ubuntu 26.04 LTS: cloud-init uses `apt-get` and
 `update-ca-certificates`. Supply your own cloud-init template via `cloud_init_template`
 for other distributions — no compatibility guarantee is made.
 
-**Recommended Ubuntu 26.04 LTS URL:**
+**Ubuntu 26.04 LTS image URL:**
 ```
 https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img
 ```
