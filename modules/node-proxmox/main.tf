@@ -81,7 +81,7 @@ resource "proxmox_virtual_environment_file" "network_data" {
             - to: default
               via: ${var.vm_gateway}
           nameservers:
-            addresses: [1.1.1.1, 8.8.8.8]
+            addresses: [${join(", ", var.dns_servers)}]
           dhcp4: false
       EOT
     : <<-EOT

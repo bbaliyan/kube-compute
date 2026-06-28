@@ -136,6 +136,12 @@ variable "vm_gateway" {
   default     = null
 }
 
+variable "dns_servers" {
+  description = "DNS nameserver addresses written into the cloud-init network-config. Defaults to Cloudflare (1.1.1.1) and Google (8.8.8.8). Override with your own resolvers (e.g. Pi-hole, internal DNS)."
+  type        = list(string)
+  default     = ["1.1.1.1", "8.8.8.8"]
+}
+
 variable "os_image_url" {
   description = "URL of the OS cloud image to download to Proxmox (e.g. Ubuntu 26.04 LTS cloud image at cloud-images.ubuntu.com). Must match the cloud_init_template OS family. Set exactly one of os_image_url or os_image_file_id."
   type        = string
