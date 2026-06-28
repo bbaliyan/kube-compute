@@ -2,6 +2,11 @@
 
 # ---- Standardized outputs (identical names across all provider modules) ----
 
+output "cluster_name" {
+  description = "Cluster name passed to the module. Use this to name local kubeconfig files and other client-side resources."
+  value       = var.cluster_name
+}
+
 output "instance_id" {
   description = "Provider-native node ID. For Azure: the full VM resource ID (/subscriptions/.../virtualMachines/<name>)."
   value       = azurerm_linux_virtual_machine.node.id

@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ---- Standardized outputs (identical names across all provider modules) ----
+
+output "cluster_name" {
+  description = "Cluster name passed to the module. Use this to name local kubeconfig files and other client-side resources."
+  value       = var.cluster_name
+}
+
 output "instance_id" {
   description = "Provider-native node ID."
   value       = aws_instance.node.id

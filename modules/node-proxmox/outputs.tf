@@ -2,6 +2,11 @@
 
 # ---- Standardized outputs (identical names across all provider modules) ----
 
+output "cluster_name" {
+  description = "Cluster name passed to the module. Use this to name local kubeconfig files and other client-side resources."
+  value       = var.cluster_name
+}
+
 output "instance_id" {
   description = "Provider-native node ID. For Proxmox: the VM ID as a string."
   value       = tostring(proxmox_virtual_environment_vm.node.vm_id)

@@ -180,8 +180,7 @@ write_files:
       %{ endif ~}
 
       status "stage-7:kubeconfig-publish"
-      SERVER="$NODE_IP"; [ -n "$CLUSTER_FQDN" ] && SERVER="$CLUSTER_FQDN"
-      sed "s|https://127.0.0.1:6443|https://$SERVER:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
+      sed "s|https://127.0.0.1:6443|https://$NODE_IP:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
       chmod 0600 "$KUBECONFIG_OUT"
 
       status "complete"
