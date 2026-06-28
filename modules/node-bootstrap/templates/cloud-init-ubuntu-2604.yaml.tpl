@@ -127,7 +127,7 @@ write_files:
       apt-get update -y
       apt-get upgrade -y
       apt-get install -y ca-certificates curl
-      # br_netfilter and overlay ship as loadable modules on Ubuntu 24.04 but are
+      # br_netfilter and overlay ship as loadable modules on Ubuntu 26.04 but are
       # not auto-loaded. Without br_netfilter, bridge traffic bypasses iptables and
       # pod-to-service routing silently breaks.
       printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/k3s.conf
@@ -177,5 +177,14 @@ write_files:
       status "complete"
       echo "[bootstrap] Bootstrap complete."
 
+bootcmd:
+  # systemd-networkd-wait-online has no timeout by default and waits for ALL managed
+  # interfaces. Proxmox cloud-init generates a network-config that names the interface
+  # "eth0", but Ubuntu 26.04 predictable naming keeps it as "ens18" (rename fails: busy).
+  # networkd then waits forever for "eth0" to become routable, blocking network-online.target
+  # and therefore cloud-final.service (runcmd). Stop and mask it here — the interface IS
+  # already up by this point, so cloud-final can proceed safely.
+  - [ systemctl, stop, systemd-networkd-wait-online.service ]
+  - [ systemctl, mask, systemd-networkd-wait-online.service ]
 runcmd:
   - ["/usr/local/bin/kube-node-bootstrap.sh"]
