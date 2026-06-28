@@ -171,7 +171,8 @@ write_files:
 
       status "stage-7:kubeconfig-publish"
       sed "s|https://127.0.0.1:6443|https://$NODE_IP:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
-      chmod 0600 "$KUBECONFIG_OUT"
+      chmod 0640 "$KUBECONFIG_OUT"
+      chown root:ubuntu "$KUBECONFIG_OUT"
 
       status "complete"
       echo "[bootstrap] Bootstrap complete."
