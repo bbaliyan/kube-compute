@@ -10,7 +10,7 @@ locals {
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
 
   # Static IP is known at plan time. DHCP IP comes from the guest agent after boot.
-  static_ip  = var.vm_ip_address != null
+  static_ip = var.vm_ip_address != null
   cluster_ip = local.static_ip ? split("/", var.vm_ip_address)[0] : try(
     [for ip in flatten(proxmox_virtual_environment_vm.node.ipv4_addresses) : ip if !startswith(ip, "127.")][0],
     null
@@ -18,7 +18,7 @@ locals {
 
   # Netplan v2 network-config. OpenTofu does not allow heredocs in ternary expressions,
   # so both branches are computed as locals and selected below.
-  _dns_list       = join(", ", var.dns_servers)
+  _dns_list           = join(", ", var.dns_servers)
   network_data_static = <<-EOT
     version: 2
     ethernets:
@@ -34,7 +34,7 @@ locals {
           addresses: [${local._dns_list}]
         dhcp4: false
     EOT
-  network_data_dhcp = <<-EOT
+  network_data_dhcp   = <<-EOT
     version: 2
     ethernets:
       primary:
@@ -42,7 +42,7 @@ locals {
           name: "en*"
         dhcp4: true
     EOT
-  network_data = local.static_ip ? local.network_data_static : local.network_data_dhcp
+  network_data        = local.static_ip ? local.network_data_static : local.network_data_dhcp
 }
 
 module "bootstrap" {
@@ -59,6 +59,7 @@ module "bootstrap" {
   gitops_workloads_revision = var.gitops_workloads_revision
   gitops_workloads_path     = var.gitops_workloads_path
   cluster_fqdn              = local.cluster_fqdn
+  cert_mode                 = var.cert_mode
 }
 
 # Download OS image to Proxmox storage as import content type. Skipped when os_image_file_id is provided.
@@ -150,7 +151,7 @@ resource "proxmox_virtual_environment_vm" "node" {
   on_boot         = true
   started         = true
   stop_on_destroy = true
-  tablet_device   = false        # no USB cursor device needed for a headless server
+  tablet_device   = false                # no USB cursor device needed for a headless server
   scsi_hardware   = "virtio-scsi-single" # one controller+queue per disk; pairs with iothread=true
 
   lifecycle {
@@ -203,7 +204,7 @@ resource "proxmox_virtual_environment_vm" "node" {
   network_device {
     bridge = var.network_bridge
     model  = "virtio"
-    queues = var.vm_cores  # multi-queue: distribute NIC interrupts across all vCPUs
+    queues = var.vm_cores # multi-queue: distribute NIC interrupts across all vCPUs
   }
 
   operating_system {

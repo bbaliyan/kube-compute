@@ -134,3 +134,13 @@ variable "root_volume_type" {
   type        = string
   default     = "gp3"
 }
+
+variable "cert_mode" {
+  description = "Certificate issuer mode deployed by kube-platform. Passed through to the cloud-init platform Application parameters. 'selfsigned' (default), 'byo' (consumer provides byo-ca-tls Secret), 'acme' (ACME DNS-01)."
+  type        = string
+  default     = "selfsigned"
+  validation {
+    condition     = contains(["selfsigned", "byo", "acme"], var.cert_mode)
+    error_message = "cert_mode must be 'selfsigned', 'byo', or 'acme'."
+  }
+}

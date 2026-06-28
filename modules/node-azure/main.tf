@@ -52,6 +52,7 @@ module "bootstrap" {
   gitops_workloads_revision = var.gitops_workloads_revision
   gitops_workloads_path     = var.gitops_workloads_path
   cluster_fqdn              = local.cluster_fqdn
+  cert_mode                 = var.cert_mode
 }
 
 # ---- Node-scoped NSG — the module owns only this; VNet/subnet are never touched ----

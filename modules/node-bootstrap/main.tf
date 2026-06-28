@@ -11,5 +11,6 @@ locals {
     gitops_workloads_repo_url = var.gitops_workloads_repo_url
     gitops_workloads_revision = var.gitops_workloads_revision
     gitops_workloads_path     = var.gitops_workloads_path
+    cert_mode                 = var.cert_mode
   })
 }

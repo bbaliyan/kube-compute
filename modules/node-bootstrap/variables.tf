@@ -63,3 +63,13 @@ variable "gitops_workloads_path" {
   type        = string
   default     = "apps"
 }
+
+variable "cert_mode" {
+  description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' needs no dependencies. 'byo' expects a Secret named byo-ca-tls in the cert-manager namespace. 'acme' requires DNS-01 config (separate setup)."
+  type        = string
+  default     = "selfsigned"
+  validation {
+    condition     = contains(["selfsigned", "byo", "acme"], var.cert_mode)
+    error_message = "cert_mode must be 'selfsigned', 'byo', or 'acme'."
+  }
+}
