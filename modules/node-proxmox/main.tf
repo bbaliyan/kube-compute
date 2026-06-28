@@ -16,6 +16,33 @@ locals {
     null
   )
 
+  # Netplan v2 network-config. OpenTofu does not allow heredocs in ternary expressions,
+  # so both branches are computed as locals and selected below.
+  _dns_list       = join(", ", var.dns_servers)
+  network_data_static = <<-EOT
+    version: 2
+    ethernets:
+      primary:
+        match:
+          name: "en*"
+        addresses:
+          - ${var.vm_ip_address}
+        routes:
+          - to: default
+            via: ${var.vm_gateway}
+        nameservers:
+          addresses: [${local._dns_list}]
+        dhcp4: false
+    EOT
+  network_data_dhcp = <<-EOT
+    version: 2
+    ethernets:
+      primary:
+        match:
+          name: "en*"
+        dhcp4: true
+    EOT
+  network_data = local.static_ip ? local.network_data_static : local.network_data_dhcp
 }
 
 module "bootstrap" {
@@ -69,29 +96,7 @@ resource "proxmox_virtual_environment_file" "network_data" {
 
   source_raw {
     file_name = "${var.cluster_name}-network-data.yaml"
-    data      = var.vm_ip_address != null ? <<-EOT
-      version: 2
-      ethernets:
-        primary:
-          match:
-            name: "en*"
-          addresses:
-            - ${var.vm_ip_address}
-          routes:
-            - to: default
-              via: ${var.vm_gateway}
-          nameservers:
-            addresses: [${join(", ", var.dns_servers)}]
-          dhcp4: false
-      EOT
-    : <<-EOT
-      version: 2
-      ethernets:
-        primary:
-          match:
-            name: "en*"
-          dhcp4: true
-      EOT
+    data      = local.network_data
   }
 }
 
