@@ -56,6 +56,45 @@ resource "proxmox_download_file" "os_image" {
   }
 }
 
+# Network-config snippet: uses match-by-name instead of the hard-coded "eth0" that
+# Proxmox generates via ip_config. Ubuntu 26.04 uses predictable interface names
+# (ens18, eno1, etc.). The auto-generated config tries to rename the interface to "eth0"
+# at cloud-init time but fails (interface already up/busy), so the static IP is never
+# applied and the VM falls back to DHCP. Providing our own network-config avoids this.
+resource "proxmox_virtual_environment_file" "network_data" {
+  content_type = "snippets"
+  datastore_id = var.iso_datastore_id
+  node_name    = var.proxmox_node
+  overwrite    = true
+
+  source_raw {
+    file_name = "${var.cluster_name}-network-data.yaml"
+    data      = var.vm_ip_address != null ? <<-EOT
+      version: 2
+      ethernets:
+        primary:
+          match:
+            name: "en*"
+          addresses:
+            - ${var.vm_ip_address}
+          routes:
+            - to: default
+              via: ${var.vm_gateway}
+          nameservers:
+            addresses: [1.1.1.1, 8.8.8.8]
+          dhcp4: false
+      EOT
+    : <<-EOT
+      version: 2
+      ethernets:
+        primary:
+          match:
+            name: "en*"
+          dhcp4: true
+      EOT
+  }
+}
+
 # Cloud-init user-data from node-bootstrap, uploaded as a Proxmox snippet.
 resource "proxmox_virtual_environment_file" "cloud_init" {
   content_type = "snippets"
@@ -167,16 +206,9 @@ resource "proxmox_virtual_environment_vm" "node" {
   }
 
   initialization {
-    datastore_id        = var.disk_datastore_id
-    user_data_file_id   = proxmox_virtual_environment_file.cloud_init.id
-    vendor_data_file_id = proxmox_virtual_environment_file.vendor_data.id
-
-    ip_config {
-      ipv4 {
-        address = var.vm_ip_address != null ? var.vm_ip_address : "dhcp"
-        gateway = var.vm_ip_address != null ? var.vm_gateway : null
-      }
-    }
-
+    datastore_id         = var.disk_datastore_id
+    user_data_file_id    = proxmox_virtual_environment_file.cloud_init.id
+    vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
+    network_data_file_id = proxmox_virtual_environment_file.network_data.id
   }
 }
