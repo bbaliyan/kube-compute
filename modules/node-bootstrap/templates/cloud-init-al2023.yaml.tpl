@@ -75,29 +75,24 @@ write_files:
           repoURL: ${gitops_platform_repo_url}
           targetRevision: ${gitops_platform_revision}
           path: bootstrap
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: argocd
-        syncPolicy:
-          automated: { prune: true, selfHeal: true }
-          syncOptions: ["CreateNamespace=true"]
-%{ endif ~}
-%{ if gitops_workloads_repo_url != null && gitops_platform_repo_url != null ~}
-  - path: /etc/kube-node/manifests/20-workloads-app.yaml
-    permissions: "0644"
-    owner: root:root
-    content: |
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
-        name: workloads
-        namespace: argocd
-      spec:
-        project: default
-        source:
-          repoURL: ${gitops_workloads_repo_url}
-          targetRevision: ${gitops_workloads_revision}
-          path: ${gitops_workloads_path}
+          helm:
+            parameters:
+              - name: platformRepoURL
+                value: "${gitops_platform_repo_url}"
+              - name: platformRevision
+                value: "${gitops_platform_revision}"
+              - name: certMode
+                value: "${cert_mode}"
+              - name: clusterFqdnSuffix
+                value: "${cluster_fqdn == null ? "" : cluster_fqdn}"
+              - name: trustedCaPemB64
+                value: "${trusted_ca_pem == null ? "" : base64encode(trusted_ca_pem)}"
+              - name: workloadsRepoURL
+                value: "${gitops_workloads_repo_url == null ? "" : gitops_workloads_repo_url}"
+              - name: workloadsRevision
+                value: "${gitops_workloads_revision}"
+              - name: workloadsPath
+                value: "${gitops_workloads_path}"
         destination:
           server: https://kubernetes.default.svc
           namespace: argocd
@@ -174,9 +169,6 @@ write_files:
       echo "[bootstrap] waiting for argocd-server to be ready..."
       timeout 600 bash -c 'until kubectl --kubeconfig '"$KC"' -n argocd rollout status deployment/argocd-server --timeout=30s 2>/dev/null; do sleep 15; done'
       kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/10-platform-app.yaml
-      %{ if gitops_workloads_repo_url != null ~}
-      kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/20-workloads-app.yaml
-      %{ endif ~}
       %{ endif ~}
 
       status "stage-7:kubeconfig-publish"
