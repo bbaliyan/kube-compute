@@ -93,6 +93,10 @@ write_files:
                 value: "${gitops_workloads_revision}"
               - name: workloadsPath
                 value: "${gitops_workloads_path}"
+%{ for name, val in platform_extra_helm_parameters ~}
+              - name: ${name}
+                value: "${val}"
+%{ endfor ~}
         destination:
           server: https://kubernetes.default.svc
           namespace: argocd
