@@ -144,3 +144,9 @@ variable "cert_mode" {
     error_message = "cert_mode must be 'selfsigned', 'byo', or 'acme'."
   }
 }
+
+variable "platform_extra_helm_parameters" {
+  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application. See node-bootstrap for full description."
+  type        = map(string)
+  default     = {}
+}

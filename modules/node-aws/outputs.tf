@@ -63,3 +63,8 @@ output "subnet_id" {
   description = "Subnet ID the node launched into (given or default-VPC fallback)."
   value       = local.effective_subnet_id
 }
+
+output "node_iam_role_name" {
+  description = "IAM role name attached to the node. Reference this in your consumer repo to attach additional policies (e.g. SSM Parameter Store read access for ESO)."
+  value       = aws_iam_role.node.name
+}
