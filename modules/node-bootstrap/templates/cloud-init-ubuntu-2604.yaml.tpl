@@ -97,6 +97,9 @@ write_files:
               - name: ${name}
                 value: "${val}"
 %{ endfor ~}
+%{ if platform_helm_values_object != null ~}
+            valuesObject: ${jsonencode(platform_helm_values_object)}
+%{ endif ~}
         destination:
           server: https://kubernetes.default.svc
           namespace: argocd
@@ -166,7 +169,8 @@ write_files:
       %{ endif ~}
 
       status "stage-7:kubeconfig-publish"
-      sed "s|https://127.0.0.1:6443|https://$NODE_IP:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
+      SERVER="$NODE_IP"; [ -n "$CLUSTER_FQDN" ] && SERVER="$CLUSTER_FQDN"
+      sed "s|https://127.0.0.1:6443|https://$SERVER:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
       chmod 0640 "$KUBECONFIG_OUT"
       chown root:ubuntu "$KUBECONFIG_OUT"
 

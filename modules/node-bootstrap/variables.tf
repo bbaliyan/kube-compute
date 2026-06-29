@@ -79,3 +79,9 @@ variable "platform_extra_helm_parameters" {
   type        = map(string)
   default     = {}
 }
+
+variable "platform_helm_values_object" {
+  description = "Arbitrary object forwarded to the platform Application as helm.valuesObject. Use for nested values that cannot be expressed as flat helm.parameters strings."
+  type        = any
+  default     = null
+}

@@ -97,6 +97,9 @@ write_files:
               - name: ${name}
                 value: "${val}"
 %{ endfor ~}
+%{ if platform_helm_values_object != null ~}
+            valuesObject: ${jsonencode(platform_helm_values_object)}
+%{ endif ~}
         destination:
           server: https://kubernetes.default.svc
           namespace: argocd

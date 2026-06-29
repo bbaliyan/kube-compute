@@ -54,6 +54,7 @@ module "bootstrap" {
   cluster_fqdn                   = local.cluster_fqdn
   cert_mode                      = var.cert_mode
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
+  platform_helm_values_object    = var.platform_helm_values_object
 }
 
 # ---- Node-scoped NSG — the module owns only this; VNet/subnet are never touched ----
