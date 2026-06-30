@@ -103,8 +103,14 @@ variable "cluster_domain" {
   default     = null
 }
 
+variable "hosted_zone_name" {
+  description = "Name of the Route53 private hosted zone (e.g. \"example.internal\"). Alternative to hosted_zone_id — the module resolves the ID via a data lookup. Requires cluster_domain to be set."
+  type        = string
+  default     = null
+}
+
 variable "hosted_zone_id" {
-  description = "Optional Route53 hosted zone ID. When set (and cluster_domain is set), the module creates the wildcard A record in that zone. Null = create no record; register DNS yourself using the wildcard_dns_name output."
+  description = "Route53 hosted zone ID. Alternative to hosted_zone_name — pass the literal ID. Requires cluster_domain to be set. Null = create no record; register DNS yourself using the wildcard_dns_name output."
   type        = string
   default     = null
 }

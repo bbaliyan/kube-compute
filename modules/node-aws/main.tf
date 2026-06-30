@@ -14,11 +14,12 @@ locals {
   effective_subnet_id = coalesce(var.subnet_id, try(one(data.aws_subnet.by_name[*].id), null), try(sort(data.aws_subnets.default[0].ids)[0], null))
 
   # DNS is optional and name-only. cluster_fqdn is the API/kubeconfig name; wildcard covers it + services.
-  has_domain    = var.cluster_domain != null
-  fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
-  cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
-  wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
-  create_record = local.has_domain && var.hosted_zone_id != null
+  has_domain            = var.cluster_domain != null
+  fqdn_suffix           = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
+  cluster_fqdn          = local.has_domain ? "api.${local.fqdn_suffix}" : null
+  wildcard_name         = local.has_domain ? "*.${local.fqdn_suffix}" : null
+  effective_zone_id     = coalesce(var.hosted_zone_id, try(data.aws_route53_zone.private[0].zone_id, null))
+  create_record         = local.has_domain && local.effective_zone_id != null
 
   common_tags = {
     ClusterName = var.cluster_name
@@ -154,11 +155,11 @@ resource "aws_instance" "node" {
 }
 
 # ---- Optional DNS convenience: wildcard A record in a Route53 zone you already own ----
-# Created ONLY when both cluster_domain and hosted_zone_id are set. Otherwise the module owns no DNS;
+# Created ONLY when cluster_domain is set and a zone is resolvable (hosted_zone_name or hosted_zone_id). Otherwise the module owns no DNS;
 # register *.${cluster}.${domain} -> cluster_ip in your DNS of choice using the wildcard_dns_name output.
 resource "aws_route53_record" "wildcard" {
   count   = local.create_record ? 1 : 0
-  zone_id = var.hosted_zone_id
+  zone_id = local.effective_zone_id
   name    = local.wildcard_name
   type    = "A"
   ttl     = 60

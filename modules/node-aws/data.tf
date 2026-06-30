@@ -45,6 +45,13 @@ data "aws_subnet" "by_name" {
   }
 }
 
+# Named hosted zone lookup — resolves the zone ID from the zone name.
+data "aws_route53_zone" "private" {
+  count        = var.hosted_zone_name != null ? 1 : 0
+  name         = var.hosted_zone_name
+  private_zone = true
+}
+
 # The subnet the node launches into. Also yields the VPC ID for the module-owned security group.
 data "aws_subnet" "selected" {
   id = local.effective_subnet_id
