@@ -12,11 +12,13 @@ existing networking, or it falls back to the account's default VPC.
 
 ## Networking
 
-`subnet_id` is **optional**:
+Three ways to specify the subnet (pick one):
 
-- Pass a `subnet_id` to launch into your own (or corp) subnet.
-- Omit it and the module uses a subnet in the account's **default VPC** (data lookup — it never
-  *creates* a VPC). Accounts whose default VPC was deleted must pass a `subnet_id`.
+- **`subnet_id`** — pass the literal subnet ID to launch into your own or corp subnet.
+- **`subnet_name`** — pass the Name tag; the module resolves the ID via a data lookup. Pair with
+  `vpc_name` to scope the search when the tag is not globally unique.
+- **Neither** — the module falls back to a subnet in the account's **default VPC** (data lookup;
+  it never *creates* a VPC). Accounts whose default VPC was deleted must pass a subnet.
 
 ## DNS (optional)
 

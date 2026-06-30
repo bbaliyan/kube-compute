@@ -30,6 +30,24 @@ run "explicit_subnet_and_arm64" {
   }
 }
 
+run "subnet_name_lookup" {
+  command = plan
+  override_data {
+    target = data.aws_subnet.by_name[0]
+    values = { id = "subnet-byname456" }
+  }
+  variables {
+    cluster_name          = "byname"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_name           = "my-private-subnet-az1"
+  }
+  assert {
+    condition     = output.subnet_id == "subnet-byname456"
+    error_message = "subnet_name should resolve to the looked-up subnet ID"
+  }
+}
+
 run "default_vpc_fallback" {
   command = plan
   variables {

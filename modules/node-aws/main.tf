@@ -7,8 +7,11 @@ locals {
 
   effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.al2023[*].id)
 
-  # Network handle: the given subnet, else the first subnet in the default VPC. Never creates fabric.
-  effective_subnet_id = coalesce(var.subnet_id, try(sort(data.aws_subnets.default[0].ids)[0], null))
+  # VPC ID resolved from vpc_name, or null when vpc_name is not provided.
+  named_vpc_id = try(data.aws_vpc.named[0].id, null)
+
+  # Network handle: explicit subnet_id → named subnet → first default-VPC subnet. Never creates fabric.
+  effective_subnet_id = coalesce(var.subnet_id, try(one(data.aws_subnet.by_name[*].id), null), try(sort(data.aws_subnets.default[0].ids)[0], null))
 
   # DNS is optional and name-only. cluster_fqdn is the API/kubeconfig name; wildcard covers it + services.
   has_domain    = var.cluster_domain != null

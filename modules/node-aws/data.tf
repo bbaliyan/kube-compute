@@ -2,22 +2,50 @@
 # Read-only AWS lookups. No resource blocks belong in this file, ever.
 # The module NEVER creates network fabric — it only reads a subnet (given or default-VPC).
 
-# Default-VPC fallback: only consulted when no subnet_id is provided.
+# Default-VPC fallback: only consulted when neither subnet_id nor subnet_name is provided.
 data "aws_vpc" "default" {
-  count   = var.subnet_id == null ? 1 : 0
+  count   = (var.subnet_id == null && var.subnet_name == null) ? 1 : 0
   default = true
 }
 
 data "aws_subnets" "default" {
-  count = var.subnet_id == null ? 1 : 0
+  count = (var.subnet_id == null && var.subnet_name == null) ? 1 : 0
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default[0].id]
   }
 }
 
-# The subnet the node launches into (the given subnet_id, or the first default-VPC subnet).
-# Also yields the VPC ID for the module-owned security group.
+# Named-VPC lookup — only consulted when subnet_name is provided with a vpc_name scope.
+data "aws_vpc" "named" {
+  count = (var.subnet_name != null && var.vpc_name != null) ? 1 : 0
+  filter {
+    name   = "tag:Name"
+    values = [var.vpc_name]
+  }
+}
+
+# Named-subnet lookup — resolves the ID from the Name tag.
+# When vpc_name is also provided, a VPC filter narrows the search to avoid ambiguity.
+data "aws_subnet" "by_name" {
+  count = var.subnet_name != null ? 1 : 0
+
+  filter {
+    name   = "tag:Name"
+    values = [var.subnet_name]
+  }
+
+  dynamic "filter" {
+    for_each = local.named_vpc_id != null ? [local.named_vpc_id] : []
+    iterator = vpc_id
+    content {
+      name   = "vpc-id"
+      values = [vpc_id.value]
+    }
+  }
+}
+
+# The subnet the node launches into. Also yields the VPC ID for the module-owned security group.
 data "aws_subnet" "selected" {
   id = local.effective_subnet_id
 }

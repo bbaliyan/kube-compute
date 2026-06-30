@@ -76,8 +76,20 @@ variable "subnet_id" {
   description = <<-EOT
     Subnet to launch the node into. Pass it to plug in your own/corp networking. Null = the module
     falls back to a subnet in the account's DEFAULT VPC (a data lookup; the module never CREATES a
-    VPC/subnet). Accounts whose default VPC was deleted must pass a subnet_id.
+    VPC/subnet). Accounts whose default VPC was deleted must pass a subnet_id or subnet_name.
   EOT
+  type        = string
+  default     = null
+}
+
+variable "vpc_name" {
+  description = "Name tag of the VPC. Pair with subnet_name to scope the subnet lookup to a specific VPC. Ignored when subnet_id is used."
+  type        = string
+  default     = null
+}
+
+variable "subnet_name" {
+  description = "Name tag of the subnet to launch the node into. Alternative to subnet_id — the module resolves the ID via a data lookup. Pair with vpc_name when the name tag is not globally unique."
   type        = string
   default     = null
 }

@@ -14,8 +14,9 @@ module "cluster" {
   instance_type         = "m7g.large"
   allowed_ingress_cidrs = ["10.0.0.0/8"]
 
-  # Networking: omit subnet_id to use the account's default VPC, or pass your own:
-  # subnet_id = "subnet-0123456789abcdef0"
+  # Networking: omit both to use the account's default VPC, or pass one of:
+  # subnet_id   = "subnet-0123456789abcdef0"   # literal ID
+  # subnet_name = "my-private-subnet-az1"      # Name tag (add vpc_name to scope by VPC)
 
   # DNS (optional): set a domain to get a named FQDN + wildcard. Add hosted_zone_id to
   # have the module create the Route53 wildcard record; otherwise register
