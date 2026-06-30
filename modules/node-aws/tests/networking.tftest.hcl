@@ -33,7 +33,7 @@ run "explicit_subnet_and_arm64" {
 run "subnet_name_lookup" {
   command = plan
   override_data {
-    target = data.aws_subnet.by_name[0]
+    target = data.aws_subnet.by_name
     values = { id = "subnet-byname456" }
   }
   variables {
