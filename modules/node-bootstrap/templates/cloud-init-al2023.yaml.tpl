@@ -45,6 +45,15 @@ write_files:
           endpoint: ["${registry_mirror_url}"]
         registry.k8s.io:
           endpoint: ["${registry_mirror_url}"]
+%{ if trusted_ca_pem != null ~}
+      configs:
+        # Pin containerd's TLS verification of the mirror host to the trusted CA.
+        # Belt-and-suspenders alongside the OS trust store: containerd verifies a
+        # privately-signed mirror cert via this CA regardless of system-bundle quirks.
+        "${trimprefix(trimprefix(registry_mirror_url, "https://"), "http://")}":
+          tls:
+            ca_file: /etc/pki/ca-trust/source/anchors/trusted-ca.crt
+%{ endif ~}
 %{ endif ~}
 %{ if gitops_platform_repo_url != null ~}
   - path: /etc/kube-node/manifests/00-argocd-helmchart.yaml
