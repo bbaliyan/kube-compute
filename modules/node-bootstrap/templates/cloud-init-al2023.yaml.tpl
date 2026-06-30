@@ -135,8 +135,11 @@ write_files:
       NODE_IP="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')"
       [ -n "$NODE_IP" ] || { status "FAILED:no-node-ip"; exit 1; }
 
-      status "stage-0:os-prep"
-      dnf update -y
+      # Apply inotify limits before anything else. systemd-sysctl.service runs during
+      # sysinit.target — before cloud-init on first boot — so the sysctl.d file written
+      # by write_files hasn't been read yet. Applying it here ensures the limits are in
+      # place before K3s and containerd start. The sysctl.d file covers stop-start boots.
+      sysctl -p /etc/sysctl.d/99-k3s.conf
 
       status "stage-1:os-trust"
       %{ if trusted_ca_pem != null ~}
@@ -144,12 +147,29 @@ write_files:
       %{ endif ~}
 
       status "stage-2:registry-mirror"
-      # No script action needed: the registry mirror config written above (when a mirror is set) is read by K3s at install time in stage-4.
+      %{ if registry_mirror_url != null ~}
+      # Preflight: verify the mirror is reachable before K3s tries to pull through it.
+      # A 401 is acceptable — it means the registry is up and enforcing auth. We only
+      # fail on connection errors (000) or unexpected codes, which would otherwise surface
+      # later as cryptic image-pull failures. The trusted CA installed in stage-1 lets curl
+      # verify a privately-signed mirror cert.
+      MIRROR_CODE="$(curl --silent --output /dev/null --write-out '%%{http_code}' --max-time 10 "${registry_mirror_url}/v2/" || true)"
+      if [ "$MIRROR_CODE" != "200" ] && [ "$MIRROR_CODE" != "401" ]; then
+        status "FAILED:registry-mirror-unreachable"
+        echo "[bootstrap] registry mirror ${registry_mirror_url} unreachable (HTTP $MIRROR_CODE)" >&2
+        exit 1
+      fi
+      echo "[bootstrap] registry mirror ${registry_mirror_url} reachable (HTTP $MIRROR_CODE)"
+      %{ else ~}
+      # No registry mirror configured — containerd pulls from upstream registries directly.
+      %{ endif ~}
 
       status "stage-3:selinux-prep"
-      # Pre-install k3s-selinux so K3s is not blocked by SELinux on first start.
-      # AL2023 maps to centos/9 in the Rancher repo — use that baseurl.
-      # Best-effort with retry on RPM lock; never hard-fail.
+      # Quiesce packagekit before any RPM operations — it holds /var/lib/rpm/.rpm.lock
+      # intermittently and causes dnf to fail mid-transaction.
+      systemctl stop packagekit 2>/dev/null || true
+      systemctl stop packagekit.socket 2>/dev/null || true
+
       if [ ! -f /etc/yum.repos.d/rancher-k3s-common.repo ]; then
         {
           echo '[rancher-k3s-common-stable]'
@@ -160,21 +180,26 @@ write_files:
           echo 'gpgkey=https://rpm.rancher.io/public.key'
         } >/etc/yum.repos.d/rancher-k3s-common.repo
       fi
-      dnf makecache -y || true
-      for a in 1 2 3 4 5; do
-        dnf install -y k3s-selinux && break
-        if [ "$a" = 5 ]; then
-          echo "[bootstrap] WARN: k3s-selinux not installed after retries" >&2
-          break
-        fi
-        sleep 10; pkill -x dnf 2>/dev/null || true; pkill -x rpm 2>/dev/null || true
+      dnf makecache
+
+      for attempt in 1 2 3; do
+        rpm --import https://rpm.rancher.io/public.key && break
+        [[ $attempt -eq 3 ]] && { status "FAILED:rancher-gpg-import"; exit 1; }
+        echo "[bootstrap] GPG import attempt $attempt failed, retrying in 10s..."
+        sleep 10
       done
 
-      status "stage-3b:sysctl"
-      # systemd-sysctl.service runs during sysinit.target, before cloud-init on
-      # first boot, so the sysctl.d file above hasn't been applied yet. Apply it
-      # now so inotify limits are in place before K3s and containerd start.
-      sysctl -p /etc/sysctl.d/99-k3s.conf
+      for attempt in 1 2 3 4 5; do
+        dnf install -y k3s-selinux && break
+        if [[ $attempt -eq 5 ]]; then
+          status "FAILED:k3s-selinux-preinstall"
+          exit 1
+        fi
+        echo "[bootstrap] k3s-selinux preinstall attempt $attempt failed, retrying in 15s..."
+        sleep 15
+        pkill -x dnf 2>/dev/null || true
+        pkill -x rpm 2>/dev/null || true
+      done
 
       status "stage-4:k8s-install"
       TLS_SANS="--tls-san $NODE_IP"
