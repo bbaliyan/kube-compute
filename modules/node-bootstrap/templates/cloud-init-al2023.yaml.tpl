@@ -13,6 +13,17 @@ write_files:
       K8S_VERSION="${k8s_version}"
       CLUSTER_FQDN="${cluster_fqdn == null ? "" : cluster_fqdn}"
 
+  # inotify limits — written here so systemd-sysctl.service applies them on
+  # every boot (including stop-start cycles) before K3s and containerd start.
+  # K3s + containerd + pods exhaust the kernel default of 128 inotify instances
+  # within ~1 hour, leaving the SSM session-worker unable to open a pty.
+  - path: /etc/sysctl.d/99-k3s.conf
+    permissions: "0644"
+    owner: root:root
+    content: |
+      fs.inotify.max_user_instances=1024
+      fs.inotify.max_user_watches=524288
+
 %{ if trusted_ca_pem != null ~}
   - path: /etc/pki/ca-trust/source/anchors/trusted-ca.crt
     permissions: "0644"
@@ -158,6 +169,12 @@ write_files:
         fi
         sleep 10; pkill -x dnf 2>/dev/null || true; pkill -x rpm 2>/dev/null || true
       done
+
+      status "stage-3b:sysctl"
+      # systemd-sysctl.service runs during sysinit.target, before cloud-init on
+      # first boot, so the sysctl.d file above hasn't been applied yet. Apply it
+      # now so inotify limits are in place before K3s and containerd start.
+      sysctl -p /etc/sysctl.d/99-k3s.conf
 
       status "stage-4:k8s-install"
       TLS_SANS="--tls-san $NODE_IP"
