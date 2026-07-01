@@ -83,6 +83,8 @@ write_files:
                 value: "${gitops_platform_revision}"
               - name: certMode
                 value: "${cert_mode}"
+              - name: clusterName
+                value: "${cluster_name}"
               - name: clusterFqdnSuffix
                 value: "${cluster_fqdn == null ? "" : cluster_fqdn}"
               - name: trustedCaPemB64
@@ -97,9 +99,7 @@ write_files:
               - name: ${name}
                 value: "${val}"
 %{ endfor ~}
-%{ if platform_helm_values_object != null ~}
-            valuesObject: ${jsonencode(platform_helm_values_object)}
-%{ endif ~}
+            valuesObject: ${jsonencode(merge(coalesce(platform_helm_values_object, {}), { extraTags = extra_tags }))}
         destination:
           server: https://kubernetes.default.svc
           namespace: argocd

@@ -85,3 +85,9 @@ variable "platform_helm_values_object" {
   type        = any
   default     = null
 }
+
+variable "extra_tags" {
+  description = "Additional tags forwarded to the platform bootstrap Application (as part of helm.valuesObject.extraTags) so Kubernetes-managed resources, e.g. CSI-provisioned storage, can tag themselves consistently with the node's own tags."
+  type        = map(string)
+  default     = {}
+}

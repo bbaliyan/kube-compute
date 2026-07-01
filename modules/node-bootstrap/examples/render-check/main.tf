@@ -14,6 +14,7 @@ module "bootstrap" {
   gitops_workloads_repo_url = "https://github.com/example/my-apps.git"
   gitops_workloads_revision = "main"
   gitops_workloads_path     = "apps"
+  extra_tags                = { CostCenter = "example" }
 }
 
 output "cloud_init" {

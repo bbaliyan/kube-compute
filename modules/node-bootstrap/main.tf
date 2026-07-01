@@ -14,5 +14,6 @@ locals {
     cert_mode                      = var.cert_mode
     platform_extra_helm_parameters = var.platform_extra_helm_parameters
     platform_helm_values_object    = var.platform_helm_values_object
+    extra_tags                     = var.extra_tags
   })
 }

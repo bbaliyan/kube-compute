@@ -21,10 +21,10 @@ locals {
   effective_zone_id     = coalesce(var.hosted_zone_id, try(data.aws_route53_zone.private[0].zone_id, null))
   create_record         = local.has_domain && local.effective_zone_id != null
 
-  common_tags = {
+  common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-node"
-  }
+  })
 }
 
 module "bootstrap" {
@@ -44,6 +44,7 @@ module "bootstrap" {
   cert_mode                      = var.cert_mode
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
   platform_helm_values_object    = var.platform_helm_values_object
+  extra_tags                     = var.extra_tags
 }
 
 # ---- Module-owned security group (NOT fabric) ----

@@ -174,3 +174,9 @@ variable "platform_helm_values_object" {
   type        = any
   default     = null
 }
+
+variable "extra_tags" {
+  description = "Additional tags applied to every AWS resource this module creates (EC2 instance, root EBS volume, security group, IAM role), and forwarded to node-bootstrap so platform-managed resources (e.g. CSI-provisioned storage) can tag themselves consistently."
+  type        = map(string)
+  default     = {}
+}
