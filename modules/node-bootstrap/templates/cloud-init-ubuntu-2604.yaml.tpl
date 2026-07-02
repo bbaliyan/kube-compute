@@ -153,7 +153,7 @@ write_files:
       TLS_SANS="--tls-san $NODE_IP"
       [ -n "$CLUSTER_FQDN" ] && TLS_SANS="$TLS_SANS --tls-san $CLUSTER_FQDN"
       export INSTALL_K3S_VERSION="${k8s_version}"
-      export INSTALL_K3S_EXEC="server --secrets-encryption --disable traefik --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644"
+      export INSTALL_K3S_EXEC="server --secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644"
       curl -sfL https://get.k3s.io | sh -
 
       status "stage-5:k8s-wait"
