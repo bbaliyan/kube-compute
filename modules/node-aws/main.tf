@@ -158,16 +158,22 @@ resource "aws_instance" "node" {
   # volumes) delete-on-termination right before the instance itself is
   # destroyed, so AWS deletes them as part of termination — no dependency on
   # the cluster's API server, kubectl, or SSM being reachable at destroy time.
+  #
+  # Destroy-time provisioners may only reference `self` (OpenTofu/Terraform
+  # rejects var./resource references here to avoid destroy-order cycles) —
+  # region is derived from self.availability_zone since var.aws_region isn't
+  # allowed.
   provisioner "local-exec" {
     when       = destroy
     on_failure = continue
     command    = <<-EOT
-      MAPPINGS=$(aws ec2 describe-volumes --region ${var.aws_region} \
+      REGION="${substr(self.availability_zone, 0, length(self.availability_zone) - 1)}"
+      MAPPINGS=$(aws ec2 describe-volumes --region "$REGION" \
         --filters Name=attachment.instance-id,Values=${self.id} \
         --query 'Volumes[].Attachments[0].{DeviceName:Device,Ebs:{DeleteOnTermination:`true`}}' \
         --output json)
       if [ -n "$MAPPINGS" ] && [ "$MAPPINGS" != "[]" ]; then
-        aws ec2 modify-instance-attribute --region ${var.aws_region} \
+        aws ec2 modify-instance-attribute --region "$REGION" \
           --instance-id ${self.id} --block-device-mappings "$MAPPINGS"
       fi
     EOT
