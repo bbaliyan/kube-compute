@@ -154,6 +154,25 @@ resource "aws_instance" "node" {
 
   tags = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}" })
 
+  # Marks every currently-attached EBS volume (root + any CSI-provisioned data
+  # volumes) delete-on-termination right before the instance itself is
+  # destroyed, so AWS deletes them as part of termination — no dependency on
+  # the cluster's API server, kubectl, or SSM being reachable at destroy time.
+  provisioner "local-exec" {
+    when       = destroy
+    on_failure = continue
+    command    = <<-EOT
+      MAPPINGS=$(aws ec2 describe-volumes --region ${var.aws_region} \
+        --filters Name=attachment.instance-id,Values=${self.id} \
+        --query 'Volumes[].Attachments[0].{DeviceName:Device,Ebs:{DeleteOnTermination:`true`}}' \
+        --output json)
+      if [ -n "$MAPPINGS" ] && [ "$MAPPINGS" != "[]" ]; then
+        aws ec2 modify-instance-attribute --region ${var.aws_region} \
+          --instance-id ${self.id} --block-device-mappings "$MAPPINGS"
+      fi
+    EOT
+  }
+
   lifecycle {
     # Don't replace on AL2023 AMI patch drift; remove to deliberately upgrade.
     ignore_changes = [ami]
