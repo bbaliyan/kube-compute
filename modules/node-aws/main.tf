@@ -72,6 +72,7 @@ resource "aws_vpc_security_group_ingress_rule" "node" {
   to_port           = each.value
   # One rule per port spanning the first allowed CIDR; remaining CIDRs handled below.
   cidr_ipv4 = var.allowed_ingress_cidrs[0]
+  tags      = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-ingress-${each.value}" })
 }
 
 # Additional CIDRs beyond the first, per port.
@@ -87,6 +88,7 @@ resource "aws_vpc_security_group_ingress_rule" "node_extra" {
   from_port         = each.value.port
   to_port           = each.value.port
   cidr_ipv4         = each.value.cidr
+  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-ingress-${each.value.port}" })
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_all" {
@@ -94,6 +96,7 @@ resource "aws_vpc_security_group_egress_rule" "node_all" {
   description       = "all egress"
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
+  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-egress-all" })
 }
 
 # ---- IAM: SSM-managed instance for the control-plane (send-command/session) ----
