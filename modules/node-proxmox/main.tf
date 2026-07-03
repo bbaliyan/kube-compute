@@ -199,6 +199,7 @@ resource "proxmox_virtual_environment_vm" "node" {
     size         = var.vm_disk_gb
     discard      = "on"
     iothread     = true
+    ssd          = true # expose as non-rotational: guest skips HDD readahead heuristics, enables TRIM
   }
 
   serial_device {}
