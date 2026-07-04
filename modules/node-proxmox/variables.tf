@@ -124,6 +124,18 @@ variable "vm_numa" {
   default     = false
 }
 
+variable "vm_hotplug" {
+  description = "Comma-separated Proxmox hotplug feature list (subset of \"disk,network,usb,memory,cpu\"). null keeps the Proxmox default (network,disk,usb). Enabling \"memory\" requires vm_numa = true; hot-added memory is onlined automatically by the Ubuntu kernel. Enabling \"cpu\" only takes effect when vm_cpu_hotplugged > 0."
+  type        = string
+  default     = null
+}
+
+variable "vm_cpu_hotplugged" {
+  description = "Number of hotplugged vCPUs (Proxmox 'vcpus'). 0 (default) disables CPU hotplug: all vm_cores are online at boot and changing vm_cores reboots the VM on apply. When > 0, vm_cores is the ceiling, this value is the online vCPU count, and changing it applies live without a reboot (requires vm_hotplug to include \"cpu\")."
+  type        = number
+  default     = 0
+}
+
 variable "vm_ip_address" {
   description = "Static IPv4 address in CIDR notation (e.g. '192.168.1.10/24'). Null = DHCP. Static IP is strongly recommended: DHCP makes the cluster_ip output unavailable at plan time and makes DNS unreliable across VM restarts."
   type        = string

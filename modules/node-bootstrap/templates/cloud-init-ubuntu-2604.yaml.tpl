@@ -13,6 +13,16 @@ write_files:
       K8S_VERSION="${k8s_version}"
       CLUSTER_FQDN="${cluster_fqdn == null ? "" : cluster_fqdn}"
 
+  # Bring hot-added vCPUs online. Ubuntu's stock 40-vm-hotadd.rules is gated to
+  # Hyper-V/Xen guests, so KVM-based hosts need this rule for CPU hotplug to be
+  # usable. Hot-added memory needs no rule: the kernel onlines it automatically
+  # (memory_hotplug.online_policy defaults to auto-online on Ubuntu).
+  - path: /etc/udev/rules.d/80-hotplug-cpu-online.rules
+    permissions: "0644"
+    owner: root:root
+    content: |
+      SUBSYSTEM=="cpu", ACTION=="add", TEST=="online", ATTR{online}!="1", ATTR{online}="1"
+
 %{ if trusted_ca_pem != null ~}
   - path: /usr/local/share/ca-certificates/trusted-ca.crt
     permissions: "0644"

@@ -155,6 +155,7 @@ resource "proxmox_virtual_environment_vm" "node" {
   stop_on_destroy = true
   tablet_device   = false                # no USB cursor device needed for a headless server
   scsi_hardware   = "virtio-scsi-single" # one controller+queue per disk; pairs with iothread=true
+  hotplug         = var.vm_hotplug
 
   lifecycle {
     precondition {
@@ -164,6 +165,14 @@ resource "proxmox_virtual_environment_vm" "node" {
     precondition {
       condition     = var.vm_ip_address == null || var.vm_gateway != null
       error_message = "vm_gateway is required when vm_ip_address is set."
+    }
+    precondition {
+      condition     = var.vm_cpu_hotplugged <= var.vm_cores
+      error_message = "vm_cpu_hotplugged must not exceed vm_cores (vm_cores is the hotplug ceiling)."
+    }
+    precondition {
+      condition     = var.vm_hotplug == null || !strcontains(var.vm_hotplug, "memory") || var.vm_numa
+      error_message = "Memory hotplug (vm_hotplug containing \"memory\") requires vm_numa = true."
     }
   }
 
@@ -176,9 +185,10 @@ resource "proxmox_virtual_environment_vm" "node" {
 
 
   cpu {
-    cores = var.vm_cores
-    numa  = var.vm_numa
-    type  = var.vm_cpu_type
+    cores      = var.vm_cores
+    hotplugged = var.vm_cpu_hotplugged
+    numa       = var.vm_numa
+    type       = var.vm_cpu_type
   }
 
   memory {
