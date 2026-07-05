@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: Apache-2.0
+mock_provider "aws" {}
+
+run "single_control_plane_default" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    k8s_version           = "v1.36.1+k3s1"
+    aws_region            = "eu-west-1"
+    instance_type         = "m7g.large"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+  }
+  assert {
+    condition     = aws_instance.control_plane.instance_type == "m7g.large"
+    error_message = "control_plane_count=1 (default) must plan exactly one control-plane instance"
+  }
+}
+
+run "control_plane_count_rejects_2" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    control_plane_count   = 2
+  }
+  expect_failures = [var.control_plane_count]
+}
+
+run "control_plane_count_rejects_4" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    control_plane_count   = 4
+  }
+  expect_failures = [var.control_plane_count]
+}
+
+run "control_plane_count_3_not_yet_wired" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    control_plane_count   = 3
+  }
+  expect_failures = [aws_instance.control_plane]
+}
+
+run "cluster_type_rejects_invalid" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    cluster_type          = "solo"
+  }
+  expect_failures = [var.cluster_type]
+}
+
+run "dedicated_control_plane_still_plans_one_node" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    cluster_type          = "dedicated_control_plane"
+  }
+  assert {
+    condition     = aws_instance.control_plane.instance_type != ""
+    error_message = "dedicated_control_plane must still plan the single control-plane node (taint content is asserted in node-bootstrap's own render tests)"
+  }
+}

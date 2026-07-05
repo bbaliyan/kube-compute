@@ -23,6 +23,10 @@ locals {
   effective_zone_id = var.hosted_zone_id != null ? var.hosted_zone_id : try(data.aws_route53_zone.private[0].zone_id, null)
   create_record     = local.has_domain && local.effective_zone_id != null
 
+  # cluster_type drives the taint, never worker count: worker pools are separate state this
+  # module cannot see, and node counts alone are ambiguous (double-duty HA vs dedicated CP).
+  control_plane_taint = var.cluster_type == "dedicated_control_plane"
+
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-node"
@@ -36,6 +40,8 @@ module "bootstrap" {
   cluster_name                   = var.cluster_name
   k8s_version                    = var.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
+  node_role                      = "server-init"
+  control_plane_taint            = local.control_plane_taint
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_platform_repo_url       = var.gitops_platform_repo_url
@@ -132,8 +138,11 @@ resource "aws_iam_instance_profile" "node" {
   tags        = local.common_tags
 }
 
-# ---- The EC2 node ----
-resource "aws_instance" "node" {
+# ---- The control-plane node ----
+# Single resource this slice: control_plane_count > 1 is validated (accepted for the interface)
+# but not yet provisioned — the precondition below fails plan explicitly rather than silently
+# creating one node while three or five were requested.
+resource "aws_instance" "control_plane" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = local.effective_subnet_id
@@ -187,6 +196,11 @@ resource "aws_instance" "node" {
   lifecycle {
     # Don't replace on AL2023 AMI patch drift; remove to deliberately upgrade.
     ignore_changes = [ami]
+
+    precondition {
+      condition     = var.control_plane_count == 1
+      error_message = "control_plane_count > 1 is not yet provisioned by spine-aws (multi-AZ control-plane fan-out and the registration load balancer land in a later slice); only 1 is supported today."
+    }
   }
 }
 
@@ -199,5 +213,5 @@ resource "aws_route53_record" "wildcard" {
   name    = local.wildcard_name
   type    = "A"
   ttl     = 60
-  records = [aws_instance.node.private_ip]
+  records = [aws_instance.control_plane.private_ip]
 }

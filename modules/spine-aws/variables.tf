@@ -71,6 +71,26 @@ variable "aws_region" {
   type        = string
 }
 
+variable "cluster_type" {
+  description = "Cluster topology intent: 'all_in_one' (control-plane nodes stay schedulable — every single-node cluster, and a small HA cluster doing double duty) or 'dedicated_control_plane' (control-plane nodes are tainted so user workloads run only on separate worker pools). Taint cannot be derived from worker count because worker pools are separate state this module cannot see."
+  type        = string
+  default     = "all_in_one"
+  validation {
+    condition     = contains(["all_in_one", "dedicated_control_plane"], var.cluster_type)
+    error_message = "cluster_type must be 'all_in_one' or 'dedicated_control_plane'."
+  }
+}
+
+variable "control_plane_count" {
+  description = "Number of control-plane nodes. Must be 1, 3, or 5 — 2 and 4 give no fault-tolerance benefit and risk split-brain. Only 1 is provisioned by this build; 3 and 5 are accepted by validation ahead of the multi-AZ control-plane slice that wires them up."
+  type        = number
+  default     = 1
+  validation {
+    condition     = contains([1, 3, 5], var.control_plane_count)
+    error_message = "control_plane_count must be 1, 3, or 5."
+  }
+}
+
 # Networking: the module takes a network HANDLE and never creates fabric (VPC/subnet/IGW/NAT).
 variable "subnet_id" {
   description = <<-EOT

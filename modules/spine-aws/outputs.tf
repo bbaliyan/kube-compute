@@ -9,12 +9,12 @@ output "cluster_name" {
 
 output "instance_id" {
   description = "Provider-native node ID."
-  value       = aws_instance.node.id
+  value       = aws_instance.control_plane.id
 }
 
 output "cluster_ip" {
   description = "Private IP of the K3s node. Register your DNS wildcard at this address."
-  value       = aws_instance.node.private_ip
+  value       = aws_instance.control_plane.private_ip
 }
 
 output "cluster_fqdn" {
@@ -29,7 +29,7 @@ output "node_provider" {
 
 output "bootstrap_status_ref" {
   description = "Handle the control-plane uses to read bootstrap status/kubeconfig. For AWS: the instance ID, targeted via 'aws ssm send-command' in region aws_region."
-  value       = aws_instance.node.id
+  value       = aws_instance.control_plane.id
 }
 
 # ---- DNS support: register this yourself if you didn't pass a hosted_zone_id ----
