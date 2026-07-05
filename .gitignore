@@ -18,3 +18,6 @@ crash.log
 .vscode/tasks.json
 
 # Committed lockfile stays tracked — do NOT ignore .terraform.lock.hcl
+
+# Agent-managed worktree scratch space
+.worktrees/
