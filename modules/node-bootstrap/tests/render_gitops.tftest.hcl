@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
+variables {
+  cloud_init_template = "templates/cloud-init-al2023.yaml.tpl"
+}
+
 run "platform_only" {
   command = plan
   variables {
@@ -20,8 +24,8 @@ run "platform_only" {
     error_message = "platform Application must use the fixed 'bootstrap' path"
   }
   assert {
-    condition     = !strcontains(nonsensitive(output.cloud_init), "name: workloads")
-    error_message = "workloads Application must be absent when no workloads repo is set"
+    condition     = strcontains(nonsensitive(output.cloud_init), "name: workloadsRepoURL\n                value: \"\"")
+    error_message = "workloadsRepoURL helm parameter must be empty when no workloads repo is set"
   }
 }
 
@@ -35,12 +39,12 @@ run "platform_and_workloads" {
     gitops_workloads_path     = "clusters/home"
   }
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "name: workloads")
-    error_message = "workloads Application must be present when a workloads repo is set"
+    condition     = strcontains(nonsensitive(output.cloud_init), "name: workloadsRepoURL\n                value: \"https://github.com/example/my-apps.git\"")
+    error_message = "workloadsRepoURL helm parameter must carry the configured workloads repo"
   }
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "path: clusters/home")
-    error_message = "workloads Application must use the configured workloads path"
+    condition     = strcontains(nonsensitive(output.cloud_init), "name: workloadsPath\n                value: \"clusters/home\"")
+    error_message = "workloadsPath helm parameter must carry the configured workloads path"
   }
 }
 

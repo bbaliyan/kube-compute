@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
+variables {
+  cloud_init_template = "templates/cloud-init-al2023.yaml.tpl"
+}
+
 run "core_render" {
   command = plan
 
