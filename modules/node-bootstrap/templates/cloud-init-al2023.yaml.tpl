@@ -211,11 +211,17 @@ write_files:
       done
 
       status "stage-4:k8s-install"
+      %{ if node_role == "server-init" ~}
       TLS_SANS="--tls-san $NODE_IP"
       [ -n "$CLUSTER_FQDN" ] && TLS_SANS="$TLS_SANS --tls-san $CLUSTER_FQDN"
       export INSTALL_K3S_VERSION="${k8s_version}"
-      export INSTALL_K3S_EXEC="server --secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644"
+      export INSTALL_K3S_EXEC="server --cluster-init --secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
       curl -sfL https://get.k3s.io | sh -
+      %{ else ~}
+      echo "[bootstrap] node_role=${node_role} is not implemented by this build of node-bootstrap" >&2
+      status "FAILED:node-role-unimplemented"
+      exit 1
+      %{ endif ~}
 
       status "stage-5:k8s-wait"
       timeout 300 bash -c 'until kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'

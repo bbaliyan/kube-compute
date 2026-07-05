@@ -21,6 +21,22 @@ variable "cluster_fqdn" {
   default     = null
 }
 
+variable "node_role" {
+  description = "Bootstrap role this node renders cloud-init for: 'server-init' (first control-plane node — forms the etcd cluster), 'server-join' (an additional control-plane node), or 'worker' (joins as an agent only, no control plane). Only 'server-init' is fully rendered by this build; the other two are reserved for a later slice and fail fast at boot if selected."
+  type        = string
+  default     = "server-init"
+  validation {
+    condition     = contains(["server-init", "server-join", "worker"], var.node_role)
+    error_message = "node_role must be one of: server-init, server-join, worker."
+  }
+}
+
+variable "control_plane_taint" {
+  description = "When true, the k3s server install adds --node-taint CriticalAddonsOnly=true:NoExecute so user workloads are excluded from this control-plane node. Only meaningful for node_role = server-init or server-join."
+  type        = bool
+  default     = false
+}
+
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive."
   type        = string

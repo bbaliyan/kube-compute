@@ -4,6 +4,8 @@ locals {
     cluster_name                   = var.cluster_name
     k8s_version                    = var.k8s_version
     cluster_fqdn                   = var.cluster_fqdn
+    node_role                      = var.node_role
+    control_plane_taint            = var.control_plane_taint
     trusted_ca_pem                 = var.trusted_ca_pem
     registry_mirror_url            = var.registry_mirror_url
     gitops_platform_repo_url       = var.gitops_platform_repo_url
