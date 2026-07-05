@@ -1,7 +1,8 @@
-# node-aws
+# spine-aws
 
-Provisions a single-node K3s cluster on AWS EC2, consuming `node-bootstrap` for the
-K3s cloud-init.
+Provisions the AWS control plane for a K3s cluster — its control-plane node(s) plus the
+cluster-wide resources — consuming `node-bootstrap` for the K3s cloud-init. A spine with
+`control_plane_count = 1` is a complete single-node cluster.
 
 ## Scope
 
@@ -9,6 +10,19 @@ The module provisions the **node and only what is intrinsic to it** — the EC2 
 own security group, its IAM role/instance-profile, and (optionally) a DNS record. It **never
 creates network fabric** (VPC, subnet, internet gateway, NAT, route tables); you plug in
 existing networking, or it falls back to the account's default VPC.
+
+## Topology
+
+- **`control_plane_count`** — `1` (default), `3`, or `5`. `2` and `4` are rejected (no
+  fault-tolerance benefit, split-brain risk). Only `1` is provisioned by this build: `3` and `5`
+  pass validation but fail plan with a clear error, pending the multi-AZ control-plane slice that
+  wires them up.
+- **`cluster_type`** — `all_in_one` (default; control-plane node stays schedulable) or
+  `dedicated_control_plane` (control-plane node is tainted `CriticalAddonsOnly=true:NoExecute`;
+  intended for use once worker pools exist). The taint is derived from this explicit intent, never
+  from node counts — worker pools are separate Terraform state this module cannot see.
+- **Datastore** — always embedded etcd (`k3s server --cluster-init`), including for
+  `control_plane_count = 1`, for one consistent datastore and uniform snapshots across topologies.
 
 ## Networking
 
@@ -58,7 +72,7 @@ one.
 
 ## Testing
 
-    cd modules/node-aws
+    cd modules/spine-aws
     tofu init -backend=false && tofu test   # offline — mock_provider "aws", no credentials
 
 Real `plan`/`apply` against AWS is run by the operator from a consumer repo.

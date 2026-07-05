@@ -11,10 +11,23 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 
 | Module | Purpose |
 |--------|---------|
-| `modules/node-bootstrap` | K3s cloud-init renderer. Ships two OS templates: AL2023 (used by node-aws) and Ubuntu 26.04 LTS (used by node-proxmox and node-azure). No provider resources. |
-| `modules/node-aws`       | AWS EC2 node (Amazon Linux 2023). |
+| `modules/node-bootstrap` | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by spine-aws) and Ubuntu 26.04 LTS (used by node-proxmox and node-azure). No provider resources. |
+| `modules/spine-aws`      | AWS control-plane node(s) + shared cluster resources (Amazon Linux 2023). |
 | `modules/node-proxmox`   | Proxmox VM (Ubuntu 26.04 LTS). |
 | `modules/node-azure`     | Azure VM (Ubuntu 26.04 LTS). |
+
+## Concepts
+
+- **Spine** — the stable core of a cluster: its control-plane node(s) plus the cluster-wide
+  resources (join tokens, cluster firewall, registration endpoint, DNS). A spine with
+  `control_plane_count = 1` *is* a complete single-node cluster; larger topologies add worker
+  pools alongside it. "Spine" is a term coined for this project, not a standard Kubernetes one.
+- **`cluster_type`** — `all_in_one` (control-plane nodes stay schedulable; the default, and what
+  every single-node cluster uses) or `dedicated_control_plane` (control-plane nodes are tainted
+  so user workloads run only on separate worker pools).
+- **Datastore** — every cluster, including single-node, runs K3s with embedded etcd
+  (`--cluster-init`) rather than the SQLite default, for one consistent datastore and uniform
+  snapshot behavior across topologies.
 
 ## License
 

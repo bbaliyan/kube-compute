@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-# Minimal node-aws usage. Placeholder values — replace for your environment.
+# Minimal spine-aws usage. Placeholder values — replace for your environment.
 # For `tofu plan` illustration only (no backend wired).
 provider "aws" {
   region = "eu-west-1"
 }
 
-module "cluster" {
+module "spine" {
   source = "../.."
 
   cluster_name          = "demo"
@@ -20,7 +20,7 @@ module "cluster" {
 
   # DNS (optional): set a domain to get a named FQDN + wildcard. Add hosted_zone_id to
   # have the module create the Route53 wildcard record; otherwise register
-  # module.cluster.wildcard_dns_name -> module.cluster.cluster_ip in your own DNS.
+  # module.spine.wildcard_dns_name -> module.spine.cluster_ip in your own DNS.
   # cluster_domain = "example.internal"
   # hosted_zone_id = "Z0123456789ABCDEFGHIJ"
 
@@ -32,7 +32,7 @@ module "cluster" {
 output "register_this_dns" {
   description = "If you did not pass hosted_zone_id, create this wildcard A record pointing at cluster_ip."
   value = {
-    name = module.cluster.wildcard_dns_name
-    ip   = module.cluster.cluster_ip
+    name = module.spine.wildcard_dns_name
+    ip   = module.spine.cluster_ip
   }
 }
