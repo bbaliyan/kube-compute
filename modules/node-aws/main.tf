@@ -14,12 +14,14 @@ locals {
   effective_subnet_id = coalesce(var.subnet_id, try(one(data.aws_subnet.by_name[*].id), null), try(sort(data.aws_subnets.default[0].ids)[0], null))
 
   # DNS is optional and name-only. cluster_fqdn is the API/kubeconfig name; wildcard covers it + services.
-  has_domain            = var.cluster_domain != null
-  fqdn_suffix           = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
-  cluster_fqdn          = local.has_domain ? "api.${local.fqdn_suffix}" : null
-  wildcard_name         = local.has_domain ? "*.${local.fqdn_suffix}" : null
-  effective_zone_id     = coalesce(var.hosted_zone_id, try(data.aws_route53_zone.private[0].zone_id, null))
-  create_record         = local.has_domain && local.effective_zone_id != null
+  has_domain    = var.cluster_domain != null
+  fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
+  cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
+  wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
+  # coalesce() errors if every argument is null (the common case: no DNS configured at
+  # all), so a plain conditional is used instead — it tolerates both being null.
+  effective_zone_id = var.hosted_zone_id != null ? var.hosted_zone_id : try(data.aws_route53_zone.private[0].zone_id, null)
+  create_record     = local.has_domain && local.effective_zone_id != null
 
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
