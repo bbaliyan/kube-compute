@@ -39,6 +39,12 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
   bootstrap probes that address at boot before deciding whether to join the existing quorum or
   initialize a new one — so replacing the first control-plane node is a safe rejoin, not a
   split-brain risk.
+- **Durability and endpoint options** — etcd snapshots (K3s built-in, default-on for
+  `control_plane_count > 1`) recover cluster state after total control-plane loss; they are
+  orthogonal to availability (HA), which prevents the outage window in the first place.
+  `endpoint_mode` picks how joining nodes reach the registration endpoint: `loadbalancer` (an
+  internal NLB, the default), `dns` (cheaper Route53 multivalue-answer records with
+  CloudWatch-alarm-backed health checks), or `static` (bring your own address).
 
 ## License
 

@@ -39,6 +39,18 @@ module "spine" {
   #   "eu-west-1b" = "subnet-0123456789abcdef1"
   #   "eu-west-1c" = "subnet-0123456789abcdef2"
   # }
+
+  # Durability (optional): etcd snapshots default on for control_plane_count > 1. Add an S3
+  # bucket to also upload them off-node (grants the control-plane IAM role scoped access to it).
+  # etcd_snapshot_s3_bucket = "my-cluster-etcd-snapshots"
+
+  # Registration endpoint mode (optional, only relevant with control_plane_count > 1): defaults
+  # to an internal NLB. "dns" is cheaper (Route53 multivalue + health checks) but TTL-bound
+  # failover; requires cluster_domain + hosted_zone_id/hosted_zone_name above. "static" brings
+  # your own address and creates neither an LB nor a DNS record.
+  # endpoint_mode = "dns"
+  # endpoint_mode = "static"
+  # static_registration_address = "my-own-lb.internal.example.com"
 }
 
 output "register_this_dns" {

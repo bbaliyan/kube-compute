@@ -89,10 +89,36 @@ shape. Additional control-plane nodes (`server-join`) `depends_on` it and join v
 Argo/platform GitOps inputs are only ever passed to the genesis node's `node-bootstrap` call, so
 platform bootstrap manifests are never applied — and never race — on more than one server.
 
-**Out of scope for this build:** etcd snapshot durability and the `dns`/`static` registration
-endpoint alternatives (a later issue); `wildcard_dns_name`/`cluster_ip` continue to reference only
-the first control-plane node — routing user-facing ingress traffic across an HA control plane (or,
-better, to a worker pool) isn't handled here.
+## Durability (etcd snapshots)
+
+`etcd_snapshots_enabled` is `null` by default, which auto-resolves to `true` for
+`control_plane_count > 1` (durability is default-on for HA) and `false` for `control_plane_count =
+1` (optional — set it explicitly to turn it on for a single node too). Snapshots are local by
+default; set `etcd_snapshot_s3_bucket` to also upload them to S3 (the control-plane IAM role is
+granted access scoped to exactly that bucket). **Restoring** a snapshot onto a fresh genesis node
+is an operator/runbook action this module does not automate — it only wires up scheduled creation
+and optional upload.
+
+## Registration endpoint modes (`endpoint_mode`)
+
+Only relevant once `control_plane_count > 1` — a single control-plane node has no registration
+endpoint at all (ADR 0003).
+
+- **`loadbalancer`** (default) — an internal NLB across all control-plane nodes on 6443.
+- **`dns`** — one Route53 A record per control-plane node under a shared name
+  (`cp.<cluster_name>.<cluster_domain>`), multivalue-answer routing, each backed by a
+  `CLOUDWATCH_METRIC` health check on that instance's own EC2 status-check alarm (Route53's public
+  health-checker fleet can't reach a private VPC IP directly, so the alarm is the bridge). Requires
+  `cluster_domain` and a resolvable hosted zone (`hosted_zone_id` or `hosted_zone_name`). Cheaper
+  than an NLB; failover is TTL-bound (the record's `ttl = 10`), not instant.
+- **`static`** — creates no load balancer or DNS record at all; `static_registration_address` is
+  used verbatim. For a consumer that already runs its own front end.
+
+## Access
+
+Zero inbound beyond `ingress_ports` (default 80/443/6443) from `allowed_ingress_cidrs`; no SSH.
+IMDSv2 is enforced. Operator access to the node is via AWS SSM (the IAM role attaches
+`AmazonSSMManagedInstanceCore`) — there is no inbound shell port.
 
 ## Inputs
 
@@ -106,9 +132,10 @@ Standardized across provider modules: `instance_id`, `cluster_ip`, `cluster_fqdn
 IP-only), `node_provider` (`"aws"`), `bootstrap_status_ref`. Plus `wildcard_dns_name` (for
 self-service DNS), `aws_region`, `node_arch`, `effective_ami_id`, `vpc_id`, `subnet_id`,
 `node_iam_role_name`. Join flow: `registration_address` (a node's private IP for
-`control_plane_count = 1`, the internal NLB's DNS name otherwise), `agent_token_ssm_parameter`,
-`cluster_security_group_id`, `control_plane_node_refs` (every control-plane node once
-`control_plane_count > 1`, not just the first) — see "Join flow" and "HA control plane" above.
+`control_plane_count = 1`; otherwise shaped by `endpoint_mode` — see "Registration endpoint modes"
+above), `agent_token_ssm_parameter`, `cluster_security_group_id`, `control_plane_node_refs` (every
+control-plane node once `control_plane_count > 1`, not just the first) — see "Join flow" and "HA
+control plane" above.
 
 ## Out of scope (lives in the consumer repo)
 
