@@ -69,6 +69,12 @@ variable "node_labels" {
   default     = {}
 }
 
+variable "extra_tls_sans" {
+  description = "Additional --tls-san values for the k3s server cert (e.g. a registration endpoint's DNS name, or a wildcard hostname). Provider-neutral: any caller may supply arbitrary extra SANs. Only meaningful for node_role = server-init or server-join."
+  type        = list(string)
+  default     = []
+}
+
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive."
   type        = string

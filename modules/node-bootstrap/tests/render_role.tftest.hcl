@@ -98,21 +98,6 @@ run "worker_role_renders_agent_join" {
   }
 }
 
-run "unimplemented_role_fails_fast" {
-  command = plan
-
-  variables {
-    cluster_name = "test1"
-    k8s_version  = "v1.36.1+k3s1"
-    node_role    = "server-join"
-  }
-
-  assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "FAILED:node-role-unimplemented")
-    error_message = "a node_role not yet implemented must fail fast with a clear status, not render a broken install"
-  }
-}
-
 run "invalid_role_rejected" {
   command = plan
 
@@ -123,4 +108,110 @@ run "invalid_role_rejected" {
   }
 
   expect_failures = [var.node_role]
+}
+
+run "server_join_renders_join_install" {
+  command = plan
+
+  variables {
+    cluster_name         = "test1"
+    k8s_version          = "v1.36.1+k3s1"
+    node_role            = "server-join"
+    registration_address = "10.0.1.10"
+    cluster_token        = "cluster-secret-join1"
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "server --server https://10.0.1.10:6443")
+    error_message = "server-join must render a plain server join against registration_address"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "INSTALL_K3S_TOKEN=\"cluster-secret-join1\"")
+    error_message = "server-join must set INSTALL_K3S_TOKEN from cluster_token"
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(output.cloud_init), "--cluster-init")
+    error_message = "server-join must never render --cluster-init (that would form a second, split-brain etcd cluster)"
+  }
+}
+
+run "server_init_runtime_probe_present" {
+  command = plan
+
+  variables {
+    cluster_name         = "test1"
+    k8s_version          = "v1.36.1+k3s1"
+    registration_address = "10.0.1.10"
+    cluster_token        = "cluster-secret-probe"
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "PROBE_CODE=")
+    error_message = "server-init must probe the registration endpoint at boot when one is configured"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "server --server https://10.0.1.10:6443")
+    error_message = "the probe's rejoin branch must be present in the rendered script"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "server --cluster-init")
+    error_message = "the probe's genesis (unreachable) branch must still be present in the rendered script"
+  }
+}
+
+run "argo_manifests_only_on_server_init" {
+  command = plan
+
+  variables {
+    cluster_name             = "test1"
+    k8s_version              = "v1.36.1+k3s1"
+    node_role                = "server-join"
+    registration_address     = "10.0.1.10"
+    cluster_token            = "cluster-secret-argo"
+    gitops_platform_repo_url = "https://github.com/example/kube-platform.git"
+  }
+
+  assert {
+    condition     = !strcontains(nonsensitive(output.cloud_init), "kind: HelmChart")
+    error_message = "Argo/platform bootstrap manifests must never render for server-join, even if gitops_platform_repo_url is set — they belong on the first server only"
+  }
+}
+
+run "extra_tls_sans_rendered_for_server_init" {
+  command = plan
+
+  variables {
+    cluster_name   = "test1"
+    k8s_version    = "v1.36.1+k3s1"
+    extra_tls_sans = ["cp-lb.internal.example.test", "*.bharat.example.test"]
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--tls-san cp-lb.internal.example.test")
+    error_message = "extra_tls_sans entries must each render as a --tls-san flag"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--tls-san *.bharat.example.test")
+    error_message = "a wildcard entry in extra_tls_sans must render verbatim"
+  }
+}
+
+run "kubeconfig_prefers_registration_address" {
+  command = plan
+
+  variables {
+    cluster_name         = "test1"
+    k8s_version          = "v1.36.1+k3s1"
+    cluster_fqdn         = "api.bharat.example.test"
+    registration_address = "cp-lb.internal.example.test"
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "REGISTRATION_ADDRESS=\"cp-lb.internal.example.test\"")
+    error_message = "REGISTRATION_ADDRESS must be written to the env file when set"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "[ -n \"$REGISTRATION_ADDRESS\" ] && SERVER=\"$REGISTRATION_ADDRESS\"")
+    error_message = "kubeconfig publish must prefer REGISTRATION_ADDRESS over CLUSTER_FQDN/NODE_IP so it survives a control-plane node dying"
+  }
 }

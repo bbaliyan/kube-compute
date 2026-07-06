@@ -12,6 +12,7 @@ write_files:
       CLUSTER_NAME="${cluster_name}"
       K8S_VERSION="${k8s_version}"
       CLUSTER_FQDN="${cluster_fqdn == null ? "" : cluster_fqdn}"
+      REGISTRATION_ADDRESS="${registration_address == null ? "" : registration_address}"
 
   # inotify limits — written here so systemd-sysctl.service applies them on
   # every boot (including stop-start cycles) before K3s and containerd start.
@@ -55,7 +56,7 @@ write_files:
             ca_file: /etc/pki/ca-trust/source/anchors/trusted-ca.crt
 %{ endif ~}
 %{ endif ~}
-%{ if gitops_platform_repo_url != null ~}
+%{ if gitops_platform_repo_url != null && node_role == "server-init" ~}
   - path: /etc/kube-node/manifests/00-argocd-helmchart.yaml
     permissions: "0644"
     owner: root:root
@@ -214,9 +215,37 @@ write_files:
       %{ if node_role == "server-init" ~}
       TLS_SANS="--tls-san $NODE_IP"
       [ -n "$CLUSTER_FQDN" ] && TLS_SANS="$TLS_SANS --tls-san $CLUSTER_FQDN"
+      %{ for san in extra_tls_sans ~}
+      TLS_SANS="$TLS_SANS --tls-san ${san}"
+      %{ endfor ~}
       export INSTALL_K3S_VERSION="${k8s_version}"
       export INSTALL_K3S_TOKEN="${cluster_token == null ? "" : cluster_token}"
-      export INSTALL_K3S_EXEC="server --cluster-init --secrets-encryption --disable traefik --disable-cloud-controller --agent-token ${cluster_agent_token == null ? "" : cluster_agent_token} --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
+      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --agent-token ${cluster_agent_token == null ? "" : cluster_agent_token} --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
+      %{ if registration_address != null ~}
+      # Runtime init-vs-join probe: a replaced first server must rejoin an already-healthy
+      # cluster rather than blindly re-initializing etcd, which would split-brain a live
+      # quorum. Genesis boot finds the registration endpoint unreachable and initializes.
+      PROBE_CODE="$(curl -sk --max-time 5 -o /dev/null -w '%%{http_code}' "https://${registration_address}:6443/readyz" 2>/dev/null || true)"
+      if [ -n "$PROBE_CODE" ] && [ "$PROBE_CODE" != "000" ]; then
+        status "stage-4:k8s-install:rejoin-detected"
+        export INSTALL_K3S_EXEC="server --server https://${registration_address}:6443 $SERVER_ARGS"
+      else
+        export INSTALL_K3S_EXEC="server --cluster-init $SERVER_ARGS"
+      fi
+      %{ else ~}
+      export INSTALL_K3S_EXEC="server --cluster-init $SERVER_ARGS"
+      %{ endif ~}
+      curl -sfL https://get.k3s.io | sh -
+      %{ endif ~}
+      %{ if node_role == "server-join" ~}
+      TLS_SANS="--tls-san $NODE_IP"
+      [ -n "$CLUSTER_FQDN" ] && TLS_SANS="$TLS_SANS --tls-san $CLUSTER_FQDN"
+      %{ for san in extra_tls_sans ~}
+      TLS_SANS="$TLS_SANS --tls-san ${san}"
+      %{ endfor ~}
+      export INSTALL_K3S_VERSION="${k8s_version}"
+      export INSTALL_K3S_TOKEN="${cluster_token == null ? "" : cluster_token}"
+      export INSTALL_K3S_EXEC="server --server https://${registration_address}:6443 --secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
       curl -sfL https://get.k3s.io | sh -
       %{ endif ~}
       %{ if node_role == "worker" ~}
@@ -230,7 +259,7 @@ write_files:
       export INSTALL_K3S_EXEC="agent --server https://${registration_address}:6443 --node-ip $NODE_IP$NODE_LABEL_FLAGS"
       INSTALL_K3S_TOKEN="$AGENT_TOKEN" curl -sfL https://get.k3s.io | sh -
       %{ endif ~}
-      %{ if node_role != "server-init" && node_role != "worker" ~}
+      %{ if node_role != "server-init" && node_role != "server-join" && node_role != "worker" ~}
       echo "[bootstrap] node_role=${node_role} is not implemented by this build of node-bootstrap" >&2
       status "FAILED:node-role-unimplemented"
       exit 1
@@ -244,7 +273,7 @@ write_files:
       %{ endif ~}
 
       status "stage-6:argo-bootstrap"
-      %{ if gitops_platform_repo_url != null ~}
+      %{ if gitops_platform_repo_url != null && node_role == "server-init" ~}
       KC=/etc/rancher/k3s/k3s.yaml
       kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/00-argocd-helmchart.yaml
       echo "[bootstrap] waiting for argocd-server to be ready..."
@@ -256,7 +285,9 @@ write_files:
       %{ if node_role == "worker" ~}
       echo "[bootstrap] node_role=worker has no local kubeconfig to publish."
       %{ else ~}
-      SERVER="$NODE_IP"; [ -n "$CLUSTER_FQDN" ] && SERVER="$CLUSTER_FQDN"
+      SERVER="$NODE_IP"
+      [ -n "$CLUSTER_FQDN" ] && SERVER="$CLUSTER_FQDN"
+      [ -n "$REGISTRATION_ADDRESS" ] && SERVER="$REGISTRATION_ADDRESS"
       sed "s|https://127.0.0.1:6443|https://$SERVER:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
       chmod 0600 "$KUBECONFIG_OUT"
       %{ endif ~}
