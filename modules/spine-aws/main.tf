@@ -51,15 +51,32 @@ locals {
   # in a different VPC than where the instances actually launch.
   module_vpc_id = var.control_plane_count > 1 ? data.aws_subnet.control_plane_genesis[0].vpc_id : data.aws_subnet.selected.vpc_id
 
-  # Null for control_plane_count = 1 (no registration endpoint — ADR 0003); the NLB's DNS name
-  # once there's more than one control-plane node.
-  registration_address = var.control_plane_count > 1 ? try(aws_lb.control_plane[0].dns_name, null) : null
+  # Null for control_plane_count = 1 (no registration endpoint — ADR 0003). For control_plane_count
+  # > 1, the shape depends on endpoint_mode: the NLB's DNS name (loadbalancer, the default), the
+  # shared Route53 record name (dns), or the consumer-supplied address verbatim (static).
+  registration_address = var.control_plane_count == 1 ? null : (
+    var.endpoint_mode == "static" ? var.static_registration_address :
+    var.endpoint_mode == "dns" ? local.dns_registration_name :
+    try(aws_lb.control_plane[0].dns_name, null)
+  )
 
   # Durability default-on for HA, optional for single-node (ADR 0009) — null means "auto".
   effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   # A bucket implies a region; default to aws_region so a caller doesn't have to repeat it.
   effective_etcd_snapshot_s3_region = var.etcd_snapshot_s3_bucket != null ? coalesce(var.etcd_snapshot_s3_region, var.aws_region) : null
+
+  # dns mode's shared record name — distinct from cluster_fqdn (api.<...>), which is the
+  # kubeconfig/API-cert name; this is the join-time registration name. Null unless a domain is
+  # configured, enforced by the precondition on aws_instance.control_plane below.
+  dns_registration_name = local.has_domain ? "cp.${local.fqdn_suffix}" : null
+
+  # All control-plane instances, keyed by the same "cp-N" suffix used in control_plane_node_refs,
+  # for per-node DNS/health-check/alarm resources.
+  control_plane_instances = merge(
+    { "1" = aws_instance.control_plane },
+    { for i, inst in aws_instance.control_plane_additional : tostring(tonumber(i) + 1) => inst }
+  )
 
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
@@ -251,12 +268,12 @@ resource "aws_instance" "control_plane_additional" {
   }
 }
 
-# ---- Internal NLB fronting the control plane on 6443 (control_plane_count > 1 only) ----
+# ---- Internal NLB fronting the control plane on 6443 (control_plane_count > 1, endpoint_mode = "loadbalancer" only) ----
 # ADR 0003: no registration endpoint at all for control_plane_count = 1; an internal NLB is the
-# default HA mode on cloud (a floating VIP cannot cross AWS AZ boundaries). dns/static endpoint
-# modes are a later option (issue 015), not implemented here.
+# default HA mode on cloud (a floating VIP cannot cross AWS AZ boundaries). See endpoint_mode for
+# the dns/static alternatives, gated below.
 resource "aws_lb" "control_plane" {
-  count              = var.control_plane_count > 1 ? 1 : 0
+  count              = var.control_plane_count > 1 && var.endpoint_mode == "loadbalancer" ? 1 : 0
   name_prefix        = "cp-lb-"
   internal           = true
   load_balancer_type = "network"
@@ -265,7 +282,7 @@ resource "aws_lb" "control_plane" {
 }
 
 resource "aws_lb_target_group" "control_plane" {
-  count       = var.control_plane_count > 1 ? 1 : 0
+  count       = var.control_plane_count > 1 && var.endpoint_mode == "loadbalancer" ? 1 : 0
   name_prefix = "cp-tg-"
   port        = 6443
   protocol    = "TCP"
@@ -284,7 +301,7 @@ resource "aws_lb_target_group" "control_plane" {
 }
 
 resource "aws_lb_listener" "control_plane" {
-  count             = var.control_plane_count > 1 ? 1 : 0
+  count             = var.control_plane_count > 1 && var.endpoint_mode == "loadbalancer" ? 1 : 0
   load_balancer_arn = aws_lb.control_plane[0].arn
   port              = 6443
   protocol          = "TCP"
@@ -296,17 +313,61 @@ resource "aws_lb_listener" "control_plane" {
 }
 
 resource "aws_lb_target_group_attachment" "genesis" {
-  count            = var.control_plane_count > 1 ? 1 : 0
+  count            = var.control_plane_count > 1 && var.endpoint_mode == "loadbalancer" ? 1 : 0
   target_group_arn = aws_lb_target_group.control_plane[0].arn
   target_id        = aws_instance.control_plane.id
   port             = 6443
 }
 
 resource "aws_lb_target_group_attachment" "additional" {
-  for_each         = aws_instance.control_plane_additional
+  for_each         = var.endpoint_mode == "loadbalancer" ? aws_instance.control_plane_additional : {}
   target_group_arn = aws_lb_target_group.control_plane[0].arn
   target_id        = each.value.id
   port             = 6443
+}
+
+# ---- dns endpoint mode: Route53 multivalue-answer records, one per control-plane node ----
+# Route53's public health-checker fleet cannot reach a private VPC IP directly, so each record's
+# health check is CLOUDWATCH_METRIC-type, backed by that instance's own EC2 status-check alarm —
+# the standard bridge for private-IP Route53 failover.
+resource "aws_cloudwatch_metric_alarm" "control_plane_health" {
+  for_each = var.control_plane_count > 1 && var.endpoint_mode == "dns" ? local.control_plane_instances : {}
+
+  alarm_name          = "kube-node-${var.cluster_name}-cp-${each.key}-status-check"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "StatusCheckFailed"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  dimensions = {
+    InstanceId = each.value.id
+  }
+  tags = local.common_tags
+}
+
+resource "aws_route53_health_check" "control_plane" {
+  for_each = var.control_plane_count > 1 && var.endpoint_mode == "dns" ? local.control_plane_instances : {}
+
+  type                            = "CLOUDWATCH_METRIC"
+  cloudwatch_alarm_name           = aws_cloudwatch_metric_alarm.control_plane_health[each.key].alarm_name
+  cloudwatch_alarm_region         = var.aws_region
+  insufficient_data_health_status = "Unhealthy"
+  tags                            = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp-${each.key}" })
+}
+
+resource "aws_route53_record" "control_plane_dns" {
+  for_each = var.control_plane_count > 1 && var.endpoint_mode == "dns" ? local.control_plane_instances : {}
+
+  zone_id                          = local.effective_zone_id
+  name                             = local.dns_registration_name
+  type                             = "A"
+  ttl                              = 10
+  records                          = [each.value.private_ip]
+  set_identifier                   = "cp-${each.key}"
+  health_check_id                  = aws_route53_health_check.control_plane[each.key].id
+  multivalue_answer_routing_policy = true
 }
 
 # ---- Module-owned security group (NOT fabric) ----
@@ -475,6 +536,11 @@ resource "aws_instance" "control_plane" {
     precondition {
       condition     = var.control_plane_count == 1 || length(local.distinct_control_plane_azs) >= 3
       error_message = "control_plane_count > 1 requires at least 3 distinct availability zones among the resolved control-plane subnets (got ${length(local.distinct_control_plane_azs)}); pass control_plane_subnets spanning >= 3 AZs."
+    }
+
+    precondition {
+      condition     = var.endpoint_mode != "dns" || (local.has_domain && local.effective_zone_id != null)
+      error_message = "endpoint_mode = \"dns\" requires cluster_domain to be set and a resolvable hosted zone (hosted_zone_id or hosted_zone_name)."
     }
   }
 }

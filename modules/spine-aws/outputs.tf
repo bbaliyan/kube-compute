@@ -71,7 +71,7 @@ output "node_iam_role_name" {
 
 # ---- Join flow: consumed by worker-pool-aws (and, later, additional control-plane nodes) ----
 output "registration_address" {
-  description = "Address workers/joining servers use to reach the cluster API. For control_plane_count = 1, this is the sole control-plane node's private IP; for control_plane_count > 1, this is the internal NLB's DNS name."
+  description = "Address workers/joining servers use to reach the cluster API. For control_plane_count = 1, this is the sole control-plane node's private IP. For control_plane_count > 1, it depends on endpoint_mode: the internal NLB's DNS name (loadbalancer, default), the shared Route53 record name (dns), or static_registration_address verbatim (static)."
   value       = local.registration_address != null ? local.registration_address : aws_instance.control_plane.private_ip
 }
 

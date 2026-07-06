@@ -102,6 +102,27 @@ variable "control_plane_subnets" {
   }
 }
 
+variable "endpoint_mode" {
+  description = "How joining nodes reach the registration endpoint once control_plane_count > 1 (ignored for control_plane_count = 1, which has no endpoint at all — ADR 0003): \"loadbalancer\" (default) creates an internal NLB; \"dns\" creates Route53 multivalue-answer A records with CloudWatch-alarm-backed health checks (cheaper, TTL-bound failover; requires cluster_domain plus a resolvable hosted zone); \"static\" creates neither and uses static_registration_address verbatim (bring your own load balancer/address)."
+  type        = string
+  default     = "loadbalancer"
+  validation {
+    condition     = contains(["loadbalancer", "dns", "static"], var.endpoint_mode)
+    error_message = "endpoint_mode must be one of: loadbalancer, dns, static."
+  }
+}
+
+variable "static_registration_address" {
+  description = "Consumer-supplied registration endpoint address (e.g. your own load balancer's DNS name), used verbatim as registration_address when endpoint_mode = \"static\". Ignored otherwise. The module creates no load balancer or DNS record for this mode — you own that infrastructure."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.endpoint_mode != "static" || var.static_registration_address != null
+    error_message = "static_registration_address is required when endpoint_mode = \"static\"."
+  }
+}
+
 variable "etcd_snapshots_enabled" {
   description = "Enable K3s' built-in scheduled etcd snapshots. Null (default) auto-derives to true when control_plane_count > 1 (HA — durability is default-on) and false for control_plane_count = 1 (optional, off by default). Set explicitly to override either default."
   type        = bool
