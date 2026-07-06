@@ -44,7 +44,7 @@ variable "registration_address" {
 }
 
 variable "agent_token_fetch_command" {
-  description = "Shell command that prints the k3s agent join token to stdout when run at boot (e.g. an AWS CLI SSM call assembled by a worker-pool module). Keeps node-bootstrap provider-neutral: the caller decides how the token is fetched and delivered to the instance; node-bootstrap only executes the command it is given. Required when node_role is worker."
+  description = "Shell command that prints the k3s agent join token to stdout when run at boot (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store, assembled by a worker-pool module). Keeps node-bootstrap provider-neutral: the caller decides how the token is fetched and delivered to the instance; node-bootstrap only executes the command it is given. Required when node_role is worker."
   type        = string
   default     = null
 }
