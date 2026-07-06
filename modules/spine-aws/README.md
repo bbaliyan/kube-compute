@@ -89,6 +89,15 @@ shape. Additional control-plane nodes (`server-join`) `depends_on` it and join v
 Argo/platform GitOps inputs are only ever passed to the genesis node's `node-bootstrap` call, so
 platform bootstrap manifests are never applied — and never race — on more than one server.
 
+## Container Network Interface (CNI)
+
+`cni` is `null` by default, which auto-resolves to `"cilium"` for `control_plane_count > 1`
+(HA clusters, for better network policy capabilities) and `"flannel"` for `control_plane_count = 1`
+(single-node clusters, for simplicity). You can override with an explicit value. The cluster
+security group's self-referencing all-protocol rule already covers every CNI's control-plane and
+pod-to-pod traffic; switching `cni` never requires a security-group change, and no per-CNI ingress
+rules are created by this module.
+
 ## Durability (etcd snapshots)
 
 `etcd_snapshots_enabled` is `null` by default, which auto-resolves to `true` for
