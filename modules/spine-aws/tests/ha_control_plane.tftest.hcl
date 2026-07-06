@@ -55,6 +55,10 @@ run "control_plane_count_3_places_one_per_az_behind_nlb" {
     condition     = length(aws_lb_target_group_attachment.genesis) == 1
     error_message = "the genesis control-plane node must attach to the NLB target group too"
   }
+  assert {
+    condition     = aws_security_group.cluster.vpc_id == data.aws_subnet.control_plane_genesis[0].vpc_id
+    error_message = "in HA mode, the cluster SG must share the VPC of the actual control-plane subnets, not an unrelated subnet_id/default-VPC fallback"
+  }
 }
 
 run "control_plane_count_5_places_one_per_az" {

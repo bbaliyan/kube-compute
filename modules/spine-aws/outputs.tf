@@ -55,8 +55,8 @@ output "effective_ami_id" {
 }
 
 output "vpc_id" {
-  description = "VPC ID the node launched into (derived from the subnet)."
-  value       = data.aws_subnet.selected.vpc_id
+  description = "VPC ID the control plane launched into (derived from the subnet — the single-node subnet_id/subnet_name/default-VPC fallback for control_plane_count = 1, or the control-plane subnets themselves for control_plane_count > 1)."
+  value       = local.module_vpc_id
 }
 
 output "subnet_id" {

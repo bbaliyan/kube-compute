@@ -81,3 +81,10 @@ data "aws_ami" "al2023" {
     values = ["available"]
   }
 }
+
+# ---- HA mode: derive the module's VPC from the genesis node's own subnet, not the single-node
+# fallback (which is otherwise unused once control_plane_count > 1) ----
+data "aws_subnet" "control_plane_genesis" {
+  count = var.control_plane_count > 1 ? 1 : 0
+  id    = local.genesis_subnet_id
+}

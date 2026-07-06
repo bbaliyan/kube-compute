@@ -29,8 +29,10 @@ module "spine" {
   # gitops_platform_repo_url = "https://github.com/me/kube-platform.git"
 
   # High availability (optional): 3 or 5 control-plane nodes, one per AZ, behind an internal
-  # NLB. control_plane_subnets must span at least 3 distinct AZs; the single
-  # subnet_id/subnet_name above is then ignored for control-plane placement.
+  # NLB. control_plane_subnets must span at least 3 distinct AZs; the single subnet_id/subnet_name
+  # above is not used for control-plane placement or networking once control_plane_count > 1 —
+  # control_plane_subnets is the sole source of both the instances' subnets and the module's VPC
+  # in that mode.
   # control_plane_count = 3
   # control_plane_subnets = {
   #   "eu-west-1a" = "subnet-0123456789abcdef0"

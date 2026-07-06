@@ -45,6 +45,12 @@ locals {
   # not a raw index-out-of-range crash.
   genesis_subnet_id = var.control_plane_count > 1 ? try(local.control_plane_subnet_ids[0], local.effective_subnet_id) : local.effective_subnet_id
 
+  # In HA mode, the module's VPC is derived from the control-plane subnets themselves — the
+  # single-node subnet_id/subnet_name fallback is otherwise unused once control_plane_count > 1,
+  # and deriving VPC from it independently risked creating security groups/the NLB target group
+  # in a different VPC than where the instances actually launch.
+  module_vpc_id = var.control_plane_count > 1 ? data.aws_subnet.control_plane_genesis[0].vpc_id : data.aws_subnet.selected.vpc_id
+
   # Null for control_plane_count = 1 (no registration endpoint — ADR 0003); the NLB's DNS name
   # once there's more than one control-plane node.
   registration_address = var.control_plane_count > 1 ? try(aws_lb.control_plane[0].dns_name, null) : null
@@ -84,7 +90,7 @@ resource "aws_ssm_parameter" "agent_token" {
 resource "aws_security_group" "cluster" {
   name_prefix = "kube-node-${var.cluster_name}-cluster-"
   description = "kube-node ${var.cluster_name}: east-west traffic among cluster members only."
-  vpc_id      = data.aws_subnet.selected.vpc_id
+  vpc_id      = local.module_vpc_id
   tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cluster" })
 
   lifecycle {
@@ -112,7 +118,7 @@ resource "aws_vpc_security_group_egress_rule" "cluster_all" {
 resource "aws_security_group" "control_plane_etcd" {
   name_prefix = "kube-node-${var.cluster_name}-etcd-"
   description = "kube-node ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
-  vpc_id      = data.aws_subnet.selected.vpc_id
+  vpc_id      = local.module_vpc_id
   tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-etcd" })
 
   lifecycle {
@@ -243,7 +249,7 @@ resource "aws_lb_target_group" "control_plane" {
   name_prefix = "cp-tg-"
   port        = 6443
   protocol    = "TCP"
-  vpc_id      = data.aws_subnet.selected.vpc_id
+  vpc_id      = local.module_vpc_id
   target_type = "instance"
 
   health_check {
@@ -287,7 +293,7 @@ resource "aws_lb_target_group_attachment" "additional" {
 resource "aws_security_group" "node" {
   name_prefix = "kube-node-${var.cluster_name}-"
   description = "kube-node ${var.cluster_name}: cluster access ports only, no SSH."
-  vpc_id      = data.aws_subnet.selected.vpc_id
+  vpc_id      = local.module_vpc_id
   tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}" })
 
   lifecycle {

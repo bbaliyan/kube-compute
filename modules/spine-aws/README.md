@@ -78,6 +78,12 @@ needed), so a caller cannot accidentally supply two subnets in the same AZ. Pass
 entries spanning at least 3 distinct AZs; fewer fails plan explicitly rather than silently
 forming a weaker quorum.
 
+Once `control_plane_count > 1`, the single `subnet_id`/`subnet_name` above is not used for
+control-plane placement or networking — this is by design, not merely cosmetic: the module's own
+VPC (used for its security groups and the NLB target group) is derived from
+`control_plane_subnets` itself in that mode, so there is no path by which `subnet_id`/`subnet_name`
+could disagree with where the instances actually launch.
+
 The genesis node (the same `server-init` node used for `control_plane_count = 1`) is unchanged in
 shape. Additional control-plane nodes (`server-join`) `depends_on` it and join via the NLB;
 Argo/platform GitOps inputs are only ever passed to the genesis node's `node-bootstrap` call, so
