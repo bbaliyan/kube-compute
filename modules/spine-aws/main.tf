@@ -33,6 +33,89 @@ locals {
   })
 }
 
+# ---- Join-token flow: pre-generated so a spine + pool join in one apply pass ----
+# Two tokens, least privilege: the server token grants joining etcd/control-plane (used
+# starting with the HA control-plane slice); the agent token is all a worker ever receives,
+# so a compromised worker cannot rejoin as a control-plane/etcd member.
+resource "random_password" "server_token" {
+  length  = 48
+  special = false
+}
+
+resource "random_password" "agent_token" {
+  length  = 48
+  special = false
+}
+
+# Delivery is provider-shaped: on AWS, the agent token is mirrored into an SSM SecureString
+# and fetched at boot via the instance's IAM role — it is never rendered into user_data.
+resource "aws_ssm_parameter" "agent_token" {
+  name  = "/kube-node/${var.cluster_name}/agent-token"
+  type  = "SecureString"
+  value = random_password.agent_token.result
+  tags  = local.common_tags
+}
+
+# ---- Cluster security group: self-referencing, every cluster member (east-west) ----
+# All-protocol among members rather than pinning to today's CNI ports: this SG is meant to
+# outlive a CNI switch (flannel now, Cilium in a later slice) without a security-group edit.
+resource "aws_security_group" "cluster" {
+  name_prefix = "kube-node-${var.cluster_name}-cluster-"
+  description = "kube-node ${var.cluster_name}: east-west traffic among cluster members only."
+  vpc_id      = data.aws_subnet.selected.vpc_id
+  tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cluster" })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cluster_self" {
+  security_group_id            = aws_security_group.cluster.id
+  description                  = "all traffic among cluster members"
+  ip_protocol                  = "-1"
+  referenced_security_group_id = aws_security_group.cluster.id
+  tags                         = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cluster-self" })
+}
+
+resource "aws_vpc_security_group_egress_rule" "cluster_all" {
+  security_group_id = aws_security_group.cluster.id
+  description       = "all egress"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cluster-egress-all" })
+}
+
+# ---- etcd security group: control-plane members only, never joined by workers ----
+resource "aws_security_group" "control_plane_etcd" {
+  name_prefix = "kube-node-${var.cluster_name}-etcd-"
+  description = "kube-node ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
+  vpc_id      = data.aws_subnet.selected.vpc_id
+  tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-etcd" })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "etcd_peer" {
+  security_group_id            = aws_security_group.control_plane_etcd.id
+  description                  = "etcd peer/client traffic among control-plane nodes"
+  ip_protocol                  = "tcp"
+  from_port                    = 2379
+  to_port                      = 2380
+  referenced_security_group_id = aws_security_group.control_plane_etcd.id
+  tags                         = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-etcd-peer" })
+}
+
+resource "aws_vpc_security_group_egress_rule" "etcd_all" {
+  security_group_id = aws_security_group.control_plane_etcd.id
+  description       = "all egress"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-etcd-egress-all" })
+}
+
 module "bootstrap" {
   source = "../node-bootstrap"
 
@@ -146,7 +229,7 @@ resource "aws_instance" "control_plane" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = local.effective_subnet_id
-  vpc_security_group_ids = [aws_security_group.node.id]
+  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
   metadata_options {

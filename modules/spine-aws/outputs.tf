@@ -68,3 +68,29 @@ output "node_iam_role_name" {
   description = "IAM role name attached to the node. Reference this in your consumer repo to attach additional policies (e.g. SSM Parameter Store read access for ESO)."
   value       = aws_iam_role.node.name
 }
+
+# ---- Join flow: consumed by worker-pool-aws (and, later, additional control-plane nodes) ----
+output "registration_address" {
+  description = "Address workers/joining servers use to reach the cluster API. For control_plane_count = 1, this is the sole control-plane node's private IP; a later multi-AZ slice fronts >1 control-plane node with a load balancer here instead."
+  value       = aws_instance.control_plane.private_ip
+}
+
+output "agent_token_ssm_parameter" {
+  description = "SSM Parameter Store name (SecureString) holding the agent join token. Fetch it at boot via the instance IAM role — never embed it in user_data or a launch template."
+  value       = aws_ssm_parameter.agent_token.name
+}
+
+output "cluster_security_group_id" {
+  description = "Self-referencing security group id shared by every cluster member (control-plane and worker pools). Worker-pool modules attach to this by id; it is never provided to anything outside the cluster."
+  value       = aws_security_group.cluster.id
+}
+
+output "control_plane_node_refs" {
+  description = "Map of control-plane node name -> {instance_id, provider}. The control-plane abstraction (SSM send-command today) targets every node from this map instead of a single bootstrap_status_ref."
+  value = {
+    "${var.cluster_name}-cp-1" = {
+      instance_id = aws_instance.control_plane.id
+      provider    = "aws"
+    }
+  }
+}
