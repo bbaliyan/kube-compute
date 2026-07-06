@@ -128,6 +128,30 @@ write_files:
           automated: { prune: true, selfHeal: true }
           syncOptions: ["CreateNamespace=true"]
 %{ endif ~}
+%{ if cni == "cilium" && (node_role == "server-init" || node_role == "server-join") ~}
+  - path: /var/lib/rancher/k3s/server/manifests/cilium.yaml
+    permissions: "0600"
+    owner: root:root
+    content: |
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: cilium
+        namespace: kube-system
+      spec:
+        repo: https://helm.cilium.io/
+        chart: cilium
+        version: "1.19.5"
+        targetNamespace: kube-system
+        bootstrap: true
+        valuesContent: |-
+          kubeProxyReplacement: true
+          k8sServiceHost: "127.0.0.1"
+          k8sServicePort: 6444
+          ipam:
+            operator:
+              clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
+%{ endif ~}
   - path: /usr/local/bin/kube-node-bootstrap.sh
     permissions: "0755"
     owner: root:root
@@ -236,7 +260,8 @@ write_files:
       %{ endif ~}
       %{ endif ~}
       %{ endif ~}
-      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --agent-token ${cluster_agent_token == null ? "" : cluster_agent_token} --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""} $SNAPSHOT_ARGS"
+      CNI_ARGS="${cni == "cilium" ? "--flannel-backend=none --disable-network-policy --disable-kube-proxy" : ""}"
+      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --agent-token ${cluster_agent_token == null ? "" : cluster_agent_token} --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""} $SNAPSHOT_ARGS $CNI_ARGS"
       %{ if registration_address != null ~}
       # Runtime init-vs-join probe: a replaced first server must rejoin an already-healthy
       # cluster rather than blindly re-initializing etcd, which would split-brain a live
@@ -277,7 +302,8 @@ write_files:
       %{ endif ~}
       %{ endif ~}
       %{ endif ~}
-      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""} $SNAPSHOT_ARGS"
+      CNI_ARGS="${cni == "cilium" ? "--flannel-backend=none --disable-network-policy --disable-kube-proxy" : ""}"
+      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""} $SNAPSHOT_ARGS $CNI_ARGS"
       export INSTALL_K3S_EXEC="server --server https://${registration_address}:6443 $SERVER_ARGS"
       curl -sfL https://get.k3s.io | sh -
       %{ endif ~}

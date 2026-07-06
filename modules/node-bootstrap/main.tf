@@ -12,6 +12,7 @@ locals {
     agent_token_fetch_command           = var.agent_token_fetch_command
     node_labels                         = var.node_labels
     extra_tls_sans                      = var.extra_tls_sans
+    cni                                 = var.cni
     etcd_snapshot_enabled               = var.etcd_snapshot_enabled
     etcd_snapshot_schedule_cron         = var.etcd_snapshot_schedule_cron
     etcd_snapshot_retention             = var.etcd_snapshot_retention

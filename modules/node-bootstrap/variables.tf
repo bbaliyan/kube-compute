@@ -75,6 +75,16 @@ variable "extra_tls_sans" {
   default     = []
 }
 
+variable "cni" {
+  description = "CNI to install: 'flannel' (K3s built-in, default) or 'cilium'. Only meaningful for node_role server-init/server-join — a worker never renders CNI flags or manifests of its own. The caller (a spine module) resolves any topology-aware default; node-bootstrap always renders whichever value it is given."
+  type        = string
+  default     = "flannel"
+  validation {
+    condition     = contains(["flannel", "cilium"], var.cni)
+    error_message = "cni must be 'flannel' or 'cilium'."
+  }
+}
+
 variable "etcd_snapshot_enabled" {
   description = "Enable K3s' built-in scheduled etcd snapshots (local, with retention). Only meaningful for node_role server-init/server-join."
   type        = bool
