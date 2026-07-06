@@ -182,7 +182,7 @@ module "bootstrap" {
   cluster_fqdn                        = local.cluster_fqdn
   node_role                           = "server-init"
   control_plane_taint                 = local.control_plane_taint
-  cni                                  = local.effective_cni
+  cni                                 = local.effective_cni
   cluster_token                       = random_password.server_token.result
   cluster_agent_token                 = random_password.agent_token.result
   registration_address                = local.registration_address
@@ -222,7 +222,7 @@ module "bootstrap_additional" {
   cluster_fqdn                        = local.cluster_fqdn
   node_role                           = "server-join"
   control_plane_taint                 = local.control_plane_taint
-  cni                                  = local.effective_cni
+  cni                                 = local.effective_cni
   registration_address                = local.registration_address
   extra_tls_sans                      = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   etcd_snapshot_enabled               = local.effective_etcd_snapshots_enabled
