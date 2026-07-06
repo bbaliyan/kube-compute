@@ -63,6 +63,12 @@ locals {
   # Durability default-on for HA, optional for single-node (ADR 0009) — null means "auto".
   effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
+  # CNI default is topology-aware (ADR 0006) — null means "auto": cilium for multi-node
+  # (control_plane_count > 1), flannel for single-node. Same "worker pools are invisible to this
+  # module" caveat as control_plane_taint above: a 1-CP-plus-workers topology still resolves via
+  # control_plane_count alone, matching the existing etcd_snapshots_enabled precedent.
+  effective_cni = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "flannel")
+
   # A bucket implies a region; default to aws_region so a caller doesn't have to repeat it.
   effective_etcd_snapshot_s3_region = var.etcd_snapshot_s3_bucket != null ? coalesce(var.etcd_snapshot_s3_region, var.aws_region) : null
 
@@ -176,6 +182,7 @@ module "bootstrap" {
   cluster_fqdn                        = local.cluster_fqdn
   node_role                           = "server-init"
   control_plane_taint                 = local.control_plane_taint
+  cni                                  = local.effective_cni
   cluster_token                       = random_password.server_token.result
   cluster_agent_token                 = random_password.agent_token.result
   registration_address                = local.registration_address
@@ -215,6 +222,7 @@ module "bootstrap_additional" {
   cluster_fqdn                        = local.cluster_fqdn
   node_role                           = "server-join"
   control_plane_taint                 = local.control_plane_taint
+  cni                                  = local.effective_cni
   registration_address                = local.registration_address
   extra_tls_sans                      = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   etcd_snapshot_enabled               = local.effective_etcd_snapshots_enabled

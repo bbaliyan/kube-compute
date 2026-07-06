@@ -81,6 +81,16 @@ variable "cluster_type" {
   }
 }
 
+variable "cni" {
+  description = "CNI to install: 'flannel' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 (multi-node — NetworkPolicy, a kube-proxy-free dataplane, and Hubble justify the extra footprint) and 'flannel' for control_plane_count = 1 (K3s built-in, zero-config, smallest footprint). Set explicitly to override either default."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.cni == null || contains(["flannel", "cilium"], var.cni)
+    error_message = "cni must be null, 'flannel', or 'cilium'."
+  }
+}
+
 variable "control_plane_count" {
   description = "Number of control-plane nodes. Must be 1, 3, or 5 — 2 and 4 give no fault-tolerance benefit and risk split-brain. 3 or 5 places one control-plane node per availability zone behind an internal NLB (see control_plane_subnets)."
   type        = number
