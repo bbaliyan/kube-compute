@@ -55,6 +55,13 @@ locals {
   # once there's more than one control-plane node.
   registration_address = var.control_plane_count > 1 ? try(aws_lb.control_plane[0].dns_name, null) : null
 
+  # Durability default-on for HA, optional for single-node (ADR 0009) — null means "auto".
+  # If an S3 bucket is provided, enable snapshots regardless (you can't upload without snapshotting).
+  effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : (var.etcd_snapshot_s3_bucket != null ? true : var.control_plane_count > 1)
+
+  # A bucket implies a region; default to aws_region so a caller doesn't have to repeat it.
+  effective_etcd_snapshot_s3_region = var.etcd_snapshot_s3_bucket != null ? coalesce(var.etcd_snapshot_s3_region, var.aws_region) : null
+
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-node"
@@ -147,27 +154,34 @@ resource "aws_vpc_security_group_egress_rule" "etcd_all" {
 module "bootstrap" {
   source = "../node-bootstrap"
 
-  cloud_init_template            = local.cloud_init_template
-  cluster_name                   = var.cluster_name
-  k8s_version                    = var.k8s_version
-  cluster_fqdn                   = local.cluster_fqdn
-  node_role                      = "server-init"
-  control_plane_taint            = local.control_plane_taint
-  cluster_token                  = random_password.server_token.result
-  cluster_agent_token            = random_password.agent_token.result
-  registration_address           = local.registration_address
-  extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  trusted_ca_pem                 = var.trusted_ca_pem
-  registry_mirror_url            = var.registry_mirror_url
-  gitops_platform_repo_url       = var.gitops_platform_repo_url
-  gitops_platform_revision       = var.gitops_platform_revision
-  gitops_workloads_repo_url      = var.gitops_workloads_repo_url
-  gitops_workloads_revision      = var.gitops_workloads_revision
-  gitops_workloads_path          = var.gitops_workloads_path
-  cert_mode                      = var.cert_mode
-  platform_extra_helm_parameters = var.platform_extra_helm_parameters
-  platform_helm_values_object    = var.platform_helm_values_object
-  extra_tags                     = var.extra_tags
+  cloud_init_template                 = local.cloud_init_template
+  cluster_name                        = var.cluster_name
+  k8s_version                         = var.k8s_version
+  cluster_fqdn                        = local.cluster_fqdn
+  node_role                           = "server-init"
+  control_plane_taint                 = local.control_plane_taint
+  cluster_token                       = random_password.server_token.result
+  cluster_agent_token                 = random_password.agent_token.result
+  registration_address                = local.registration_address
+  extra_tls_sans                      = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  etcd_snapshot_enabled               = local.effective_etcd_snapshots_enabled
+  etcd_snapshot_schedule_cron         = var.etcd_snapshot_schedule_cron
+  etcd_snapshot_retention             = var.etcd_snapshot_retention
+  etcd_snapshot_object_store_bucket   = var.etcd_snapshot_s3_bucket
+  etcd_snapshot_object_store_region   = local.effective_etcd_snapshot_s3_region
+  etcd_snapshot_object_store_endpoint = var.etcd_snapshot_s3_endpoint
+  etcd_snapshot_object_store_folder   = var.etcd_snapshot_s3_folder
+  trusted_ca_pem                      = var.trusted_ca_pem
+  registry_mirror_url                 = var.registry_mirror_url
+  gitops_platform_repo_url            = var.gitops_platform_repo_url
+  gitops_platform_revision            = var.gitops_platform_revision
+  gitops_workloads_repo_url           = var.gitops_workloads_repo_url
+  gitops_workloads_revision           = var.gitops_workloads_revision
+  gitops_workloads_path               = var.gitops_workloads_path
+  cert_mode                           = var.cert_mode
+  platform_extra_helm_parameters      = var.platform_extra_helm_parameters
+  platform_helm_values_object         = var.platform_helm_values_object
+  extra_tags                          = var.extra_tags
 }
 
 # ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
@@ -179,19 +193,26 @@ module "bootstrap_additional" {
 
   source = "../node-bootstrap"
 
-  cloud_init_template  = local.cloud_init_template
-  cluster_name         = var.cluster_name
-  k8s_version          = var.k8s_version
-  cluster_fqdn         = local.cluster_fqdn
-  node_role            = "server-join"
-  control_plane_taint  = local.control_plane_taint
-  registration_address = local.registration_address
-  extra_tls_sans       = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  cluster_token        = random_password.server_token.result
-  trusted_ca_pem       = var.trusted_ca_pem
-  registry_mirror_url  = var.registry_mirror_url
-  cert_mode            = var.cert_mode
-  extra_tags           = var.extra_tags
+  cloud_init_template                 = local.cloud_init_template
+  cluster_name                        = var.cluster_name
+  k8s_version                         = var.k8s_version
+  cluster_fqdn                        = local.cluster_fqdn
+  node_role                           = "server-join"
+  control_plane_taint                 = local.control_plane_taint
+  registration_address                = local.registration_address
+  extra_tls_sans                      = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  etcd_snapshot_enabled               = local.effective_etcd_snapshots_enabled
+  etcd_snapshot_schedule_cron         = var.etcd_snapshot_schedule_cron
+  etcd_snapshot_retention             = var.etcd_snapshot_retention
+  etcd_snapshot_object_store_bucket   = var.etcd_snapshot_s3_bucket
+  etcd_snapshot_object_store_region   = local.effective_etcd_snapshot_s3_region
+  etcd_snapshot_object_store_endpoint = var.etcd_snapshot_s3_endpoint
+  etcd_snapshot_object_store_folder   = var.etcd_snapshot_s3_folder
+  cluster_token                       = random_password.server_token.result
+  trusted_ca_pem                      = var.trusted_ca_pem
+  registry_mirror_url                 = var.registry_mirror_url
+  cert_mode                           = var.cert_mode
+  extra_tags                          = var.extra_tags
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
   # first server only (ADR 0007) — node-bootstrap also enforces this at the render level.
 }
@@ -364,6 +385,26 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
   role       = aws_iam_role.node.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+# ---- Scoped S3 access for etcd snapshot upload (only when a bucket is configured) ----
+resource "aws_iam_role_policy" "etcd_snapshot_s3" {
+  count = var.etcd_snapshot_s3_bucket != null ? 1 : 0
+  name  = "kube-node-${var.cluster_name}-etcd-snapshot-s3"
+  role  = aws_iam_role.node.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"]
+        Resource = [
+          "arn:aws:s3:::${var.etcd_snapshot_s3_bucket}",
+          "arn:aws:s3:::${var.etcd_snapshot_s3_bucket}/*"
+        ]
+      }
+    ]
+  })
 }
 
 resource "aws_iam_instance_profile" "node" {

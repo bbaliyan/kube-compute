@@ -109,3 +109,12 @@ output "rendered_cloud_init" {
   value       = module.bootstrap.cloud_init
   sensitive   = true
 }
+
+output "rendered_cloud_init_additional" {
+  description = "Map of rendered cloud-config for additional control-plane nodes, keyed by index (1..N). Sensitive — contains the cluster/agent tokens. Exposed for tests and debugging only."
+  value = {
+    for idx, m in module.bootstrap_additional :
+    idx => m.cloud_init
+  }
+  sensitive = true
+}
