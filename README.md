@@ -33,6 +33,12 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
   token is given to worker pools (via an SSM `SecureString` on AWS), so a compromised worker cannot
   rejoin as a control-plane/etcd member. Cluster members reach each other over a self-referencing
   security group; etcd (2379-2380) is further restricted to control-plane-only members.
+- **HA control plane** — `control_plane_count = 3` or `5` places one control-plane node per
+  availability zone (at least 3 distinct AZs required) behind an internal Network Load Balancer
+  on port 6443. `registration_address` becomes the NLB's DNS name. A control-plane node's
+  bootstrap probes that address at boot before deciding whether to join the existing quorum or
+  initialize a new one — so replacing the first control-plane node is a safe rejoin, not a
+  split-brain risk.
 
 ## License
 
