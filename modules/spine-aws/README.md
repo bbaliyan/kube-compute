@@ -52,6 +52,20 @@ Zero inbound beyond `ingress_ports` (default 80/443/6443) from `allowed_ingress_
 IMDSv2 is enforced. Operator access to the node is via AWS SSM (the IAM role attaches
 `AmazonSSMManagedInstanceCore`) — there is no inbound shell port.
 
+## Join flow (workers and, later, additional control-plane nodes)
+
+The spine pre-generates two tokens (`random_password`, both sensitive) so a worker pool can join
+in the same apply pass it's created in: a **server token** (unused until the HA control-plane
+slice wires up additional control-plane nodes) and a separate **agent token**, mirrored into an
+SSM `SecureString` (`agent_token_ssm_parameter` output). Workers receive only the agent token —
+never the server token — so a compromised worker cannot rejoin as a control-plane/etcd member.
+
+Two security groups carry this: `cluster_security_group_id` is self-referencing and shared by
+every cluster member (control-plane and worker pools) for east-west traffic; a second,
+control-plane-only security group scopes etcd (2379-2380) so workers can never reach it.
+`registration_address` is what a joining node's `--server` flag targets — for `control_plane_count
+= 1` this is simply the control-plane node's private IP.
+
 ## Inputs
 
 See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing
@@ -62,7 +76,9 @@ is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `ro
 
 Standardized across provider modules: `instance_id`, `cluster_ip`, `cluster_fqdn` (null when
 IP-only), `node_provider` (`"aws"`), `bootstrap_status_ref`. Plus `wildcard_dns_name` (for
-self-service DNS), `aws_region`, `node_arch`, `effective_ami_id`, `vpc_id`, `subnet_id`.
+self-service DNS), `aws_region`, `node_arch`, `effective_ami_id`, `vpc_id`, `subnet_id`,
+`node_iam_role_name`. Join flow: `registration_address`, `agent_token_ssm_parameter`,
+`cluster_security_group_id`, `control_plane_node_refs` — see "Join flow" above.
 
 ## Out of scope (lives in the consumer repo)
 

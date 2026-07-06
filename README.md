@@ -11,10 +11,11 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 
 | Module | Purpose |
 |--------|---------|
-| `modules/node-bootstrap` | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by spine-aws) and Ubuntu 26.04 LTS (used by node-proxmox and node-azure). No provider resources. |
-| `modules/spine-aws`      | AWS control-plane node(s) + shared cluster resources (Amazon Linux 2023). |
-| `modules/node-proxmox`   | Proxmox VM (Ubuntu 26.04 LTS). |
-| `modules/node-azure`     | Azure VM (Ubuntu 26.04 LTS). |
+| `modules/node-bootstrap`  | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by spine-aws and worker-pool-aws) and Ubuntu 26.04 LTS (used by node-proxmox and node-azure). No provider resources. |
+| `modules/spine-aws`       | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (Amazon Linux 2023). |
+| `modules/worker-pool-aws` | Fixed, AZ-pinned AWS worker pool (ASG + launch template) that joins an existing spine-aws cluster (Amazon Linux 2023). |
+| `modules/node-proxmox`    | Proxmox VM (Ubuntu 26.04 LTS). |
+| `modules/node-azure`      | Azure VM (Ubuntu 26.04 LTS). |
 
 ## Concepts
 
@@ -28,6 +29,10 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 - **Datastore** — every cluster, including single-node, runs K3s with embedded etcd
   (`--cluster-init`) rather than the SQLite default, for one consistent datastore and uniform
   snapshot behavior across topologies.
+- **Join flow** — a spine pre-generates a server token and a separate agent token; only the agent
+  token is given to worker pools (via an SSM `SecureString` on AWS), so a compromised worker cannot
+  rejoin as a control-plane/etcd member. Cluster members reach each other over a self-referencing
+  security group; etcd (2379-2380) is further restricted to control-plane-only members.
 
 ## License
 
