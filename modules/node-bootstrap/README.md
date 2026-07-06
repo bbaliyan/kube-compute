@@ -20,6 +20,14 @@ environment needs. `trusted_ca_pem`, `registry_mirror_url`, the `gitops_*` input
   template does not yet take a `cni` input (pre-existing gap — see issue 018/019 for
   Ubuntu template completion).
 
+  The rendered Cilium values set no `operator.replicas`, so Cilium's own chart default
+  (`2`, with pod anti-affinity) applies. On a genuinely single-node cluster (only reachable
+  by explicitly forcing `cni = "cilium"` against a 1-node topology, which otherwise defaults
+  to flannel) this leaves one `cilium-operator` replica permanently `Pending` — the cluster
+  still comes up networked, but that second replica never schedules. If this matters for
+  your use case, override it with a consumer-supplied `HelmChart` values patch setting
+  `operator.replicas: 1`.
+
 ## Outputs
 
 - `cloud_init` (sensitive) — plaintext rendered cloud-config (for debugging/tests).
