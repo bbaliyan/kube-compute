@@ -215,3 +215,96 @@ run "kubeconfig_prefers_registration_address" {
     error_message = "kubeconfig publish must prefer REGISTRATION_ADDRESS over CLUSTER_FQDN/NODE_IP so it survives a control-plane node dying"
   }
 }
+
+run "etcd_snapshot_disabled_by_default" {
+  command = plan
+
+  variables {
+    cluster_name = "test1"
+    k8s_version  = "v1.36.1+k3s1"
+  }
+
+  assert {
+    condition     = !strcontains(nonsensitive(output.cloud_init), "--etcd-snapshot-schedule-cron")
+    error_message = "etcd_snapshot_enabled defaults to false; no snapshot flags should render"
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(output.cloud_init), "--etcd-s3")
+    error_message = "no --etcd-s3 flag when snapshots are disabled"
+  }
+}
+
+run "etcd_snapshot_schedule_renders_for_server_init" {
+  command = plan
+
+  variables {
+    cluster_name             = "test1"
+    k8s_version              = "v1.36.1+k3s1"
+    etcd_snapshot_enabled    = true
+    etcd_snapshot_schedule_cron = "0 */6 * * *"
+    etcd_snapshot_retention  = 10
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-snapshot-schedule-cron '0 */6 * * *'")
+    error_message = "etcd_snapshot_schedule_cron must render verbatim as --etcd-snapshot-schedule-cron"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-snapshot-retention 10")
+    error_message = "etcd_snapshot_retention must render as --etcd-snapshot-retention"
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(output.cloud_init), "--etcd-s3")
+    error_message = "no --etcd-s3 flag when no object-store bucket is given, even with snapshots enabled"
+  }
+}
+
+run "etcd_snapshot_object_store_renders_s3_flags" {
+  command = plan
+
+  variables {
+    cluster_name                         = "test1"
+    k8s_version                          = "v1.36.1+k3s1"
+    etcd_snapshot_enabled                = true
+    etcd_snapshot_object_store_bucket    = "kube-node-test1-snapshots"
+    etcd_snapshot_object_store_region    = "eu-west-1"
+    etcd_snapshot_object_store_endpoint  = "https://s3.eu-west-1.amazonaws.com"
+    etcd_snapshot_object_store_folder    = "test1"
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-s3 --etcd-s3-bucket kube-node-test1-snapshots")
+    error_message = "an object-store bucket must render --etcd-s3 --etcd-s3-bucket"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-s3-region eu-west-1")
+    error_message = "etcd_snapshot_object_store_region must render as --etcd-s3-region"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-s3-endpoint https://s3.eu-west-1.amazonaws.com")
+    error_message = "etcd_snapshot_object_store_endpoint must render as --etcd-s3-endpoint"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-s3-folder test1")
+    error_message = "etcd_snapshot_object_store_folder must render as --etcd-s3-folder"
+  }
+}
+
+run "etcd_snapshot_renders_identically_for_server_join" {
+  command = plan
+
+  variables {
+    cluster_name           = "test1"
+    k8s_version            = "v1.36.1+k3s1"
+    node_role              = "server-join"
+    registration_address   = "10.0.1.10"
+    cluster_token          = "cluster-secret-snap"
+    etcd_snapshot_enabled  = true
+    etcd_snapshot_retention = 7
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-snapshot-retention 7")
+    error_message = "server-join must render the same snapshot flags as server-init"
+  }
+}

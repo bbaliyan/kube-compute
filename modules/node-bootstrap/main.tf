@@ -12,6 +12,13 @@ locals {
     agent_token_fetch_command      = var.agent_token_fetch_command
     node_labels                    = var.node_labels
     extra_tls_sans                 = var.extra_tls_sans
+    etcd_snapshot_enabled            = var.etcd_snapshot_enabled
+    etcd_snapshot_schedule_cron      = var.etcd_snapshot_schedule_cron
+    etcd_snapshot_retention          = var.etcd_snapshot_retention
+    etcd_snapshot_object_store_bucket   = var.etcd_snapshot_object_store_bucket
+    etcd_snapshot_object_store_region   = var.etcd_snapshot_object_store_region
+    etcd_snapshot_object_store_endpoint = var.etcd_snapshot_object_store_endpoint
+    etcd_snapshot_object_store_folder   = var.etcd_snapshot_object_store_folder
     trusted_ca_pem                 = var.trusted_ca_pem
     registry_mirror_url            = var.registry_mirror_url
     gitops_platform_repo_url       = var.gitops_platform_repo_url

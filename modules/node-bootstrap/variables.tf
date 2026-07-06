@@ -75,6 +75,48 @@ variable "extra_tls_sans" {
   default     = []
 }
 
+variable "etcd_snapshot_enabled" {
+  description = "Enable K3s' built-in scheduled etcd snapshots (local, with retention). Only meaningful for node_role server-init/server-join."
+  type        = bool
+  default     = false
+}
+
+variable "etcd_snapshot_schedule_cron" {
+  description = "Cron schedule for etcd snapshots (k3s --etcd-snapshot-schedule-cron). Only rendered when etcd_snapshot_enabled is true."
+  type        = string
+  default     = "0 */12 * * *"
+}
+
+variable "etcd_snapshot_retention" {
+  description = "Number of local etcd snapshots to retain before the oldest is pruned (k3s --etcd-snapshot-retention). Only rendered when etcd_snapshot_enabled is true."
+  type        = number
+  default     = 5
+}
+
+variable "etcd_snapshot_object_store_bucket" {
+  description = "Optional object-store bucket name for uploading etcd snapshots off-node (S3-compatible API — k3s --etcd-s3-bucket). Null = local-only snapshots. Provider-neutral name: the caller (a spine module) resolves this to whatever object store its provider uses."
+  type        = string
+  default     = null
+}
+
+variable "etcd_snapshot_object_store_region" {
+  description = "Region for the object-store bucket above (k3s --etcd-s3-region). Ignored when etcd_snapshot_object_store_bucket is null."
+  type        = string
+  default     = null
+}
+
+variable "etcd_snapshot_object_store_endpoint" {
+  description = "Optional custom S3-compatible endpoint URL (k3s --etcd-s3-endpoint), for a non-default-AWS-S3 object store. Ignored when etcd_snapshot_object_store_bucket is null."
+  type        = string
+  default     = null
+}
+
+variable "etcd_snapshot_object_store_folder" {
+  description = "Optional folder/prefix within the object-store bucket (k3s --etcd-s3-folder) — useful when multiple clusters share one bucket. Ignored when etcd_snapshot_object_store_bucket is null."
+  type        = string
+  default     = null
+}
+
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive."
   type        = string

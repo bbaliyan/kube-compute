@@ -220,7 +220,23 @@ write_files:
       %{ endfor ~}
       export INSTALL_K3S_VERSION="${k8s_version}"
       export INSTALL_K3S_TOKEN="${cluster_token == null ? "" : cluster_token}"
-      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --agent-token ${cluster_agent_token == null ? "" : cluster_agent_token} --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
+      SNAPSHOT_ARGS=""
+      %{ if etcd_snapshot_enabled ~}
+      SNAPSHOT_ARGS="--etcd-snapshot-schedule-cron '${etcd_snapshot_schedule_cron}' --etcd-snapshot-retention ${etcd_snapshot_retention}"
+      %{ if etcd_snapshot_object_store_bucket != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3 --etcd-s3-bucket ${etcd_snapshot_object_store_bucket}"
+      %{ if etcd_snapshot_object_store_region != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3-region ${etcd_snapshot_object_store_region}"
+      %{ endif ~}
+      %{ if etcd_snapshot_object_store_endpoint != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3-endpoint ${etcd_snapshot_object_store_endpoint}"
+      %{ endif ~}
+      %{ if etcd_snapshot_object_store_folder != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3-folder ${etcd_snapshot_object_store_folder}"
+      %{ endif ~}
+      %{ endif ~}
+      %{ endif ~}
+      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --agent-token ${cluster_agent_token == null ? "" : cluster_agent_token} --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""} $SNAPSHOT_ARGS"
       %{ if registration_address != null ~}
       # Runtime init-vs-join probe: a replaced first server must rejoin an already-healthy
       # cluster rather than blindly re-initializing etcd, which would split-brain a live
@@ -245,7 +261,24 @@ write_files:
       %{ endfor ~}
       export INSTALL_K3S_VERSION="${k8s_version}"
       export INSTALL_K3S_TOKEN="${cluster_token == null ? "" : cluster_token}"
-      export INSTALL_K3S_EXEC="server --server https://${registration_address}:6443 --secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
+      SNAPSHOT_ARGS=""
+      %{ if etcd_snapshot_enabled ~}
+      SNAPSHOT_ARGS="--etcd-snapshot-schedule-cron '${etcd_snapshot_schedule_cron}' --etcd-snapshot-retention ${etcd_snapshot_retention}"
+      %{ if etcd_snapshot_object_store_bucket != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3 --etcd-s3-bucket ${etcd_snapshot_object_store_bucket}"
+      %{ if etcd_snapshot_object_store_region != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3-region ${etcd_snapshot_object_store_region}"
+      %{ endif ~}
+      %{ if etcd_snapshot_object_store_endpoint != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3-endpoint ${etcd_snapshot_object_store_endpoint}"
+      %{ endif ~}
+      %{ if etcd_snapshot_object_store_folder != null ~}
+      SNAPSHOT_ARGS="$SNAPSHOT_ARGS --etcd-s3-folder ${etcd_snapshot_object_store_folder}"
+      %{ endif ~}
+      %{ endif ~}
+      %{ endif ~}
+      SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""} $SNAPSHOT_ARGS"
+      export INSTALL_K3S_EXEC="server --server https://${registration_address}:6443 $SERVER_ARGS"
       curl -sfL https://get.k3s.io | sh -
       %{ endif ~}
       %{ if node_role == "worker" ~}
