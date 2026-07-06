@@ -125,6 +125,8 @@ module "bootstrap" {
   cluster_fqdn                   = local.cluster_fqdn
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
+  cluster_token                  = random_password.server_token.result
+  cluster_agent_token            = random_password.agent_token.result
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_platform_repo_url       = var.gitops_platform_repo_url

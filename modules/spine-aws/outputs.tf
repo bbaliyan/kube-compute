@@ -94,3 +94,9 @@ output "control_plane_node_refs" {
     }
   }
 }
+
+output "rendered_cloud_init" {
+  description = "Plaintext rendered cloud-config passed through from node-bootstrap. Sensitive — contains the cluster/agent tokens. Exposed for tests and debugging only; not part of the module's operational interface."
+  value       = module.bootstrap.cloud_init
+  sensitive   = true
+}

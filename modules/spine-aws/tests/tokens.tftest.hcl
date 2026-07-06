@@ -28,4 +28,8 @@ run "server_and_agent_tokens_distinct_and_ssm_backed" {
     condition     = output.agent_token_ssm_parameter == aws_ssm_parameter.agent_token.name
     error_message = "agent_token_ssm_parameter output must expose the parameter name workers fetch from"
   }
+  assert {
+    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--agent-token ${nonsensitive(random_password.agent_token.result)}")
+    error_message = "the control-plane node must be configured to accept exactly the agent token that was mirrored to SSM, or a worker's fetched token will be rejected at join time"
+  }
 }

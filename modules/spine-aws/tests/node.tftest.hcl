@@ -2,7 +2,7 @@
 mock_provider "aws" {}
 
 run "node_resources" {
-  command = plan
+  command = apply
   variables {
     cluster_name          = "bharat"
     k8s_version           = "v1.36.1+k3s1"
