@@ -71,8 +71,8 @@ output "node_iam_role_name" {
 
 # ---- Join flow: consumed by worker-pool-aws (and, later, additional control-plane nodes) ----
 output "registration_address" {
-  description = "Address workers/joining servers use to reach the cluster API. For control_plane_count = 1, this is the sole control-plane node's private IP; a later multi-AZ slice fronts >1 control-plane node with a load balancer here instead."
-  value       = aws_instance.control_plane.private_ip
+  description = "Address workers/joining servers use to reach the cluster API. For control_plane_count = 1, this is the sole control-plane node's private IP; for control_plane_count > 1, this is the internal NLB's DNS name."
+  value       = local.registration_address != null ? local.registration_address : aws_instance.control_plane.private_ip
 }
 
 output "agent_token_ssm_parameter" {
@@ -87,12 +87,21 @@ output "cluster_security_group_id" {
 
 output "control_plane_node_refs" {
   description = "Map of control-plane node name -> {instance_id, provider}. The control-plane abstraction (SSM send-command today) targets every node from this map instead of a single bootstrap_status_ref."
-  value = {
-    "${var.cluster_name}-cp-1" = {
-      instance_id = aws_instance.control_plane.id
-      provider    = "aws"
+  value = merge(
+    {
+      "${var.cluster_name}-cp-1" = {
+        instance_id = aws_instance.control_plane.id
+        provider    = "aws"
+      }
+    },
+    {
+      for i, inst in aws_instance.control_plane_additional :
+      "${var.cluster_name}-cp-${tonumber(i) + 1}" => {
+        instance_id = inst.id
+        provider    = "aws"
+      }
     }
-  }
+  )
 }
 
 output "rendered_cloud_init" {

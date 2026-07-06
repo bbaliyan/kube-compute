@@ -91,6 +91,17 @@ variable "control_plane_count" {
   }
 }
 
+variable "control_plane_subnets" {
+  description = "Map of availability zone -> subnet id for control-plane placement, required when control_plane_count > 1 (one control-plane node per AZ, across at least 3 distinct AZs — the map's keys ARE those AZs, so the module needs no lookup to discover them). Ignored when control_plane_count = 1 — use subnet_id/subnet_name instead. The module never creates fabric; every value must be an existing subnet's id, already located in the AZ given by its key."
+  type        = map(string)
+  default     = null
+
+  validation {
+    condition     = var.control_plane_count == 1 || var.control_plane_subnets != null
+    error_message = "control_plane_subnets is required when control_plane_count > 1 (the module does not auto-discover multi-AZ subnets for the HA control plane)."
+  }
+}
+
 # Networking: the module takes a network HANDLE and never creates fabric (VPC/subnet/IGW/NAT).
 variable "subnet_id" {
   description = <<-EOT

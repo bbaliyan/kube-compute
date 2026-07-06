@@ -41,18 +41,6 @@ run "control_plane_count_rejects_4" {
   expect_failures = [var.control_plane_count]
 }
 
-run "control_plane_count_3_not_yet_wired" {
-  command = plan
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-  }
-  expect_failures = [aws_instance.control_plane]
-}
-
 run "cluster_type_rejects_invalid" {
   command = plan
   variables {
@@ -78,4 +66,17 @@ run "dedicated_control_plane_still_plans_one_node" {
     condition     = aws_instance.control_plane.instance_type != ""
     error_message = "dedicated_control_plane must still plan the single control-plane node (taint content is asserted in node-bootstrap's own render tests)"
   }
+}
+
+run "control_plane_subnets_required_above_one" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    control_plane_count   = 3
+    # control_plane_subnets omitted on purpose
+  }
+  expect_failures = [var.control_plane_subnets]
 }

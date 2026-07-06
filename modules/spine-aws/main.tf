@@ -27,6 +27,28 @@ locals {
   # module cannot see, and node counts alone are ambiguous (double-duty HA vs dedicated CP).
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
 
+  # The map's own keys ARE the distinct AZs — no data source needed to discover them.
+  distinct_control_plane_azs = var.control_plane_subnets != null ? sort(keys(var.control_plane_subnets)) : []
+
+  # One subnet id per control-plane node, cycling through the distinct AZs (round-robins if
+  # control_plane_count exceeds the number of distinct AZs available, e.g. 5 nodes in a 3-AZ
+  # region — the >= 3 AZ requirement below is still enforced regardless).
+  control_plane_subnet_ids = var.control_plane_count > 1 && length(local.distinct_control_plane_azs) > 0 ? [
+    for i in range(var.control_plane_count) :
+    var.control_plane_subnets[local.distinct_control_plane_azs[i % length(local.distinct_control_plane_azs)]]
+  ] : []
+
+  # Genesis keeps using the existing single-subnet resolution for control_plane_count = 1
+  # (byte-for-byte the same behavior as before this task); for HA it takes the first AZ slot.
+  # try() guards against an empty control_plane_subnet_ids list (e.g. control_plane_subnets = {}
+  # or zero AZs resolved) so evaluation fails via the precondition below with a clear message,
+  # not a raw index-out-of-range crash.
+  genesis_subnet_id = var.control_plane_count > 1 ? try(local.control_plane_subnet_ids[0], local.effective_subnet_id) : local.effective_subnet_id
+
+  # Null for control_plane_count = 1 (no registration endpoint — ADR 0003); the NLB's DNS name
+  # once there's more than one control-plane node.
+  registration_address = var.control_plane_count > 1 ? try(aws_lb.control_plane[0].dns_name, null) : null
+
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-node"
@@ -127,6 +149,8 @@ module "bootstrap" {
   control_plane_taint            = local.control_plane_taint
   cluster_token                  = random_password.server_token.result
   cluster_agent_token            = random_password.agent_token.result
+  registration_address           = local.registration_address
+  extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_platform_repo_url       = var.gitops_platform_repo_url
@@ -138,6 +162,125 @@ module "bootstrap" {
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
   platform_helm_values_object    = var.platform_helm_values_object
   extra_tags                     = var.extra_tags
+}
+
+# ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
+# Explicitly depends_on the genesis node (ADR 0007's first-server ordering) — server-join
+# retries against the registration endpoint, so no ordering among the additional nodes
+# themselves is needed, only "after the genesis node exists."
+module "bootstrap_additional" {
+  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
+
+  source = "../node-bootstrap"
+
+  cloud_init_template  = local.cloud_init_template
+  cluster_name         = var.cluster_name
+  k8s_version          = var.k8s_version
+  cluster_fqdn         = local.cluster_fqdn
+  node_role            = "server-join"
+  control_plane_taint  = local.control_plane_taint
+  registration_address = local.registration_address
+  extra_tls_sans       = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  cluster_token        = random_password.server_token.result
+  trusted_ca_pem       = var.trusted_ca_pem
+  registry_mirror_url  = var.registry_mirror_url
+  cert_mode            = var.cert_mode
+  extra_tags           = var.extra_tags
+  # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
+  # first server only (ADR 0007) — node-bootstrap also enforces this at the render level.
+}
+
+resource "aws_instance" "control_plane_additional" {
+  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => local.control_plane_subnet_ids[i] } : {}
+
+  ami                    = local.effective_ami_id
+  instance_type          = var.instance_type
+  subnet_id              = each.value
+  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
+  iam_instance_profile   = aws_iam_instance_profile.node.name
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+
+  root_block_device {
+    volume_type           = var.root_volume_type
+    volume_size           = var.root_volume_size_gb
+    encrypted             = true
+    delete_on_termination = true
+    tags                  = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp-${tonumber(each.key) + 1}-root" })
+  }
+
+  user_data_base64            = module.bootstrap_additional[each.key].user_data_base64
+  user_data_replace_on_change = true
+
+  tags = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp-${tonumber(each.key) + 1}" })
+
+  depends_on = [aws_instance.control_plane]
+
+  lifecycle {
+    ignore_changes = [ami]
+  }
+}
+
+# ---- Internal NLB fronting the control plane on 6443 (control_plane_count > 1 only) ----
+# ADR 0003: no registration endpoint at all for control_plane_count = 1; an internal NLB is the
+# default HA mode on cloud (a floating VIP cannot cross AWS AZ boundaries). dns/static endpoint
+# modes are a later option (issue 015), not implemented here.
+resource "aws_lb" "control_plane" {
+  count              = var.control_plane_count > 1 ? 1 : 0
+  name_prefix        = "cp-lb-"
+  internal           = true
+  load_balancer_type = "network"
+  subnets            = local.control_plane_subnet_ids
+  tags               = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp" })
+}
+
+resource "aws_lb_target_group" "control_plane" {
+  count       = var.control_plane_count > 1 ? 1 : 0
+  name_prefix = "cp-tg-"
+  port        = 6443
+  protocol    = "TCP"
+  vpc_id      = data.aws_subnet.selected.vpc_id
+  target_type = "instance"
+
+  health_check {
+    protocol            = "TCP"
+    port                = "6443"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    interval            = 10
+  }
+
+  tags = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp" })
+}
+
+resource "aws_lb_listener" "control_plane" {
+  count             = var.control_plane_count > 1 ? 1 : 0
+  load_balancer_arn = aws_lb.control_plane[0].arn
+  port              = 6443
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.control_plane[0].arn
+  }
+}
+
+resource "aws_lb_target_group_attachment" "genesis" {
+  count            = var.control_plane_count > 1 ? 1 : 0
+  target_group_arn = aws_lb_target_group.control_plane[0].arn
+  target_id        = aws_instance.control_plane.id
+  port             = 6443
+}
+
+resource "aws_lb_target_group_attachment" "additional" {
+  for_each         = aws_instance.control_plane_additional
+  target_group_arn = aws_lb_target_group.control_plane[0].arn
+  target_id        = each.value.id
+  port             = 6443
 }
 
 # ---- Module-owned security group (NOT fabric) ----
@@ -223,14 +366,15 @@ resource "aws_iam_instance_profile" "node" {
   tags        = local.common_tags
 }
 
-# ---- The control-plane node ----
-# Single resource this slice: control_plane_count > 1 is validated (accepted for the interface)
-# but not yet provisioned — the precondition below fails plan explicitly rather than silently
-# creating one node while three or five were requested.
+# ---- The control-plane node (genesis: server-init) ----
+# control_plane_count additional nodes (server-join) are provisioned below in
+# aws_instance.control_plane_additional. The precondition here fails plan explicitly when
+# control_plane_count > 1 but fewer than 3 distinct AZs were resolved from control_plane_subnets,
+# rather than silently under-spreading the quorum.
 resource "aws_instance" "control_plane" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
-  subnet_id              = local.effective_subnet_id
+  subnet_id              = local.genesis_subnet_id
   vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
@@ -283,8 +427,8 @@ resource "aws_instance" "control_plane" {
     ignore_changes = [ami]
 
     precondition {
-      condition     = var.control_plane_count == 1
-      error_message = "control_plane_count > 1 is not yet provisioned by spine-aws (multi-AZ control-plane fan-out and the registration load balancer land in a later slice); only 1 is supported today."
+      condition     = var.control_plane_count == 1 || length(local.distinct_control_plane_azs) >= 3
+      error_message = "control_plane_count > 1 requires at least 3 distinct availability zones among the resolved control-plane subnets (got ${length(local.distinct_control_plane_azs)}); pass control_plane_subnets spanning >= 3 AZs."
     }
   }
 }
