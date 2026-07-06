@@ -215,7 +215,8 @@ write_files:
       TLS_SANS="--tls-san $NODE_IP"
       [ -n "$CLUSTER_FQDN" ] && TLS_SANS="$TLS_SANS --tls-san $CLUSTER_FQDN"
       export INSTALL_K3S_VERSION="${k8s_version}"
-      export INSTALL_K3S_EXEC="server --cluster-init --secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
+      export INSTALL_K3S_TOKEN="${cluster_token == null ? "" : cluster_token}"
+      export INSTALL_K3S_EXEC="server --cluster-init --secrets-encryption --disable traefik --disable-cloud-controller --agent-token ${cluster_agent_token == null ? "" : cluster_agent_token} --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
       curl -sfL https://get.k3s.io | sh -
       %{ endif ~}
       %{ if node_role == "worker" ~}

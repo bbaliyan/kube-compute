@@ -37,6 +37,20 @@ variable "control_plane_taint" {
   default     = false
 }
 
+variable "cluster_token" {
+  description = "Shared secret used to join a server or agent to the cluster (k3s --token). Required when node_role is server-init, which forms the whole-cluster join secret. Sensitive."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "cluster_agent_token" {
+  description = "Separate shared secret accepted only from agents (k3s --agent-token) — a worker presenting this value can join as an agent but never as a server/etcd member. Required when node_role is server-init. Sensitive."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
 variable "registration_address" {
   description = "IP or FQDN of the existing cluster's registration endpoint (a spine's registration_address output). Used to build --server https://<address>:6443 for the k3s agent/server join. Required when node_role is server-join or worker; ignored for server-init."
   type        = string

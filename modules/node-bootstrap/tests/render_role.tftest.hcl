@@ -44,6 +44,26 @@ run "control_plane_taint_adds_node_taint" {
   }
 }
 
+run "server_init_wires_cluster_tokens" {
+  command = plan
+
+  variables {
+    cluster_name        = "test1"
+    k8s_version         = "v1.36.1+k3s1"
+    cluster_token       = "cluster-secret-abc123"
+    cluster_agent_token = "agent-secret-xyz789"
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "INSTALL_K3S_TOKEN=\"cluster-secret-abc123\"")
+    error_message = "server-init must set INSTALL_K3S_TOKEN from cluster_token so servers/agents share the base join secret"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--agent-token agent-secret-xyz789")
+    error_message = "server-init must configure a separate --agent-token so a worker's token can never be used to join as a server"
+  }
+}
+
 run "worker_role_renders_agent_join" {
   command = plan
 
