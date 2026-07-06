@@ -37,6 +37,24 @@ variable "control_plane_taint" {
   default     = false
 }
 
+variable "registration_address" {
+  description = "IP or FQDN of the existing cluster's registration endpoint (a spine's registration_address output). Used to build --server https://<address>:6443 for the k3s agent/server join. Required when node_role is server-join or worker; ignored for server-init."
+  type        = string
+  default     = null
+}
+
+variable "agent_token_fetch_command" {
+  description = "Shell command that prints the k3s agent join token to stdout when run at boot (e.g. an AWS CLI SSM call assembled by a worker-pool module). Keeps node-bootstrap provider-neutral: the caller decides how the token is fetched and delivered to the instance; node-bootstrap only executes the command it is given. Required when node_role is worker."
+  type        = string
+  default     = null
+}
+
+variable "node_labels" {
+  description = "Extra --node-label flags applied at k3s install time, e.g. { \"topology.kubernetes.io/zone\" = \"eu-west-1a\" }. Provider-neutral: any caller may set arbitrary labels; node-bootstrap does not interpret the keys."
+  type        = map(string)
+  default     = {}
+}
+
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive."
   type        = string

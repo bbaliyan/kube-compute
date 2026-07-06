@@ -1,28 +1,35 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Renders node-bootstrap (all features) and validates the YAML + embedded bash.
-# State is written to /tmp so each run starts from scratch and the working
-# tree stays clean (idempotent CI gate).
+# Renders node-bootstrap (server-init and worker roles) and validates the
+# YAML + embedded bash for each. State is written to /tmp so each run starts
+# from scratch and the working tree stays clean (idempotent CI gate).
 set -euo pipefail
-cd "$(dirname "$0")/../examples/render-check"
+cd "$(dirname "$0")"
 
-STATE=/tmp/kube-node-render-check.tfstate
+check_render() {
+  local example_dir="$1" state_name="$2"
+  (
+    cd "../examples/${example_dir}"
+    STATE="/tmp/kube-node-render-check-${state_name}.tfstate"
+    tofu init -backend=false >/dev/null
+    tofu apply -auto-approve -state="$STATE" >/dev/null
+    tofu output -state="$STATE" -raw cloud_init >"/tmp/kube-node-ci-${state_name}.yaml"
+  )
 
-tofu init -backend=false >/dev/null
-tofu apply -auto-approve -state="$STATE" >/dev/null
-tofu output -state="$STATE" -raw cloud_init >/tmp/kube-node-ci.yaml
+  python3 -c "import yaml; yaml.safe_load(open('/tmp/kube-node-ci-${state_name}.yaml'))"
+  echo "OK: ${example_dir} cloud-init is valid YAML"
 
-# 1. The whole document must be valid YAML.
-python3 -c 'import yaml; yaml.safe_load(open("/tmp/kube-node-ci.yaml"))'
-echo "OK: cloud-init is valid YAML"
-
-# 2. The embedded bootstrap script must be syntactically valid bash.
-python3 - <<'PY'
-import yaml
-doc = yaml.safe_load(open("/tmp/kube-node-ci.yaml"))
+  python3 - "$state_name" <<'PY'
+import sys, yaml
+state_name = sys.argv[1]
+doc = yaml.safe_load(open(f"/tmp/kube-node-ci-{state_name}.yaml"))
 script = next(f["content"] for f in doc["write_files"]
               if f["path"] == "/usr/local/bin/kube-node-bootstrap.sh")
-open("/tmp/kube-node-bootstrap.sh", "w").write(script)
+open(f"/tmp/kube-node-bootstrap-{state_name}.sh", "w").write(script)
 PY
-bash -n /tmp/kube-node-bootstrap.sh
-echo "OK: embedded bootstrap script passes bash -n"
+  bash -n "/tmp/kube-node-bootstrap-${state_name}.sh"
+  echo "OK: ${example_dir} embedded bootstrap script passes bash -n"
+}
+
+check_render "render-check" "server-init"
+check_render "render-check-worker" "worker"

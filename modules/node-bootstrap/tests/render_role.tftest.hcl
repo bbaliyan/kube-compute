@@ -44,13 +44,47 @@ run "control_plane_taint_adds_node_taint" {
   }
 }
 
+run "worker_role_renders_agent_join" {
+  command = plan
+
+  variables {
+    cluster_name              = "test1"
+    k8s_version               = "v1.36.1+k3s1"
+    node_role                 = "worker"
+    registration_address      = "10.0.1.5"
+    agent_token_fetch_command = "aws ssm get-parameter --name /kube-node/test1/agent-token --with-decryption --query Parameter.Value --output text --region eu-west-1"
+    node_labels               = { "topology.kubernetes.io/zone" = "eu-west-1a" }
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--server https://10.0.1.5:6443")
+    error_message = "worker role must render the agent join pointed at registration_address"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "aws ssm get-parameter")
+    error_message = "worker role must render agent_token_fetch_command verbatim so the token is fetched at boot, not embedded"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "--node-label topology.kubernetes.io/zone=eu-west-1a")
+    error_message = "worker role must render every entry of node_labels as a --node-label flag"
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(output.cloud_init), "--cluster-init")
+    error_message = "a worker must never render server-only flags (--cluster-init)"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "agent --server https://10.0.1.5:6443")
+    error_message = "sanity: the assembled agent exec string must be present"
+  }
+}
+
 run "unimplemented_role_fails_fast" {
   command = plan
 
   variables {
     cluster_name = "test1"
     k8s_version  = "v1.36.1+k3s1"
-    node_role    = "worker"
+    node_role    = "server-join"
   }
 
   assert {

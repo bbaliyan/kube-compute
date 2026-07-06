@@ -217,14 +217,30 @@ write_files:
       export INSTALL_K3S_VERSION="${k8s_version}"
       export INSTALL_K3S_EXEC="server --cluster-init --secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""}"
       curl -sfL https://get.k3s.io | sh -
-      %{ else ~}
+      %{ endif ~}
+      %{ if node_role == "worker" ~}
+      AGENT_TOKEN="$(${agent_token_fetch_command})"
+      [ -n "$AGENT_TOKEN" ] || { status "FAILED:agent-token-fetch"; exit 1; }
+      NODE_LABEL_FLAGS=""
+      %{ for label_key, label_val in node_labels ~}
+      NODE_LABEL_FLAGS="$NODE_LABEL_FLAGS --node-label ${label_key}=${label_val}"
+      %{ endfor ~}
+      export INSTALL_K3S_VERSION="${k8s_version}"
+      export INSTALL_K3S_EXEC="agent --server https://${registration_address}:6443 --node-ip $NODE_IP$NODE_LABEL_FLAGS"
+      INSTALL_K3S_TOKEN="$AGENT_TOKEN" curl -sfL https://get.k3s.io | sh -
+      %{ endif ~}
+      %{ if node_role != "server-init" && node_role != "worker" ~}
       echo "[bootstrap] node_role=${node_role} is not implemented by this build of node-bootstrap" >&2
       status "FAILED:node-role-unimplemented"
       exit 1
       %{ endif ~}
 
       status "stage-5:k8s-wait"
+      %{ if node_role == "worker" ~}
+      timeout 300 bash -c 'until systemctl is-active --quiet k3s-agent; do sleep 5; done'
+      %{ else ~}
       timeout 300 bash -c 'until kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'
+      %{ endif ~}
 
       status "stage-6:argo-bootstrap"
       %{ if gitops_platform_repo_url != null ~}
@@ -236,9 +252,13 @@ write_files:
       %{ endif ~}
 
       status "stage-7:kubeconfig-publish"
+      %{ if node_role == "worker" ~}
+      echo "[bootstrap] node_role=worker has no local kubeconfig to publish."
+      %{ else ~}
       SERVER="$NODE_IP"; [ -n "$CLUSTER_FQDN" ] && SERVER="$CLUSTER_FQDN"
       sed "s|https://127.0.0.1:6443|https://$SERVER:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
       chmod 0600 "$KUBECONFIG_OUT"
+      %{ endif ~}
 
       status "complete"
       echo "[bootstrap] Bootstrap complete."

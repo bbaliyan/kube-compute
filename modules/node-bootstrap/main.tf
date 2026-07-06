@@ -6,6 +6,9 @@ locals {
     cluster_fqdn                   = var.cluster_fqdn
     node_role                      = var.node_role
     control_plane_taint            = var.control_plane_taint
+    registration_address           = var.registration_address
+    agent_token_fetch_command      = var.agent_token_fetch_command
+    node_labels                    = var.node_labels
     trusted_ca_pem                 = var.trusted_ca_pem
     registry_mirror_url            = var.registry_mirror_url
     gitops_platform_repo_url       = var.gitops_platform_repo_url
