@@ -191,7 +191,7 @@ module "bootstrap_additional" {
 }
 
 resource "aws_instance" "control_plane_additional" {
-  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => local.control_plane_subnet_ids[i] } : {}
+  for_each = var.control_plane_count > 1 && length(local.control_plane_subnet_ids) > 0 ? { for i in range(1, var.control_plane_count) : tostring(i) => local.control_plane_subnet_ids[i] } : {}
 
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
@@ -234,7 +234,7 @@ resource "aws_lb" "control_plane" {
   name_prefix        = "cp-lb-"
   internal           = true
   load_balancer_type = "network"
-  subnets            = local.control_plane_subnet_ids
+  subnets            = distinct(local.control_plane_subnet_ids)
   tags               = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp" })
 }
 

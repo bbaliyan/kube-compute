@@ -97,6 +97,23 @@ run "control_plane_count_5_round_robins_when_fewer_than_five_azs" {
     condition     = length(aws_instance.control_plane_additional) == 4
     error_message = "control_plane_count=5 with only 3 AZs available must still plan 5 nodes total (genesis + 4 additional), cycling through the 3 AZs rather than failing"
   }
+  assert {
+    condition     = length(aws_lb.control_plane[0].subnets) == 3
+    error_message = "the NLB must list each distinct AZ's subnet exactly once, even when control_plane_count exceeds the number of available AZs — AWS's real NLB API rejects duplicate/repeated subnets"
+  }
+}
+
+run "empty_control_plane_subnets_map_declines_cleanly" {
+  command = plan
+  variables {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    control_plane_count   = 3
+    control_plane_subnets = {}
+  }
+  expect_failures = [aws_instance.control_plane]
 }
 
 run "fewer_than_three_azs_declines" {

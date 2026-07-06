@@ -82,7 +82,7 @@ variable "cluster_type" {
 }
 
 variable "control_plane_count" {
-  description = "Number of control-plane nodes. Must be 1, 3, or 5 — 2 and 4 give no fault-tolerance benefit and risk split-brain. Only 1 is provisioned by this build; 3 and 5 are accepted by validation ahead of the multi-AZ control-plane slice that wires them up."
+  description = "Number of control-plane nodes. Must be 1, 3, or 5 — 2 and 4 give no fault-tolerance benefit and risk split-brain. 3 or 5 places one control-plane node per availability zone behind an internal NLB (see control_plane_subnets)."
   type        = number
   default     = 1
   validation {
