@@ -56,8 +56,7 @@ locals {
   registration_address = var.control_plane_count > 1 ? try(aws_lb.control_plane[0].dns_name, null) : null
 
   # Durability default-on for HA, optional for single-node (ADR 0009) — null means "auto".
-  # If an S3 bucket is provided, enable snapshots regardless (you can't upload without snapshotting).
-  effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : (var.etcd_snapshot_s3_bucket != null ? true : var.control_plane_count > 1)
+  effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   # A bucket implies a region; default to aws_region so a caller doesn't have to repeat it.
   effective_etcd_snapshot_s3_region = var.etcd_snapshot_s3_bucket != null ? coalesce(var.etcd_snapshot_s3_region, var.aws_region) : null

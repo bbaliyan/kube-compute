@@ -68,6 +68,22 @@ run "explicit_false_overrides_ha_default" {
   }
 }
 
+run "single_node_snapshots_still_off_by_default_even_with_bucket" {
+  command = plan
+  variables {
+    cluster_name            = "bharat"
+    aws_region              = "eu-west-1"
+    instance_type           = "m7g.large"
+    allowed_ingress_cidrs   = ["10.0.0.0/8"]
+    subnet_id               = "subnet-abc"
+    etcd_snapshot_s3_bucket = "kube-node-bharat-snapshots"
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "--etcd-snapshot-schedule-cron")
+    error_message = "control_plane_count=1 must keep snapshots off by default even when an object-store bucket is configured — only an explicit etcd_snapshots_enabled=true turns them on for single-node"
+  }
+}
+
 run "object_store_bucket_grants_scoped_iam_and_renders_s3_flags" {
   command = apply
   variables {
@@ -77,6 +93,7 @@ run "object_store_bucket_grants_scoped_iam_and_renders_s3_flags" {
     allowed_ingress_cidrs    = ["10.0.0.0/8"]
     subnet_id                = "subnet-abc"
     etcd_snapshot_s3_bucket  = "kube-node-bharat-snapshots"
+    etcd_snapshots_enabled   = true
   }
   assert {
     condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-s3-bucket kube-node-bharat-snapshots")
