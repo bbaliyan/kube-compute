@@ -29,6 +29,52 @@ locals {
   })
 }
 
+# ---- Node-scoped NSG — the pool owns only this; the spine's cluster ASG membership
+# alone (below, on the VMSS network_interface) is not equivalent to attaching a security
+# group: on Azure, an ASG is purely a label that NSG rules reference, and a NIC with no
+# NSG attached falls back to the platform default rules (AllowVnetInBound), which permit
+# all intra-VNet traffic including SSH. Mirrors spine-azure's control_plane NSG shape.
+resource "azurerm_network_security_group" "worker" {
+  name                = "nsg-${var.cluster_name}-worker"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = local.common_tags
+}
+
+# SSH is always denied, at the highest priority (lowest number) — same rule shape as
+# spine-azure's deny_ssh. Out-of-band access is via `az vm run-command invoke`.
+resource "azurerm_network_security_rule" "deny_ssh" {
+  name                        = "deny-ssh"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.worker.name
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Deny"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+}
+
+# East-west, cluster-wide: any protocol/port among members of the spine's cluster ASG —
+# this pool's worker NICs are already members of that ASG (via application_security_group_ids
+# below), so this rule lets them receive traffic from any other cluster member (control-plane
+# or worker). Priority 110, same as spine-azure's cluster_self rule.
+resource "azurerm_network_security_rule" "cluster_self" {
+  name                                       = "allow-cluster-self"
+  resource_group_name                        = var.resource_group_name
+  network_security_group_name                = azurerm_network_security_group.worker.name
+  priority                                   = 110
+  direction                                  = "Inbound"
+  access                                     = "Allow"
+  protocol                                   = "*"
+  source_port_range                          = "*"
+  destination_port_range                     = "*"
+  source_application_security_group_ids      = [var.cluster_asg_id]
+  destination_application_security_group_ids = [var.cluster_asg_id]
+}
+
 module "bootstrap" {
   source = "../node-bootstrap"
 
@@ -82,8 +128,9 @@ resource "azurerm_linux_virtual_machine_scale_set" "worker" {
   }
 
   network_interface {
-    name    = "nic-worker"
-    primary = true
+    name                      = "nic-worker"
+    primary                   = true
+    network_security_group_id = azurerm_network_security_group.worker.id
 
     ip_configuration {
       name                           = "internal"
@@ -96,7 +143,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "worker" {
   lifecycle {
     precondition {
       condition     = local.pool_version_num <= local.spine_version_num
-      error_message = "k8s_version (${var.k8s_version}) must not be newer than the spine's k8s_version (${var.spine_k8s_version}) — a kubelet may trail the API server by up to 3 minors, never lead it."
+      error_message = "k8s_version (${var.k8s_version}) must not be newer than the spine's k8s_version (${var.spine_k8s_version})."
     }
   }
 }

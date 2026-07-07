@@ -92,7 +92,7 @@ variable "os_image_urn" {
 }
 
 variable "admin_username" {
-  description = "OS admin user created by Azure. Never reachable — no inbound NSG on this pool's NICs beyond the spine-owned cluster ASG rule."
+  description = "OS admin user created by Azure. Never reachable — this pool owns its own NSG, which denies inbound SSH on every worker NIC."
   type        = string
   default     = "azureuser"
 }

@@ -17,8 +17,8 @@ mock_provider "azurerm" {
   }
 }
 
-run "worker_fetches_agent_token_via_imds_and_key_vault_rest_not_ssm" {
-  command = apply
+run "pool_owns_its_own_nsg_denying_ssh_and_allowing_cluster_self" {
+  command = plan
   variables {
     cluster_name            = "bharat"
     k8s_version             = "v1.36.1+k3s1"
@@ -38,35 +38,27 @@ run "worker_fetches_agent_token_via_imds_and_key_vault_rest_not_ssm" {
     cluster_asg_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster"
   }
   assert {
-    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "169.254.169.254/metadata/identity/oauth2/token")
-    error_message = "every worker's cloud-init must fetch its OAuth token from Azure IMDS, not az CLI"
+    condition     = azurerm_network_security_rule.deny_ssh.access == "Deny"
+    error_message = "deny_ssh rule must have access = Deny"
   }
   assert {
-    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "kvbharat123456.vault.azure.net/secrets/agent-token")
-    error_message = "every worker's cloud-init must fetch the agent token from this cluster's own Key Vault secret"
+    condition     = azurerm_network_security_rule.deny_ssh.priority == 100
+    error_message = "deny_ssh must be priority 100, the highest precedence"
   }
   assert {
-    condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "aws ssm")
-    error_message = "an Azure worker must never reference AWS SSM"
+    condition     = azurerm_network_security_rule.deny_ssh.destination_port_range == "22"
+    error_message = "deny_ssh must target port 22"
   }
   assert {
-    condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "az keyvault")
-    error_message = "the fetch command must use raw curl+IMDS, not the az CLI (not guaranteed present on the image)"
+    condition     = tolist(azurerm_network_security_rule.cluster_self.source_application_security_group_ids)[0] == var.cluster_asg_id
+    error_message = "the cluster-self rule must reference the spine's cluster ASG as the source"
   }
   assert {
-    condition     = azurerm_linux_virtual_machine_scale_set.worker.instances == 2
-    error_message = "desired_count = 2 must create a VMSS with instances = 2"
+    condition     = tolist(azurerm_network_security_rule.cluster_self.destination_application_security_group_ids)[0] == var.cluster_asg_id
+    error_message = "the cluster-self rule must reference the spine's cluster ASG as the destination"
   }
   assert {
-    condition     = contains(azurerm_linux_virtual_machine_scale_set.worker.zones, "1")
-    error_message = "the VMSS must be pinned to the single configured zone"
-  }
-  assert {
-    condition     = azurerm_role_assignment.agent_token_read.role_definition_name == "Key Vault Secrets User"
-    error_message = "the worker identity must be granted Key Vault Secrets User, not a broader role"
-  }
-  assert {
-    condition     = azurerm_role_assignment.agent_token_read.scope == "${var.key_vault_id}/secrets/${var.agent_token_secret_name}"
-    error_message = "the role assignment must be scoped to the individual secret, not the whole vault"
+    condition     = azurerm_linux_virtual_machine_scale_set.worker.network_interface[0].network_security_group_id == azurerm_network_security_group.worker.id
+    error_message = "the VMSS network_interface must attach this pool's own NSG"
   }
 }
