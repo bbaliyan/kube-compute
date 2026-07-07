@@ -46,6 +46,12 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
   internal NLB, the default), `dns` (cheaper Route53 multivalue-answer records with
   CloudWatch-alarm-backed health checks), or `static` (bring your own address).
 
+## Example: consumer region hierarchy
+
+`examples/consumer/live/aws/` shows the Terragrunt layout a consumer repo uses to
+organize multiple clusters across regions/AZs — see its README for the full
+walkthrough.
+
 ## License
 
 Apache-2.0. Contributions require a DCO sign-off — see CONTRIBUTING.md.
