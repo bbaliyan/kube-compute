@@ -1,15 +1,88 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# NOTE: this file currently holds only the two outputs Task 5's ha_lb.tftest.hcl needs
-# (registration_address, control_plane_node_refs). The plan's Task 6 brief defines the
-# full standardized output set for this module (cluster_name, instance_id, cluster_ip,
-# key_vault_id, etc.) in this same file — Task 6 appends those without redefining the
-# two declared here. See task-5-report.md for why these two exist ahead of Task 6.
+# ---- Standardized outputs (identical names across all provider modules) ----
+
+output "cluster_name" {
+  description = "Cluster name passed to the module."
+  value       = var.cluster_name
+}
+
+output "instance_id" {
+  description = "Provider-native node ID of the genesis control-plane VM."
+  value       = azurerm_linux_virtual_machine.control_plane.id
+}
+
+output "cluster_ip" {
+  description = "Genesis control-plane node's private IP. For control_plane_count > 1, prefer registration_address."
+  value       = azurerm_network_interface.control_plane["0"].private_ip_address
+}
+
+output "cluster_fqdn" {
+  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given."
+  value       = local.cluster_fqdn
+}
+
+output "node_provider" {
+  description = "Provider identifier ('azure'). Control-plane scripts dispatch via az vm run-command invoke for this provider."
+  value       = "azure"
+}
+
+output "bootstrap_status_ref" {
+  description = "Genesis VM resource ID used to read bootstrap status. Usage: az vm run-command invoke --ids <this> --command-id RunShellScript --scripts 'cat /var/log/kube-node/bootstrap-status'"
+  value       = azurerm_linux_virtual_machine.control_plane.id
+}
+
+output "wildcard_dns_name" {
+  description = "Wildcard hostname for cluster services, or null when no cluster_domain was given."
+  value       = local.wildcard_name
+}
+
+# ---- Azure-specific extras ----
+
+output "node_arch" {
+  description = "CPU architecture as declared by the operator."
+  value       = var.node_arch
+}
+
+output "resource_group_name" {
+  description = "Resource group every spine resource was created in."
+  value       = var.resource_group_name
+}
+
+output "location" {
+  description = "Azure region the spine runs in."
+  value       = var.location
+}
+
+output "k8s_version" {
+  description = "K8s distro version installed on this spine's control-plane nodes. Wire worker-pool-azure's spine_k8s_version to this output so the version-skew guard is enforced automatically."
+  value       = var.k8s_version
+}
 
 # ---- Join flow: consumed by worker-pool-azure ----
 output "registration_address" {
   description = "Address workers/joining servers use to reach the cluster API: null for control_plane_count = 1 (ADR 0003 — no endpoint at all), the internal Standard LB's frontend private IP otherwise."
   value       = local.registration_address
+}
+
+output "key_vault_id" {
+  description = "Resource ID of the Key Vault holding the agent join token. worker-pool-azure's role assignment is scoped under this vault at the individual-secret level."
+  value       = azurerm_key_vault.cluster.id
+}
+
+output "key_vault_name" {
+  description = "Name of the Key Vault holding the agent join token (used to build the vault URI in worker-pool-azure's agent_token_fetch_command)."
+  value       = azurerm_key_vault.cluster.name
+}
+
+output "agent_token_secret_name" {
+  description = "Name of the Key Vault secret holding the agent join token ('agent-token'). worker-pool-azure's managed identity is granted read access scoped to exactly this secret."
+  value       = azurerm_key_vault_secret.agent_token.name
+}
+
+output "cluster_asg_id" {
+  description = "ID of the cluster-wide Application Security Group. worker-pool-azure's VM Scale Set NICs join this ASG by id — it never creates or owns the ASG itself."
+  value       = azurerm_application_security_group.cluster.id
 }
 
 output "control_plane_node_refs" {
@@ -29,4 +102,16 @@ output "control_plane_node_refs" {
       }
     }
   )
+}
+
+output "rendered_cloud_init" {
+  description = "Plaintext rendered cloud-config for the genesis node, passed through from node-bootstrap. Sensitive — for tests/debugging only."
+  value       = module.bootstrap.cloud_init
+  sensitive   = true
+}
+
+output "rendered_cloud_init_additional" {
+  description = "Map of rendered cloud-config for additional control-plane nodes, keyed by index. Sensitive."
+  value       = { for k, m in module.bootstrap_additional : k => m.cloud_init }
+  sensitive   = true
 }

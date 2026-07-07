@@ -408,3 +408,14 @@ resource "azurerm_network_interface_backend_address_pool_association" "control_p
   ip_configuration_name   = "internal"
   backend_address_pool_id = azurerm_lb_backend_address_pool.control_plane[0].id
 }
+
+# ---- Optional: wildcard A record in an Azure DNS zone you already own ----
+resource "azurerm_dns_a_record" "wildcard" {
+  count               = local.create_record ? 1 : 0
+  name                = "*.${var.cluster_name}"
+  resource_group_name = var.dns_zone_resource_group
+  zone_name           = var.cluster_domain
+  ttl                 = 60
+  records             = [var.control_plane_count == 1 ? azurerm_network_interface.control_plane["0"].private_ip_address : local.registration_address]
+  tags                = local.common_tags
+}
