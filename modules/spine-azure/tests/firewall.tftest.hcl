@@ -15,6 +15,15 @@ mock_provider "azurerm" {
   mock_resource "azurerm_network_security_group" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkSecurityGroups/nsg-bharat-cp" }
   }
+  mock_resource "azurerm_network_interface" {
+    defaults = {
+      id                 = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkInterfaces/nic-bharat-cp-0"
+      private_ip_address = "10.0.1.10"
+    }
+  }
+  mock_resource "azurerm_linux_virtual_machine" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachines/vm-bharat-cp-0" }
+  }
 }
 
 run "cluster_firewall_uses_asg_membership_not_cidr" {

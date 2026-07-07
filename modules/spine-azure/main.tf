@@ -200,3 +200,110 @@ resource "azurerm_network_security_rule" "allow_inbound" {
   source_address_prefixes     = var.allowed_ingress_cidrs
   destination_address_prefix  = "*"
 }
+
+# ---- Control-plane NICs, one per index 0..control_plane_count-1 ----
+resource "azurerm_network_interface" "control_plane" {
+  for_each = { for i in range(var.control_plane_count) : tostring(i) => i }
+
+  name                = "nic-${var.cluster_name}-cp-${each.key}"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = local.common_tags
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = data.azurerm_subnet.control_plane.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_network_interface_security_group_association" "control_plane" {
+  for_each = azurerm_network_interface.control_plane
+
+  network_interface_id      = each.value.id
+  network_security_group_id = azurerm_network_security_group.control_plane.id
+}
+
+resource "azurerm_network_interface_application_security_group_association" "cluster" {
+  for_each = azurerm_network_interface.control_plane
+
+  network_interface_id          = each.value.id
+  application_security_group_id = azurerm_application_security_group.cluster.id
+}
+
+resource "azurerm_network_interface_application_security_group_association" "etcd" {
+  for_each = azurerm_network_interface.control_plane
+
+  network_interface_id          = each.value.id
+  application_security_group_id = azurerm_application_security_group.etcd.id
+}
+
+# ---- The genesis control-plane node (server-init) ----
+module "bootstrap" {
+  source = "../node-bootstrap"
+
+  cloud_init_template            = local.cloud_init_template
+  cluster_name                   = var.cluster_name
+  k8s_version                    = var.k8s_version
+  cluster_fqdn                   = local.cluster_fqdn
+  node_role                      = "server-init"
+  control_plane_taint            = local.control_plane_taint
+  cni                            = local.effective_cni
+  cluster_token                  = random_password.server_token.result
+  cluster_agent_token            = random_password.agent_token.result
+  registration_address           = local.registration_address
+  extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  etcd_snapshot_enabled          = local.effective_etcd_snapshots_enabled
+  etcd_snapshot_schedule_cron    = var.etcd_snapshot_schedule_cron
+  etcd_snapshot_retention        = var.etcd_snapshot_retention
+  trusted_ca_pem                 = var.trusted_ca_pem
+  registry_mirror_url            = var.registry_mirror_url
+  gitops_platform_repo_url       = var.gitops_platform_repo_url
+  gitops_platform_revision       = var.gitops_platform_revision
+  gitops_workloads_repo_url      = var.gitops_workloads_repo_url
+  gitops_workloads_revision      = var.gitops_workloads_revision
+  gitops_workloads_path          = var.gitops_workloads_path
+  cert_mode                      = var.cert_mode
+  platform_extra_helm_parameters = var.platform_extra_helm_parameters
+  platform_helm_values_object    = var.platform_helm_values_object
+  extra_tags                     = var.extra_tags
+}
+
+resource "azurerm_linux_virtual_machine" "control_plane" {
+  name                            = "vm-${var.cluster_name}-cp-0"
+  resource_group_name             = var.resource_group_name
+  location                        = var.location
+  size                            = var.vm_size
+  admin_username                  = var.admin_username
+  disable_password_authentication = true
+  network_interface_ids           = [azurerm_network_interface.control_plane["0"].id]
+  zone                            = tostring(var.availability_zones[0])
+  tags                            = merge(local.common_tags, { Role = "control-plane" })
+
+  admin_ssh_key {
+    username   = var.admin_username
+    public_key = var.admin_ssh_public_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = var.os_disk_type
+    disk_size_gb         = var.os_disk_size_gb
+  }
+
+  source_image_reference {
+    publisher = local.image_publisher
+    offer     = local.image_offer
+    sku       = local.image_sku
+    version   = local.image_version
+  }
+
+  custom_data = module.bootstrap.user_data_base64
+
+  lifecycle {
+    precondition {
+      condition     = var.control_plane_count == 1 || length(distinct(var.availability_zones)) >= 3
+      error_message = "control_plane_count > 1 requires at least 3 distinct availability_zones (got ${length(distinct(var.availability_zones))})."
+    }
+  }
+}

@@ -32,8 +32,23 @@ mock_provider "azurerm" {
   mock_resource "azurerm_role_assignment" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000003" }
   }
+  mock_resource "azurerm_application_security_group" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster" }
+  }
+  mock_resource "azurerm_network_security_group" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkSecurityGroups/nsg-bharat-cp" }
+  }
   mock_resource "azurerm_key_vault_secret" {
     defaults = { id = "https://kvbharat123456.vault.azure.net/secrets/agent-token/abc123" }
+  }
+  mock_resource "azurerm_network_interface" {
+    defaults = {
+      id                 = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkInterfaces/nic-bharat-cp-0"
+      private_ip_address = "10.0.1.10"
+    }
+  }
+  mock_resource "azurerm_linux_virtual_machine" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachines/vm-bharat-cp-0" }
   }
 }
 
