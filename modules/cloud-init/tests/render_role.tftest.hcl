@@ -238,11 +238,11 @@ run "etcd_snapshot_schedule_renders_for_server_init" {
   command = plan
 
   variables {
-    cluster_name             = "test1"
-    k8s_version              = "v1.36.1+k3s1"
-    etcd_snapshot_enabled    = true
+    cluster_name                = "test1"
+    k8s_version                 = "v1.36.1+k3s1"
+    etcd_snapshot_enabled       = true
     etcd_snapshot_schedule_cron = "0 */6 * * *"
-    etcd_snapshot_retention  = 10
+    etcd_snapshot_retention     = 10
   }
 
   assert {
@@ -263,13 +263,13 @@ run "etcd_snapshot_object_store_renders_s3_flags" {
   command = plan
 
   variables {
-    cluster_name                         = "test1"
-    k8s_version                          = "v1.36.1+k3s1"
-    etcd_snapshot_enabled                = true
-    etcd_snapshot_object_store_bucket    = "kube-node-test1-snapshots"
-    etcd_snapshot_object_store_region    = "eu-west-1"
-    etcd_snapshot_object_store_endpoint  = "https://s3.eu-west-1.amazonaws.com"
-    etcd_snapshot_object_store_folder    = "test1"
+    cluster_name                        = "test1"
+    k8s_version                         = "v1.36.1+k3s1"
+    etcd_snapshot_enabled               = true
+    etcd_snapshot_object_store_bucket   = "kube-node-test1-snapshots"
+    etcd_snapshot_object_store_region   = "eu-west-1"
+    etcd_snapshot_object_store_endpoint = "https://s3.eu-west-1.amazonaws.com"
+    etcd_snapshot_object_store_folder   = "test1"
   }
 
   assert {
@@ -294,12 +294,12 @@ run "etcd_snapshot_renders_identically_for_server_join" {
   command = plan
 
   variables {
-    cluster_name           = "test1"
-    k8s_version            = "v1.36.1+k3s1"
-    node_role              = "server-join"
-    registration_address   = "10.0.1.10"
-    cluster_token          = "cluster-secret-snap"
-    etcd_snapshot_enabled  = true
+    cluster_name            = "test1"
+    k8s_version             = "v1.36.1+k3s1"
+    node_role               = "server-join"
+    registration_address    = "10.0.1.10"
+    cluster_token           = "cluster-secret-snap"
+    etcd_snapshot_enabled   = true
     etcd_snapshot_retention = 7
   }
 

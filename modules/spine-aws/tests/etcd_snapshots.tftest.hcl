@@ -50,12 +50,12 @@ run "ha_snapshots_on_by_default" {
 run "explicit_false_overrides_ha_default" {
   command = apply
   variables {
-    cluster_name           = "bharat"
-    aws_region             = "eu-west-1"
-    allowed_ingress_cidrs  = ["10.0.0.0/8"]
-    subnet_id              = "subnet-abc"
-    control_plane_count    = 3
-    control_plane_subnets  = {
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    control_plane_count   = 3
+    control_plane_subnets = {
       "eu-west-1a" = "subnet-az-a"
       "eu-west-1b" = "subnet-az-b"
       "eu-west-1c" = "subnet-az-c"
@@ -87,13 +87,13 @@ run "single_node_snapshots_still_off_by_default_even_with_bucket" {
 run "object_store_bucket_grants_scoped_iam_and_renders_s3_flags" {
   command = apply
   variables {
-    cluster_name             = "bharat"
-    aws_region               = "eu-west-1"
-    instance_type            = "m7g.large"
-    allowed_ingress_cidrs    = ["10.0.0.0/8"]
-    subnet_id                = "subnet-abc"
-    etcd_snapshot_s3_bucket  = "kube-node-bharat-snapshots"
-    etcd_snapshots_enabled   = true
+    cluster_name            = "bharat"
+    aws_region              = "eu-west-1"
+    instance_type           = "m7g.large"
+    allowed_ingress_cidrs   = ["10.0.0.0/8"]
+    subnet_id               = "subnet-abc"
+    etcd_snapshot_s3_bucket = "kube-node-bharat-snapshots"
+    etcd_snapshots_enabled  = true
   }
   assert {
     condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-s3-bucket kube-node-bharat-snapshots")

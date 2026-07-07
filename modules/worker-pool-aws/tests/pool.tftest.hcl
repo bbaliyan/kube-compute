@@ -23,8 +23,8 @@ run "fixed_pool_attaches_cluster_sg_and_sets_az_label" {
     agent_token_ssm_parameter = "/kube-node/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
     subnet_id                 = "subnet-worker-a"
-    instance_type              = "m7g.large"
-    desired_count              = 3
+    instance_type             = "m7g.large"
+    desired_count             = 3
   }
   assert {
     condition     = aws_autoscaling_group.worker.min_size == 3 && aws_autoscaling_group.worker.max_size == 3 && aws_autoscaling_group.worker.desired_capacity == 3

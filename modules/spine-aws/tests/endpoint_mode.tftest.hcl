@@ -114,18 +114,18 @@ run "dns_mode_requires_domain_and_zone" {
 run "static_mode_creates_nothing_and_uses_the_supplied_address" {
   command = plan
   variables {
-    cluster_name                 = "bharat"
-    aws_region                   = "eu-west-1"
-    allowed_ingress_cidrs        = ["10.0.0.0/8"]
-    subnet_id                    = "subnet-abc"
-    control_plane_count          = 3
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    control_plane_count   = 3
     control_plane_subnets = {
       "eu-west-1a" = "subnet-az-a"
       "eu-west-1b" = "subnet-az-b"
       "eu-west-1c" = "subnet-az-c"
     }
-    endpoint_mode                 = "static"
-    static_registration_address   = "my-own-lb.internal.example.test"
+    endpoint_mode               = "static"
+    static_registration_address = "my-own-lb.internal.example.test"
   }
   assert {
     condition     = length(aws_lb.control_plane) == 0
