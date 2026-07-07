@@ -1,7 +1,7 @@
 # spine-aws
 
 Provisions the AWS control plane for a K3s cluster — its control-plane node(s) plus the
-cluster-wide resources — consuming `node-bootstrap` for the K3s cloud-init. A spine with
+cluster-wide resources — consuming `cloud-init` for the K3s cloud-init. A spine with
 `control_plane_count = 1` is a complete single-node cluster.
 
 ## Scope
@@ -86,7 +86,7 @@ could disagree with where the instances actually launch.
 
 The genesis node (the same `server-init` node used for `control_plane_count = 1`) is unchanged in
 shape. Additional control-plane nodes (`server-join`) `depends_on` it and join via the NLB;
-Argo/platform GitOps inputs are only ever passed to the genesis node's `node-bootstrap` call, so
+Argo/platform GitOps inputs are only ever passed to the genesis node's `cloud-init` call, so
 platform bootstrap manifests are never applied — and never race — on more than one server.
 
 ## Container Network Interface (CNI)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to node-bootstrap) ----
+# ---- Common inputs (pass through to cloud-init) ----
 variable "cloud_init_template" {
   description = "Absolute path to the cloud-init template to render. Defaults to the bundled AL2023 template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
   type        = string
@@ -140,13 +140,13 @@ variable "etcd_snapshots_enabled" {
 }
 
 variable "etcd_snapshot_schedule_cron" {
-  description = "Cron schedule for etcd snapshots, passed through to node-bootstrap. Only meaningful when etcd_snapshots_enabled resolves to true."
+  description = "Cron schedule for etcd snapshots, passed through to cloud-init. Only meaningful when etcd_snapshots_enabled resolves to true."
   type        = string
   default     = "0 */12 * * *"
 }
 
 variable "etcd_snapshot_retention" {
-  description = "Number of local etcd snapshots to retain, passed through to node-bootstrap. Only meaningful when etcd_snapshots_enabled resolves to true."
+  description = "Number of local etcd snapshots to retain, passed through to cloud-init. Only meaningful when etcd_snapshots_enabled resolves to true."
   type        = number
   default     = 5
 }
@@ -268,7 +268,7 @@ variable "cert_mode" {
 }
 
 variable "platform_extra_helm_parameters" {
-  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application. See node-bootstrap for full description."
+  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application. See cloud-init for full description."
   type        = map(string)
   default     = {}
 }
@@ -280,7 +280,7 @@ variable "platform_helm_values_object" {
 }
 
 variable "extra_tags" {
-  description = "Additional tags applied to every AWS resource this module creates (EC2 instance, root EBS volume, security group, IAM role), and forwarded to node-bootstrap so platform-managed resources (e.g. CSI-provisioned storage) can tag themselves consistently."
+  description = "Additional tags applied to every AWS resource this module creates (EC2 instance, root EBS volume, security group, IAM role), and forwarded to cloud-init so platform-managed resources (e.g. CSI-provisioned storage) can tag themselves consistently."
   type        = map(string)
   default     = {}
 }

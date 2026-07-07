@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Renders node-bootstrap (server-init and worker roles) and validates the
+# Renders cloud-init (server-init and worker roles) and validates the
 # YAML + embedded bash for each. State is written to /tmp so each run starts
 # from scratch and the working tree stays clean (idempotent CI gate).
 set -euo pipefail

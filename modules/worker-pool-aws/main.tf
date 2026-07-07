@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-al2023.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-al2023.yaml.tpl")
 
   ami_arch         = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
   effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.al2023[*].id)
 
   availability_zone = data.aws_subnet.selected.availability_zone
 
-  # AWS-native delivery for this provider module: node-bootstrap only ever sees an
+  # AWS-native delivery for this provider module: cloud-init only ever sees an
   # opaque command it executes at boot, never the SSM API itself.
   agent_token_fetch_command = "aws ssm get-parameter --name '${var.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
 
@@ -28,7 +28,7 @@ locals {
 }
 
 module "bootstrap" {
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name

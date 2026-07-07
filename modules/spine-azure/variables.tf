@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to node-bootstrap) ----
+# ---- Common inputs (pass through to cloud-init) ----
 variable "cloud_init_template" {
   description = "Absolute path to the cloud-init template to render. Defaults to the bundled Ubuntu 26.04 LTS template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
   type        = string
@@ -126,7 +126,7 @@ variable "platform_helm_values_object" {
 }
 
 variable "extra_tags" {
-  description = "Additional tags applied to every Azure resource this module creates, and forwarded to node-bootstrap's platform Application (helm.valuesObject.extraTags)."
+  description = "Additional tags applied to every Azure resource this module creates, and forwarded to cloud-init's platform Application (helm.valuesObject.extraTags)."
   type        = map(string)
   default     = {}
 }

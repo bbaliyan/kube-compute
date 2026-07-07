@@ -13,7 +13,7 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 
 | Module | Purpose |
 |--------|---------|
-| `modules/node-bootstrap`      | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by spine-aws and worker-pool-aws) and Ubuntu 26.04 LTS (used by the Proxmox and Azure modules). No provider resources. |
+| `modules/cloud-init`          | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by spine-aws and worker-pool-aws) and Ubuntu 26.04 LTS (used by the Proxmox and Azure modules). No provider resources. |
 | `modules/spine-aws`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (Amazon Linux 2023). |
 | `modules/worker-pool-aws`     | Fixed, AZ-pinned AWS worker pool (ASG + launch template) that joins an existing spine-aws cluster (Amazon Linux 2023). |
 | `modules/spine-proxmox`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (Ubuntu 26.04 LTS). |
@@ -66,12 +66,6 @@ after total control-plane loss — orthogonal to HA, which prevents the outage w
 place. `endpoint_mode` picks how joining nodes reach the registration endpoint: `loadbalancer`
 (the NLB above, default), `dns` (cheaper Route53 multivalue-answer records with
 CloudWatch-alarm-backed health checks), or `static` (bring your own address).
-
-## Consumer examples
-
-Real Terragrunt usage examples (region hierarchy, HA + worker pools) live in the
-separate [`kube-examples`](https://github.com/bbaliyan/kube-examples) repo, not here —
-this repo stays code-only.
 
 ## License
 

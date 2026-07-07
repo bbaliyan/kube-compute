@@ -58,13 +58,13 @@ variable "registration_address" {
 }
 
 variable "agent_token_fetch_command" {
-  description = "Shell command that prints the k3s agent join token to stdout when run at boot (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store, assembled by a worker-pool module). Keeps node-bootstrap provider-neutral: the caller decides how the token is fetched and delivered to the instance; node-bootstrap only executes the command it is given. Required when node_role is worker."
+  description = "Shell command that prints the k3s agent join token to stdout when run at boot (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store, assembled by a worker-pool module). Keeps cloud-init provider-neutral: the caller decides how the token is fetched and delivered to the instance; cloud-init only executes the command it is given. Required when node_role is worker."
   type        = string
   default     = null
 }
 
 variable "node_labels" {
-  description = "Extra --node-label flags applied at k3s install time, e.g. { \"topology.kubernetes.io/zone\" = \"eu-west-1a\" }. Provider-neutral: any caller may set arbitrary labels; node-bootstrap does not interpret the keys."
+  description = "Extra --node-label flags applied at k3s install time, e.g. { \"topology.kubernetes.io/zone\" = \"eu-west-1a\" }. Provider-neutral: any caller may set arbitrary labels; cloud-init does not interpret the keys."
   type        = map(string)
   default     = {}
 }
@@ -76,7 +76,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'flannel' (K3s built-in, default) or 'cilium'. Only meaningful for node_role server-init/server-join — a worker never renders CNI flags or manifests of its own. The caller (a spine module) resolves any topology-aware default; node-bootstrap always renders whichever value it is given."
+  description = "CNI to install: 'flannel' (K3s built-in, default) or 'cilium'. Only meaningful for node_role server-init/server-join — a worker never renders CNI flags or manifests of its own. The caller (a spine module) resolves any topology-aware default; cloud-init always renders whichever value it is given."
   type        = string
   default     = "flannel"
   validation {
@@ -181,7 +181,7 @@ variable "cert_mode" {
 }
 
 variable "platform_extra_helm_parameters" {
-  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application. Use for optional platform features (secret store wiring, future extensions) without requiring node-bootstrap changes."
+  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application. Use for optional platform features (secret store wiring, future extensions) without requiring cloud-init changes."
   type        = map(string)
   default     = {}
 }
@@ -199,7 +199,7 @@ variable "extra_tags" {
 }
 
 variable "extra_server_manifests" {
-  description = "Arbitrary K3s auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/k3s/server/manifests/ on server-init/server-join nodes only. node-bootstrap does not interpret the content — a spine module uses this to drop provider-specific server-side add-ons (e.g. a kube-vip DaemonSet on Proxmox) without node-bootstrap knowing what they are."
+  description = "Arbitrary K3s auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/k3s/server/manifests/ on server-init/server-join nodes only. cloud-init does not interpret the content — a spine module uses this to drop provider-specific server-side add-ons (e.g. a kube-vip DaemonSet on Proxmox) without cloud-init knowing what they are."
   type        = map(string)
   default     = {}
 }

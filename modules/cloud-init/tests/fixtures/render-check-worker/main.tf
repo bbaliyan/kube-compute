@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Renders node-bootstrap in the worker role so the agent-join path can be
+# Renders cloud-init in the worker role so the agent-join path can be
 # validated offline (YAML + embedded bash), alongside the server-init render
 # in ../render-check. Not for production use.
 module "bootstrap" {

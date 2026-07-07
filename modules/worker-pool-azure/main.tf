@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-ubuntu-2604.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
 
   # Azure-native delivery: raw IMDS + Key Vault REST calls, no az CLI dependency (see
   # spine-azure's design note 6 — Ubuntu 26.04 is not guaranteed to ship the Azure CLI, but
-  # curl + python3 are always present). node-bootstrap only ever sees an opaque command it
+  # curl + python3 are always present). cloud-init only ever sees an opaque command it
   # executes at boot, never the Key Vault API itself.
   agent_token_fetch_command = "TOKEN=$(curl -s -H Metadata:true \"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access_token\"])') && curl -s -H \"Authorization: Bearer $TOKEN\" \"https://${var.key_vault_name}.vault.azure.net/secrets/${var.agent_token_secret_name}?api-version=7.4\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"value\"])'"
 
@@ -76,7 +76,7 @@ resource "azurerm_network_security_rule" "cluster_self" {
 }
 
 module "bootstrap" {
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name

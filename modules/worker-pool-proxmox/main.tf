@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-ubuntu-2604.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
 
   static_ips = var.worker_ip_addresses != null
 
@@ -92,7 +92,7 @@ resource "proxmox_virtual_environment_file" "network_data" {
 }
 
 module "bootstrap" {
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 

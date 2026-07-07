@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-ubuntu-2604.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
 
   network_rg = coalesce(var.network_resource_group_name, var.resource_group_name)
 
@@ -39,7 +39,7 @@ locals {
 
 # ---- Join-token flow: pre-generated so a spine + pool join in one apply pass ----
 # Two tokens, least privilege: the server token grants joining etcd/control-plane (embedded
-# directly into this spine's own node-bootstrap calls — control-plane nodes never fetch
+# directly into this spine's own cloud-init calls — control-plane nodes never fetch
 # anything from Key Vault); the agent token is all a worker ever receives, delivered via
 # Key Vault + managed identity (ADR 0004's Azure answer) so a compromised worker cannot
 # rejoin as a control-plane/etcd member.
@@ -224,7 +224,7 @@ resource "azurerm_network_interface_application_security_group_association" "etc
 
 # ---- The genesis control-plane node (server-init) ----
 module "bootstrap" {
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template            = local.cloud_init_template
   cluster_name                   = var.cluster_name
@@ -296,7 +296,7 @@ resource "azurerm_linux_virtual_machine" "control_plane" {
 module "bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template         = local.cloud_init_template
   cluster_name                = var.cluster_name

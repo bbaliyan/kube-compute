@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-al2023.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-al2023.yaml.tpl")
 
   # Arch from AWS's own metadata — covers all present and future instance types.
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
@@ -174,7 +174,7 @@ resource "aws_vpc_security_group_egress_rule" "etcd_all" {
 }
 
 module "bootstrap" {
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template                 = local.cloud_init_template
   cluster_name                        = var.cluster_name
@@ -214,7 +214,7 @@ module "bootstrap" {
 module "bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template                 = local.cloud_init_template
   cluster_name                        = var.cluster_name
@@ -238,7 +238,7 @@ module "bootstrap_additional" {
   cert_mode                           = var.cert_mode
   extra_tags                          = var.extra_tags
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
-  # first server only (ADR 0007) — node-bootstrap also enforces this at the render level.
+  # first server only (ADR 0007) — cloud-init also enforces this at the render level.
 }
 
 resource "aws_instance" "control_plane_additional" {

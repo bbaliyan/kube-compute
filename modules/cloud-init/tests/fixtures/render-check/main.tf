@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Renders node-bootstrap with all features enabled so the cloud_init can be
+# Renders cloud-init with all features enabled so the cloud_init can be
 # extracted and validated offline. Not for production use.
 module "bootstrap" {
   source = "../../.."

@@ -1,4 +1,4 @@
-# node-bootstrap
+# cloud-init
 
 Provider-agnostic renderer for the K3s node cloud-init. **No provider resources** —
 it only renders a template, so it builds and tests with zero cloud credentials.
@@ -36,7 +36,7 @@ environment needs. `trusted_ca_pem`, `registry_mirror_url`, the `gitops_*` input
 ## Testing
 
 ```bash
-cd modules/node-bootstrap
+cd modules/cloud-init
 tofu init -backend=false && tofu test    # content assertions
 tests/validate-render.sh                 # YAML parse + bash -n of the full render
 ```

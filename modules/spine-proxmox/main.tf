@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-ubuntu-2604.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
 
   has_domain    = var.cluster_domain != null
   fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
@@ -215,7 +215,7 @@ locals {
 }
 
 module "bootstrap" {
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template            = local.cloud_init_template
   cluster_name                   = var.cluster_name
@@ -248,7 +248,7 @@ module "bootstrap" {
 module "bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
-  source = "../node-bootstrap"
+  source = "../cloud-init"
 
   cloud_init_template         = local.cloud_init_template
   cluster_name                = var.cluster_name

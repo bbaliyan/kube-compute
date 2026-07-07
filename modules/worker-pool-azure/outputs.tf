@@ -25,7 +25,7 @@ output "worker_identity_principal_id" {
 }
 
 output "rendered_cloud_init" {
-  description = "Plaintext rendered cloud-config shared by every worker in this pool, passed through from node-bootstrap. Sensitive — for tests/debugging only."
+  description = "Plaintext rendered cloud-config shared by every worker in this pool, passed through from cloud-init. Sensitive — for tests/debugging only."
   value       = module.bootstrap.cloud_init
   sensitive   = true
 }

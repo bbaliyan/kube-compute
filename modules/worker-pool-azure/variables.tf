@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to node-bootstrap) ----
+# ---- Common inputs (pass through to cloud-init) ----
 variable "cloud_init_template" {
   description = "Absolute path to the cloud-init template to render. Defaults to the bundled Ubuntu 26.04 LTS template."
   type        = string
