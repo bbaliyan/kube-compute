@@ -14,7 +14,8 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 | `modules/node-bootstrap`  | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by spine-aws and worker-pool-aws) and Ubuntu 26.04 LTS (used by node-proxmox and node-azure). No provider resources. |
 | `modules/spine-aws`       | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (Amazon Linux 2023). |
 | `modules/worker-pool-aws` | Fixed, AZ-pinned AWS worker pool (ASG + launch template) that joins an existing spine-aws cluster (Amazon Linux 2023). |
-| `modules/node-proxmox`    | Proxmox VM (Ubuntu 26.04 LTS). |
+| `modules/spine-proxmox`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (Ubuntu 26.04 LTS). |
+| `modules/worker-pool-proxmox` | Fixed Proxmox worker pool (discrete VMs) that joins an existing spine-proxmox cluster (Ubuntu 26.04 LTS). |
 | `modules/node-azure`      | Azure VM (Ubuntu 26.04 LTS). |
 
 ## Concepts
@@ -39,6 +40,12 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
   bootstrap probes that address at boot before deciding whether to join the existing quorum or
   initialize a new one — so replacing the first control-plane node is a safe rejoin, not a
   split-brain risk.
+- **Proxmox HA registration endpoint** — Proxmox has no load-balancer primitive, so `control_plane_count = 3` or `5`
+  runs a [kube-vip](https://kube-vip.io) ARP-mode VIP across the control-plane nodes instead of a cloud LB.
+  `registration_address` becomes that VIP. The cluster-wide firewall is a Proxmox ipset scoped to the cluster's
+  L2 subnet CIDR (not exact per-VM IPs like AWS's self-referencing security group) — `bpg/proxmox`'s ipset
+  resource is owned by one Terraform state, and worker pools are deliberately separate state, so exact
+  cross-state membership isn't possible; see `modules/spine-proxmox`'s `cluster_network_cidr` variable.
 - **Durability and endpoint options** — etcd snapshots (K3s built-in, default-on for
   `control_plane_count > 1`) recover cluster state after total control-plane loss; they are
   orthogonal to availability (HA), which prevents the outage window in the first place.
