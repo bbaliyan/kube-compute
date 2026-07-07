@@ -64,8 +64,9 @@ run "ha_creates_lb_and_two_additional_vms" {
   # this resource, so without it OpenTofu synthesizes a random id instead of
   # reusing the mock_resource "azurerm_lb" default declared above, which breaks the
   # downstream azurerm_lb_backend_address_pool/probe/rule resources that parse
-  # loadbalancer_id as a real Azure resource ID. This is a test-only fix (see
-  # task-5-report.md); main.tf is unchanged from the brief.
+  # loadbalancer_id as a real Azure resource ID. This override exists purely to give
+  # the test a deterministic frontend private_ip_address to assert on; it changes
+  # nothing about main.tf itself.
   override_resource {
     target = azurerm_lb.control_plane
     values = {
