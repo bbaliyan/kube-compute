@@ -1,6 +1,6 @@
 # spine-azure
 
-Control-plane spine for a kube-node cluster on Azure: discrete `azurerm_linux_virtual_machine`
+Control-plane spine for a kube-compute cluster on Azure: discrete `azurerm_linux_virtual_machine`
 control-plane pets (1, 3, or 5 — one per availability zone), an internal Standard Load Balancer
 registration endpoint for HA, an Application Security Group + NSG cluster firewall, and join
 tokens delivered via Key Vault (RBAC authorization).

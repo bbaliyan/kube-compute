@@ -1,10 +1,14 @@
-# kube-node
+# kube-compute
 
-Reusable OpenTofu/Terragrunt modules to provision a disposable K3s cluster on the
-provider of choice — AWS, Proxmox, or Azure — with minimal per-provider code. A
-cluster is a **spine** (control-plane node(s) plus cluster-wide resources) optionally
-joined by one or more **worker pools**; `control_plane_count = 1` with no worker pools
-is a complete single-node cluster.
+Reusable OpenTofu/Terragrunt modules for the compute layer of a K3s cluster —
+control-plane and worker nodes, the load balancer/VIP and DNS needed to reach them,
+and node-scoped firewalling — on the provider of choice (AWS, Proxmox, or Azure) with
+minimal per-provider code. Not a single node: a cluster is a **spine** (control-plane
+node(s) plus cluster-wide resources) optionally joined by one or more **worker pools**;
+`control_plane_count = 1` with no worker pools is a complete single-node cluster.
+
+This is the compute half of the stack — what runs *on top* (GitOps, platform services)
+is [`kube-platform`](https://github.com/bbaliyan/kube-platform).
 
 This repo contains **no environment-specific values**. Consumers pin it by immutable
 git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, domains).
