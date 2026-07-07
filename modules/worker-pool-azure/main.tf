@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: Apache-2.0
+locals {
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../node-bootstrap/templates/cloud-init-ubuntu-2604.yaml.tpl")
+
+  # Azure-native delivery: raw IMDS + Key Vault REST calls, no az CLI dependency (see
+  # spine-azure's design note 6 — Ubuntu 26.04 is not guaranteed to ship the Azure CLI, but
+  # curl + python3 are always present). node-bootstrap only ever sees an opaque command it
+  # executes at boot, never the Key Vault API itself.
+  agent_token_fetch_command = "TOKEN=$(curl -s -H Metadata:true \"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access_token\"])') && curl -s -H \"Authorization: Bearer $TOKEN\" \"https://${var.key_vault_name}.vault.azure.net/secrets/${var.agent_token_secret_name}?api-version=7.4\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"value\"])'"
+
+  node_labels = merge({ "topology.kubernetes.io/zone" = var.zone }, var.extra_node_labels)
+
+  # Version-skew check: kubelet may trail the API server, never lead it.
+  version_regex       = "^v(\\d+)\\.(\\d+)\\.(\\d+)\\+"
+  pool_version_parts  = regex(local.version_regex, var.k8s_version)
+  spine_version_parts = regex(local.version_regex, var.spine_k8s_version)
+  pool_version_num    = tonumber(local.pool_version_parts[0]) * 1000000 + tonumber(local.pool_version_parts[1]) * 1000 + tonumber(local.pool_version_parts[2])
+  spine_version_num   = tonumber(local.spine_version_parts[0]) * 1000000 + tonumber(local.spine_version_parts[1]) * 1000 + tonumber(local.spine_version_parts[2])
+
+  image_parts     = var.os_image_urn != null ? split(":", var.os_image_urn) : []
+  image_publisher = var.os_image_urn != null ? local.image_parts[0] : "Canonical"
+  image_offer     = var.os_image_urn != null ? local.image_parts[1] : "ubuntu-26_04-lts"
+  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "server-gen2"
+  image_version   = var.os_image_urn != null ? local.image_parts[3] : "latest"
+
+  common_tags = merge(var.extra_tags, {
+    ClusterName = var.cluster_name
+    ManagedBy   = "kube-node"
+  })
+}
+
+module "bootstrap" {
+  source = "../node-bootstrap"
+
+  cloud_init_template       = local.cloud_init_template
+  cluster_name              = var.cluster_name
+  k8s_version               = var.k8s_version
+  node_role                 = "worker"
+  registration_address      = var.registration_address
+  agent_token_fetch_command = local.agent_token_fetch_command
+  node_labels               = local.node_labels
+  trusted_ca_pem            = var.trusted_ca_pem
+  registry_mirror_url       = var.registry_mirror_url
+  extra_tags                = var.extra_tags
+}
+
+# ---- Fixed worker pool: VM Scale Set, one zone, system-assigned managed identity ----
+resource "azurerm_linux_virtual_machine_scale_set" "worker" {
+  name                            = "vmss-${var.cluster_name}-worker"
+  resource_group_name             = var.resource_group_name
+  location                        = var.location
+  sku                             = var.vm_size
+  instances                       = var.desired_count
+  admin_username                  = var.admin_username
+  disable_password_authentication = true
+  upgrade_mode                    = "Manual"
+  zones                           = [var.zone]
+  single_placement_group          = false
+  custom_data                     = module.bootstrap.user_data_base64
+  tags                            = merge(local.common_tags, { Role = "worker" })
+
+  admin_ssh_key {
+    username   = var.admin_username
+    public_key = var.admin_ssh_public_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = var.os_disk_type
+    disk_size_gb         = var.os_disk_size_gb
+  }
+
+  source_image_reference {
+    publisher = local.image_publisher
+    offer     = local.image_offer
+    sku       = local.image_sku
+    version   = local.image_version
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  network_interface {
+    name    = "nic-worker"
+    primary = true
+
+    ip_configuration {
+      name                           = "internal"
+      primary                        = true
+      subnet_id                      = data.azurerm_subnet.worker.id
+      application_security_group_ids = [var.cluster_asg_id]
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.pool_version_num <= local.spine_version_num
+      error_message = "k8s_version (${var.k8s_version}) must not be newer than the spine's k8s_version (${var.spine_k8s_version}) — a kubelet may trail the API server by up to 3 minors, never lead it."
+    }
+  }
+}
+
+# ---- Least-privilege token read: scoped to this one secret, not the whole vault ----
+resource "azurerm_role_assignment" "agent_token_read" {
+  scope                = "${var.key_vault_id}/secrets/${var.agent_token_secret_name}"
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_linux_virtual_machine_scale_set.worker.identity[0].principal_id
+}
