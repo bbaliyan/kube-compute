@@ -32,8 +32,15 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
   snapshot behavior across topologies.
 - **Join flow** — a spine pre-generates a server token and a separate agent token; only the agent
   token is given to worker pools (via an SSM `SecureString` on AWS), so a compromised worker cannot
-  rejoin as a control-plane/etcd member. Cluster members reach each other over a self-referencing
-  security group; etcd (2379-2380) is further restricted to control-plane-only members.
+  rejoin as a control-plane/etcd member. On AWS, cluster members reach each other over a
+  self-referencing security group, and etcd (2379-2380) is further restricted to
+  control-plane-only members by exact instance membership. On Proxmox this extra etcd restriction
+  has no additional effect: the cluster-wide ipset already ACCEPTs all traffic from the whole
+  subnet CIDR (see below), so a narrower etcd-only rule is a strict subset of what's already
+  allowed from any other host on that subnet — it only matters against traffic from outside the
+  subnet, which the default-DROP policy blocks regardless. Operators who want etcd traffic
+  genuinely isolated from other subnet occupants on Proxmox should put the cluster on its own
+  dedicated subnet/VLAN.
 - **HA control plane** — `control_plane_count = 3` or `5` places one control-plane node per
   availability zone (at least 3 distinct AZs required) behind an internal Network Load Balancer
   on port 6443. `registration_address` becomes the NLB's DNS name. A control-plane node's
@@ -46,6 +53,9 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
   L2 subnet CIDR (not exact per-VM IPs like AWS's self-referencing security group) — `bpg/proxmox`'s ipset
   resource is owned by one Terraform state, and worker pools are deliberately separate state, so exact
   cross-state membership isn't possible; see `modules/spine-proxmox`'s `cluster_network_cidr` variable.
+  `spine-proxmox` and `worker-pool-proxmox` are validated with `tofu test` against a mocked
+  provider only; operators should verify VIP failover and the live join flow against a real
+  Proxmox cluster before relying on either module in production.
 - **Durability and endpoint options** — etcd snapshots (K3s built-in, default-on for
   `control_plane_count > 1`) recover cluster state after total control-plane loss; they are
   orthogonal to availability (HA), which prevents the outage window in the first place.
