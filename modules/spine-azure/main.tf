@@ -105,3 +105,98 @@ resource "azurerm_lb" "control_plane" {
     private_ip_address_allocation = "Dynamic"
   }
 }
+
+# ---- Application Security Groups: the Azure equivalent of AWS's self-referencing SG ----
+resource "azurerm_application_security_group" "cluster" {
+  name                = "asg-${var.cluster_name}-cluster"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = local.common_tags
+}
+
+resource "azurerm_application_security_group" "etcd" {
+  name                = "asg-${var.cluster_name}-etcd"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = local.common_tags
+}
+
+# ---- Node-scoped NSG — the module owns only this; VNet/subnet are never touched ----
+resource "azurerm_network_security_group" "control_plane" {
+  name                = "nsg-${var.cluster_name}-cp"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = local.common_tags
+}
+
+# SSH is always denied, at the highest priority (lowest number), regardless of ingress_ports.
+# Out-of-band access is via `az vm run-command invoke` — no inbound port required.
+resource "azurerm_network_security_rule" "deny_ssh" {
+  name                        = "deny-ssh"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.control_plane.name
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Deny"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+}
+
+# East-west, cluster-wide: any protocol/port among members of the cluster ASG. Priority 110
+# sits between deny-ssh (100) and the CIDR-based allow_inbound rules (200+) so it always wins
+# over an accidental narrower rule, and never collides regardless of how many ingress_ports
+# are configured.
+resource "azurerm_network_security_rule" "cluster_self" {
+  name                                       = "allow-cluster-self"
+  resource_group_name                        = var.resource_group_name
+  network_security_group_name                = azurerm_network_security_group.control_plane.name
+  priority                                   = 110
+  direction                                  = "Inbound"
+  access                                     = "Allow"
+  protocol                                   = "*"
+  source_port_range                          = "*"
+  destination_port_range                     = "*"
+  source_application_security_group_ids      = [azurerm_application_security_group.cluster.id]
+  destination_application_security_group_ids = [azurerm_application_security_group.cluster.id]
+}
+
+# etcd (2379-2380) is control-plane-to-control-plane only, via the separate etcd ASG that
+# worker-pool-azure never joins.
+resource "azurerm_network_security_rule" "etcd_peer" {
+  name                                       = "allow-etcd-peer"
+  resource_group_name                        = var.resource_group_name
+  network_security_group_name                = azurerm_network_security_group.control_plane.name
+  priority                                   = 115
+  direction                                  = "Inbound"
+  access                                     = "Allow"
+  protocol                                   = "Tcp"
+  source_port_range                          = "*"
+  destination_port_range                     = "2379-2380"
+  source_application_security_group_ids      = [azurerm_application_security_group.etcd.id]
+  destination_application_security_group_ids = [azurerm_application_security_group.etcd.id]
+}
+
+# One allow rule per port, accepting traffic from all allowed_ingress_cidrs. Priorities:
+# 200, 210, 220 ... — above cluster_self/etcd_peer (110/115) so those unconditional
+# cluster-membership allows are never shadowed.
+resource "azurerm_network_security_rule" "allow_inbound" {
+  for_each = {
+    for idx, port in var.ingress_ports :
+    tostring(port) => { port = port, priority = 200 + idx * 10 }
+  }
+
+  name                        = "allow-${each.key}"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.control_plane.name
+  priority                    = each.value.priority
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = tostring(each.value.port)
+  source_address_prefixes     = var.allowed_ingress_cidrs
+  destination_address_prefix  = "*"
+}
