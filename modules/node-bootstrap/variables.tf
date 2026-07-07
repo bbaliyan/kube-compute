@@ -197,3 +197,9 @@ variable "extra_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "extra_server_manifests" {
+  description = "Arbitrary K3s auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/k3s/server/manifests/ on server-init/server-join nodes only. node-bootstrap does not interpret the content — a spine module uses this to drop provider-specific server-side add-ons (e.g. a kube-vip DaemonSet on Proxmox) without node-bootstrap knowing what they are."
+  type        = map(string)
+  default     = {}
+}

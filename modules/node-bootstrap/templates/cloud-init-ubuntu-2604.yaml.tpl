@@ -117,6 +117,15 @@ write_files:
           automated: { prune: true, selfHeal: true }
           syncOptions: ["CreateNamespace=true"]
 %{ endif ~}
+%{ if node_role == "server-init" || node_role == "server-join" ~}
+%{ for name, content in extra_server_manifests ~}
+  - path: /var/lib/rancher/k3s/server/manifests/${name}
+    permissions: "0600"
+    owner: root:root
+    content: |
+      ${indent(6, content)}
+%{ endfor ~}
+%{ endif ~}
   - path: /usr/local/bin/kube-node-bootstrap.sh
     permissions: "0755"
     owner: root:root
