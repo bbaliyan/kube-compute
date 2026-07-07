@@ -8,8 +8,7 @@ on:
 jobs:
   tofu:
     runs-on: ubuntu-latest
-    # renovate: datasource=docker depName=ghcr.io/bbaliyan/kube-devenv
-    container: ghcr.io/bbaliyan/kube-devenv:v0.1.0
+    container: ghcr.io/bbaliyan/kube-devenv:0.1.6
     steps:
       - uses: actions/checkout@v4
 
