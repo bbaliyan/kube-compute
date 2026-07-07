@@ -5,7 +5,14 @@
 # local.kv_name derives from random_string.kv_suffix.result, the KV-name-length
 # assertion below needs that value known at plan time, so the random provider
 # is mocked too.
-mock_provider "random" {}
+mock_provider "random" {
+  # Pin the suffix to its real 6-character width so the KV-name-length
+  # assertion below reflects the actual 18+6=24 guarantee, not an
+  # auto-generated placeholder of arbitrary length.
+  mock_resource "random_string" {
+    defaults = { result = "abc123" }
+  }
+}
 
 mock_provider "azurerm" {
   mock_data "azurerm_client_config" {
@@ -37,11 +44,11 @@ run "key_vault_holds_agent_token_not_server_token" {
     k8s_version           = "v1.36.1+k3s1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
-    vnet_name              = "vnet-main"
-    subnet_name            = "snet-k8s"
-    vm_size                = "Standard_D4s_v3"
-    admin_ssh_public_key    = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-node-test"
-    allowed_ingress_cidrs  = ["10.0.0.0/8"]
+    vnet_name             = "vnet-main"
+    subnet_name           = "snet-k8s"
+    vm_size               = "Standard_D4s_v3"
+    admin_ssh_public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-node-test"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
   }
   assert {
     condition     = azurerm_key_vault.cluster.enable_rbac_authorization == true
