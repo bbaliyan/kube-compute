@@ -13,7 +13,7 @@ tokens delivered via Key Vault (RBAC authorization).
 - Two Application Security Groups: `cluster` (all members, all ports/protocols) and `etcd`
   (control-plane-only, ports 2379-2380) — the Azure equivalent of AWS's self-referencing
   security group. `worker-pool-azure` joins the `cluster` ASG by id; it never creates one.
-- One Key Vault (`enable_rbac_authorization = true`) holding the agent join token as a secret.
+- One Key Vault (`rbac_authorization_enabled = true`) holding the agent join token as a secret.
   The server token is passed directly to `node-bootstrap` within this module's own state —
   control-plane nodes never read from Key Vault.
 

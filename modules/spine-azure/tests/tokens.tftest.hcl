@@ -66,7 +66,7 @@ run "key_vault_holds_agent_token_not_server_token" {
     allowed_ingress_cidrs = ["10.0.0.0/8"]
   }
   assert {
-    condition     = azurerm_key_vault.cluster.enable_rbac_authorization == true
+    condition     = azurerm_key_vault.cluster.rbac_authorization_enabled == true
     error_message = "Key Vault must use RBAC authorization, not access policies"
   }
   assert {

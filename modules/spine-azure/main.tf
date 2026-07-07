@@ -61,13 +61,13 @@ resource "random_string" "kv_suffix" {
 
 # ---- Key Vault: RBAC authorization, agent token only ----
 resource "azurerm_key_vault" "cluster" {
-  name                      = local.kv_name
-  resource_group_name       = var.resource_group_name
-  location                  = var.location
-  tenant_id                 = data.azurerm_client_config.current.tenant_id
-  sku_name                  = "standard"
-  enable_rbac_authorization = true
-  tags                      = local.common_tags
+  name                       = local.kv_name
+  resource_group_name        = var.resource_group_name
+  location                   = var.location
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  rbac_authorization_enabled = true
+  tags                       = local.common_tags
 }
 
 # RBAC authorization grants nothing implicitly — the executing principal needs an explicit
