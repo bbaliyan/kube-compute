@@ -90,22 +90,6 @@ resource "azurerm_key_vault_secret" "agent_token" {
   depends_on = [azurerm_role_assignment.kv_admin_self]
 }
 
-# ---- STUB: replaced by the full internal Standard LB in Task 5 ----
-resource "azurerm_lb" "control_plane" {
-  count               = var.control_plane_count > 1 ? 1 : 0
-  name                = "lb-${var.cluster_name}-cp"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  sku                 = "Standard"
-  tags                = local.common_tags
-
-  frontend_ip_configuration {
-    name                          = "internal"
-    subnet_id                     = data.azurerm_subnet.control_plane.id
-    private_ip_address_allocation = "Dynamic"
-  }
-}
-
 # ---- Application Security Groups: the Azure equivalent of AWS's self-referencing SG ----
 resource "azurerm_application_security_group" "cluster" {
   name                = "asg-${var.cluster_name}-cluster"
@@ -306,4 +290,121 @@ resource "azurerm_linux_virtual_machine" "control_plane" {
       error_message = "control_plane_count > 1 requires at least 3 distinct availability_zones (got ${length(distinct(var.availability_zones))})."
     }
   }
+}
+
+# ---- Additional control-plane nodes (2..N): server-join ----
+module "bootstrap_additional" {
+  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
+
+  source = "../node-bootstrap"
+
+  cloud_init_template         = local.cloud_init_template
+  cluster_name                = var.cluster_name
+  k8s_version                 = var.k8s_version
+  cluster_fqdn                = local.cluster_fqdn
+  node_role                   = "server-join"
+  control_plane_taint         = local.control_plane_taint
+  cni                         = local.effective_cni
+  registration_address        = local.registration_address
+  extra_tls_sans              = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  etcd_snapshot_enabled       = local.effective_etcd_snapshots_enabled
+  etcd_snapshot_schedule_cron = var.etcd_snapshot_schedule_cron
+  etcd_snapshot_retention     = var.etcd_snapshot_retention
+  cluster_token               = random_password.server_token.result
+  trusted_ca_pem              = var.trusted_ca_pem
+  registry_mirror_url         = var.registry_mirror_url
+  cert_mode                   = var.cert_mode
+  extra_tags                  = var.extra_tags
+  # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
+}
+
+resource "azurerm_linux_virtual_machine" "control_plane_additional" {
+  for_each = module.bootstrap_additional
+
+  name                            = "vm-${var.cluster_name}-cp-${each.key}"
+  resource_group_name             = var.resource_group_name
+  location                        = var.location
+  size                            = var.vm_size
+  admin_username                  = var.admin_username
+  disable_password_authentication = true
+  network_interface_ids           = [azurerm_network_interface.control_plane[each.key].id]
+  zone                            = tostring(var.availability_zones[tonumber(each.key) % length(var.availability_zones)])
+  tags                            = merge(local.common_tags, { Role = "control-plane" })
+
+  admin_ssh_key {
+    username   = var.admin_username
+    public_key = var.admin_ssh_public_key
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = var.os_disk_type
+    disk_size_gb         = var.os_disk_size_gb
+  }
+
+  source_image_reference {
+    publisher = local.image_publisher
+    offer     = local.image_offer
+    sku       = local.image_sku
+    version   = local.image_version
+  }
+
+  custom_data = each.value.user_data_base64
+
+  depends_on = [azurerm_linux_virtual_machine.control_plane]
+}
+
+# ---- Internal Standard LB fronting the control plane on 6443 (control_plane_count > 1) ----
+# A floating VIP is impossible on Azure (a private IP is subnet-scoped, and Azure VNets are
+# not flat L2 across zones any more than AWS VPCs are across AZs) — an internal Standard LB
+# is the only registration-endpoint primitive here, matching spine-aws's NLB and ADR 0003.
+resource "azurerm_lb" "control_plane" {
+  count               = var.control_plane_count > 1 ? 1 : 0
+  name                = "lb-${var.cluster_name}-cp"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  sku                 = "Standard"
+  tags                = local.common_tags
+
+  frontend_ip_configuration {
+    name                          = "internal"
+    subnet_id                     = data.azurerm_subnet.control_plane.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_lb_backend_address_pool" "control_plane" {
+  count           = var.control_plane_count > 1 ? 1 : 0
+  loadbalancer_id = azurerm_lb.control_plane[0].id
+  name            = "cp-backend"
+}
+
+resource "azurerm_lb_probe" "control_plane" {
+  count               = var.control_plane_count > 1 ? 1 : 0
+  loadbalancer_id     = azurerm_lb.control_plane[0].id
+  name                = "cp-probe"
+  protocol            = "Tcp"
+  port                = 6443
+  interval_in_seconds = 10
+  number_of_probes    = 2
+}
+
+resource "azurerm_lb_rule" "control_plane" {
+  count                          = var.control_plane_count > 1 ? 1 : 0
+  loadbalancer_id                = azurerm_lb.control_plane[0].id
+  name                           = "cp-6443"
+  protocol                       = "Tcp"
+  frontend_port                  = 6443
+  backend_port                   = 6443
+  frontend_ip_configuration_name = "internal"
+  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.control_plane[0].id]
+  probe_id                       = azurerm_lb_probe.control_plane[0].id
+}
+
+resource "azurerm_network_interface_backend_address_pool_association" "control_plane" {
+  for_each = var.control_plane_count > 1 ? azurerm_network_interface.control_plane : {}
+
+  network_interface_id    = each.value.id
+  ip_configuration_name   = "internal"
+  backend_address_pool_id = azurerm_lb_backend_address_pool.control_plane[0].id
 }
