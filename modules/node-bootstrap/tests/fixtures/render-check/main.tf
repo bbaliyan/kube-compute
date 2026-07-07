@@ -2,9 +2,9 @@
 # Renders node-bootstrap with all features enabled so the cloud_init can be
 # extracted and validated offline. Not for production use.
 module "bootstrap" {
-  source = "../.."
+  source = "../../.."
 
-  cloud_init_template       = "${path.module}/../../templates/cloud-init-al2023.yaml.tpl"
+  cloud_init_template       = "${path.module}/../../../templates/cloud-init-al2023.yaml.tpl"
   cluster_name              = "render-check"
   k8s_version               = "v1.36.1+k3s1"
   cluster_fqdn              = "api.render-check.example.test"

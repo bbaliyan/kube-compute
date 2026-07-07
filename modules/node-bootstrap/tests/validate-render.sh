@@ -7,9 +7,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 check_render() {
-  local example_dir="$1" state_name="$2"
+  local fixture_dir="$1" state_name="$2"
   (
-    cd "../examples/${example_dir}"
+    cd "fixtures/${fixture_dir}"
     STATE="/tmp/kube-node-render-check-${state_name}.tfstate"
     tofu init -backend=false >/dev/null
     tofu apply -auto-approve -state="$STATE" >/dev/null
@@ -17,7 +17,7 @@ check_render() {
   )
 
   python3 -c "import yaml; yaml.safe_load(open('/tmp/kube-node-ci-${state_name}.yaml'))"
-  echo "OK: ${example_dir} cloud-init is valid YAML"
+  echo "OK: ${fixture_dir} cloud-init is valid YAML"
 
   python3 - "$state_name" <<'PY'
 import sys, yaml
@@ -28,7 +28,7 @@ script = next(f["content"] for f in doc["write_files"]
 open(f"/tmp/kube-node-bootstrap-{state_name}.sh", "w").write(script)
 PY
   bash -n "/tmp/kube-node-bootstrap-${state_name}.sh"
-  echo "OK: ${example_dir} embedded bootstrap script passes bash -n"
+  echo "OK: ${fixture_dir} embedded bootstrap script passes bash -n"
 }
 
 check_render "render-check" "server-init"
