@@ -212,7 +212,7 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "ingress_ports" {
-  description = "TCP ports to open inbound from allowed_ingress_cidrs on every control-plane VM. Port 22 is always denied regardless of this list. Port order is stable — removing or reordering entries changes NSG rule priorities and triggers rule recreation. Limit: at most 9 entries (priorities 200, 210, ... 280 stay below the cluster/etcd ASG rules at 110/115... wait see note) — see module README."
+  description = "TCP ports to open inbound from allowed_ingress_cidrs on every control-plane VM. Port 22 is always denied regardless of this list. Port order is stable — removing or reordering entries changes NSG rule priorities (200, 210, 220, ...) and triggers rule recreation."
   type        = list(number)
   default     = [80, 443, 6443]
   validation {
