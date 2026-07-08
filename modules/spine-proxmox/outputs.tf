@@ -26,7 +26,7 @@ output "node_provider" {
 }
 
 output "bootstrap_status_ref" {
-  description = "Genesis VM ID used to read bootstrap status: qm guest exec <vmid> -- cat /var/log/kube-node/bootstrap-status."
+  description = "Genesis VM ID used to read bootstrap status: qm guest exec <vmid> -- cat /var/log/kube-compute/bootstrap-status."
   value       = tostring(proxmox_virtual_environment_vm.control_plane.vm_id)
 }
 

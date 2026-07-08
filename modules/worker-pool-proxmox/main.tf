@@ -125,7 +125,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   name            = "${var.cluster_name}-worker-${each.key}"
   node_name       = var.proxmox_node
-  tags            = ["kube-node", var.cluster_name, "worker"]
+  tags            = ["kube-compute", var.cluster_name, "worker"]
   on_boot         = true
   started         = true
   stop_on_destroy = true

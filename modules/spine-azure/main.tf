@@ -33,7 +33,7 @@ locals {
 
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
-    ManagedBy   = "kube-node"
+    ManagedBy   = "kube-compute"
   })
 }
 

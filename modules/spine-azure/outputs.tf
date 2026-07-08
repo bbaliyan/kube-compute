@@ -28,7 +28,7 @@ output "node_provider" {
 }
 
 output "bootstrap_status_ref" {
-  description = "Genesis VM resource ID used to read bootstrap status. Usage: az vm run-command invoke --ids <this> --command-id RunShellScript --scripts 'cat /var/log/kube-node/bootstrap-status'"
+  description = "Genesis VM resource ID used to read bootstrap status. Usage: az vm run-command invoke --ids <this> --command-id RunShellScript --scripts 'cat /var/log/kube-compute/bootstrap-status'"
   value       = azurerm_linux_virtual_machine.control_plane.id
 }
 

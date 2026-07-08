@@ -76,7 +76,7 @@ run "single_node_snapshots_still_off_by_default_even_with_bucket" {
     instance_type           = "m7g.large"
     allowed_ingress_cidrs   = ["10.0.0.0/8"]
     subnet_id               = "subnet-abc"
-    etcd_snapshot_s3_bucket = "kube-node-bharat-snapshots"
+    etcd_snapshot_s3_bucket = "kube-compute-bharat-snapshots"
   }
   assert {
     condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "--etcd-snapshot-schedule-cron")
@@ -92,11 +92,11 @@ run "object_store_bucket_grants_scoped_iam_and_renders_s3_flags" {
     instance_type           = "m7g.large"
     allowed_ingress_cidrs   = ["10.0.0.0/8"]
     subnet_id               = "subnet-abc"
-    etcd_snapshot_s3_bucket = "kube-node-bharat-snapshots"
+    etcd_snapshot_s3_bucket = "kube-compute-bharat-snapshots"
     etcd_snapshots_enabled  = true
   }
   assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-s3-bucket kube-node-bharat-snapshots")
+    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-s3-bucket kube-compute-bharat-snapshots")
     error_message = "etcd_snapshot_s3_bucket must render as --etcd-s3-bucket in the genesis node's cloud-init"
   }
   assert {
@@ -108,7 +108,7 @@ run "object_store_bucket_grants_scoped_iam_and_renders_s3_flags" {
     error_message = "a bucket must grant a scoped IAM policy on the control-plane role"
   }
   assert {
-    condition     = strcontains(nonsensitive(aws_iam_role_policy.etcd_snapshot_s3[0].policy), "kube-node-bharat-snapshots")
+    condition     = strcontains(nonsensitive(aws_iam_role_policy.etcd_snapshot_s3[0].policy), "kube-compute-bharat-snapshots")
     error_message = "the IAM policy must reference the specific bucket, not a wildcard"
   }
 }

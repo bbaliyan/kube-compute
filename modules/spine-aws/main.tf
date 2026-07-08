@@ -86,7 +86,7 @@ locals {
 
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
-    ManagedBy   = "kube-node"
+    ManagedBy   = "kube-compute"
   })
 }
 
@@ -107,7 +107,7 @@ resource "random_password" "agent_token" {
 # Delivery is provider-shaped: on AWS, the agent token is mirrored into an SSM SecureString
 # and fetched at boot via the instance's IAM role — it is never rendered into user_data.
 resource "aws_ssm_parameter" "agent_token" {
-  name  = "/kube-node/${var.cluster_name}/agent-token"
+  name  = "/kube-compute/${var.cluster_name}/agent-token"
   type  = "SecureString"
   value = random_password.agent_token.result
   tags  = local.common_tags
@@ -117,10 +117,10 @@ resource "aws_ssm_parameter" "agent_token" {
 # All-protocol among members rather than pinning to today's CNI ports: this SG is meant to
 # outlive a CNI switch (flannel now, Cilium in a later slice) without a security-group edit.
 resource "aws_security_group" "cluster" {
-  name_prefix = "kube-node-${var.cluster_name}-cluster-"
-  description = "kube-node ${var.cluster_name}: east-west traffic among cluster members only."
+  name_prefix = "kube-compute-${var.cluster_name}-cluster-"
+  description = "kube-compute ${var.cluster_name}: east-west traffic among cluster members only."
   vpc_id      = local.module_vpc_id
-  tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cluster" })
+  tags        = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster" })
 
   lifecycle {
     create_before_destroy = true
@@ -132,7 +132,7 @@ resource "aws_vpc_security_group_ingress_rule" "cluster_self" {
   description                  = "all traffic among cluster members"
   ip_protocol                  = "-1"
   referenced_security_group_id = aws_security_group.cluster.id
-  tags                         = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cluster-self" })
+  tags                         = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-self" })
 }
 
 resource "aws_vpc_security_group_egress_rule" "cluster_all" {
@@ -140,15 +140,15 @@ resource "aws_vpc_security_group_egress_rule" "cluster_all" {
   description       = "all egress"
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
-  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cluster-egress-all" })
+  tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-egress-all" })
 }
 
 # ---- etcd security group: control-plane members only, never joined by workers ----
 resource "aws_security_group" "control_plane_etcd" {
-  name_prefix = "kube-node-${var.cluster_name}-etcd-"
-  description = "kube-node ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
+  name_prefix = "kube-compute-${var.cluster_name}-etcd-"
+  description = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
   vpc_id      = local.module_vpc_id
-  tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-etcd" })
+  tags        = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd" })
 
   lifecycle {
     create_before_destroy = true
@@ -162,7 +162,7 @@ resource "aws_vpc_security_group_ingress_rule" "etcd_peer" {
   from_port                    = 2379
   to_port                      = 2380
   referenced_security_group_id = aws_security_group.control_plane_etcd.id
-  tags                         = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-etcd-peer" })
+  tags                         = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd-peer" })
 }
 
 resource "aws_vpc_security_group_egress_rule" "etcd_all" {
@@ -170,7 +170,7 @@ resource "aws_vpc_security_group_egress_rule" "etcd_all" {
   description       = "all egress"
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
-  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-etcd-egress-all" })
+  tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd-egress-all" })
 }
 
 module "bootstrap" {
@@ -261,13 +261,13 @@ resource "aws_instance" "control_plane_additional" {
     volume_size           = var.root_volume_size_gb
     encrypted             = true
     delete_on_termination = true
-    tags                  = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp-${tonumber(each.key) + 1}-root" })
+    tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}-root" })
   }
 
   user_data_base64            = module.bootstrap_additional[each.key].user_data_base64
   user_data_replace_on_change = true
 
-  tags = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp-${tonumber(each.key) + 1}" })
+  tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}" })
 
   depends_on = [aws_instance.control_plane]
 
@@ -286,7 +286,7 @@ resource "aws_lb" "control_plane" {
   internal           = true
   load_balancer_type = "network"
   subnets            = distinct(local.control_plane_subnet_ids)
-  tags               = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp" })
+  tags               = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp" })
 }
 
 resource "aws_lb_target_group" "control_plane" {
@@ -305,7 +305,7 @@ resource "aws_lb_target_group" "control_plane" {
     interval            = 10
   }
 
-  tags = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp" })
+  tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp" })
 }
 
 resource "aws_lb_listener" "control_plane" {
@@ -341,7 +341,7 @@ resource "aws_lb_target_group_attachment" "additional" {
 resource "aws_cloudwatch_metric_alarm" "control_plane_health" {
   for_each = var.control_plane_count > 1 && var.endpoint_mode == "dns" ? local.control_plane_instances : {}
 
-  alarm_name          = "kube-node-${var.cluster_name}-cp-${each.key}-status-check"
+  alarm_name          = "kube-compute-${var.cluster_name}-cp-${each.key}-status-check"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "StatusCheckFailed"
@@ -362,7 +362,7 @@ resource "aws_route53_health_check" "control_plane" {
   cloudwatch_alarm_name           = aws_cloudwatch_metric_alarm.control_plane_health[each.key].alarm_name
   cloudwatch_alarm_region         = var.aws_region
   insufficient_data_health_status = "Unhealthy"
-  tags                            = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-cp-${each.key}" })
+  tags                            = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${each.key}" })
 }
 
 resource "aws_route53_record" "control_plane_dns" {
@@ -380,10 +380,10 @@ resource "aws_route53_record" "control_plane_dns" {
 
 # ---- Module-owned security group (NOT fabric) ----
 resource "aws_security_group" "node" {
-  name_prefix = "kube-node-${var.cluster_name}-"
-  description = "kube-node ${var.cluster_name}: cluster access ports only, no SSH."
+  name_prefix = "kube-compute-${var.cluster_name}-"
+  description = "kube-compute ${var.cluster_name}: cluster access ports only, no SSH."
   vpc_id      = local.module_vpc_id
-  tags        = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}" })
+  tags        = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}" })
 
   lifecycle {
     # create_before_destroy avoids a name_prefix collision when the SG is replaced. The
@@ -403,7 +403,7 @@ resource "aws_vpc_security_group_ingress_rule" "node" {
   to_port           = each.value
   # One rule per port spanning the first allowed CIDR; remaining CIDRs handled below.
   cidr_ipv4 = var.allowed_ingress_cidrs[0]
-  tags      = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-ingress-${each.value}" })
+  tags      = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-ingress-${each.value}" })
 }
 
 # Additional CIDRs beyond the first, per port.
@@ -419,7 +419,7 @@ resource "aws_vpc_security_group_ingress_rule" "node_extra" {
   from_port         = each.value.port
   to_port           = each.value.port
   cidr_ipv4         = each.value.cidr
-  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-ingress-${each.value.port}" })
+  tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-ingress-${each.value.port}" })
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_all" {
@@ -427,13 +427,13 @@ resource "aws_vpc_security_group_egress_rule" "node_all" {
   description       = "all egress"
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
-  tags              = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-egress-all" })
+  tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-egress-all" })
 }
 
 # ---- IAM: SSM-managed instance for the control-plane (send-command/session) ----
 # Inline JSON avoids a data.aws_iam_policy_document block that mock_provider cannot evaluate.
 resource "aws_iam_role" "node" {
-  name_prefix = "kube-node-${var.cluster_name}-"
+  name_prefix = "kube-compute-${var.cluster_name}-"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -458,7 +458,7 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
 # ---- Scoped S3 access for etcd snapshot upload (only when a bucket is configured) ----
 resource "aws_iam_role_policy" "etcd_snapshot_s3" {
   count = var.etcd_snapshot_s3_bucket != null ? 1 : 0
-  name  = "kube-node-${var.cluster_name}-etcd-snapshot-s3"
+  name  = "kube-compute-${var.cluster_name}-etcd-snapshot-s3"
   role  = aws_iam_role.node.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -476,7 +476,7 @@ resource "aws_iam_role_policy" "etcd_snapshot_s3" {
 }
 
 resource "aws_iam_instance_profile" "node" {
-  name_prefix = "kube-node-${var.cluster_name}-"
+  name_prefix = "kube-compute-${var.cluster_name}-"
   role        = aws_iam_role.node.name
   tags        = local.common_tags
 }
@@ -504,13 +504,13 @@ resource "aws_instance" "control_plane" {
     volume_size           = var.root_volume_size_gb
     encrypted             = true
     delete_on_termination = true
-    tags                  = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-root" })
+    tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-root" })
   }
 
   user_data_base64            = module.bootstrap.user_data_base64
   user_data_replace_on_change = true # disposable nodes: replace on bootstrap change
 
-  tags = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}" })
+  tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}" })
 
   # Marks every currently-attached EBS volume (root + any CSI-provisioned data
   # volumes) delete-on-termination right before the instance itself is

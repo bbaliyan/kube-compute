@@ -34,11 +34,11 @@ run "cluster_and_etcd_ipsets_created_and_referenced" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_firewall_ipset.cluster.name == "kube-node-bharat-cluster"
+    condition     = proxmox_virtual_environment_firewall_ipset.cluster.name == "kube-compute-bharat-cluster"
     error_message = "cluster ipset must be named predictably so worker pools can reference it by name"
   }
   assert {
-    condition     = output.cluster_ipset_name == "kube-node-bharat-cluster"
+    condition     = output.cluster_ipset_name == "kube-compute-bharat-cluster"
     error_message = "cluster_ipset_name output must match the ipset actually created"
   }
   assert {
@@ -46,7 +46,7 @@ run "cluster_and_etcd_ipsets_created_and_referenced" {
     error_message = "etcd ipset must contain exactly one cidr entry per control-plane node"
   }
   assert {
-    condition     = alltrue([for r in proxmox_virtual_environment_firewall_rules.control_plane["0"].rule : true if strcontains(coalesce(r.source, ""), "kube-node-bharat-cluster") || strcontains(coalesce(r.source, ""), "kube-node-bharat-etcd") || contains(var.allowed_ingress_cidrs, coalesce(r.source, ""))])
+    condition     = alltrue([for r in proxmox_virtual_environment_firewall_rules.control_plane["0"].rule : true if strcontains(coalesce(r.source, ""), "kube-compute-bharat-cluster") || strcontains(coalesce(r.source, ""), "kube-compute-bharat-etcd") || contains(var.allowed_ingress_cidrs, coalesce(r.source, ""))])
     error_message = "every control-plane firewall rule's source must be the cluster ipset, the etcd ipset, or an allowed ingress CIDR"
   }
 }

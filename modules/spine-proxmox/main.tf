@@ -14,8 +14,8 @@ locals {
   # Null for control_plane_count = 1 (no registration endpoint — ADR 0003), the VIP otherwise.
   registration_address = var.control_plane_count == 1 ? null : var.control_plane_vip_address
 
-  cluster_ipset_name = "kube-node-${var.cluster_name}-cluster"
-  etcd_ipset_name    = "kube-node-${var.cluster_name}-etcd"
+  cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
+  etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
 
   # One IP per control-plane node; index 0 is genesis. DHCP only when control_plane_count = 1
   # and control_plane_ip_addresses was left null (parity with node-proxmox's existing default).
@@ -66,7 +66,7 @@ resource "random_password" "agent_token" {
 # ---- Cluster firewall: an ipset scoped to the cluster's L2 subnet CIDR (see plan design note 2) ----
 resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
   name    = local.cluster_ipset_name
-  comment = "kube-node ${var.cluster_name}: east-west traffic among cluster members (subnet-scoped — see module README)."
+  comment = "kube-compute ${var.cluster_name}: east-west traffic among cluster members (subnet-scoped — see module README)."
 
   cidr {
     name = coalesce(var.cluster_network_cidr, "${split("/", coalesce(try(var.control_plane_ip_addresses[0], null), "0.0.0.0/32"))[0]}/32")
@@ -76,7 +76,7 @@ resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
 # ---- etcd firewall: exact control-plane IPs only, never joined by workers ----
 resource "proxmox_virtual_environment_firewall_ipset" "etcd" {
   name    = local.etcd_ipset_name
-  comment = "kube-node ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
+  comment = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
 
   dynamic "cidr" {
     for_each = var.control_plane_count > 1 ? [for ip in var.control_plane_ip_addresses : "${split("/", ip)[0]}/32"] : ["${local.cp_ips["0"]}/32"]
@@ -326,7 +326,7 @@ resource "proxmox_virtual_environment_file" "cloud_init_additional" {
 resource "proxmox_virtual_environment_vm" "control_plane" {
   name            = "${var.cluster_name}-cp-0"
   node_name       = var.proxmox_node
-  tags            = ["kube-node", var.cluster_name, "control-plane"]
+  tags            = ["kube-compute", var.cluster_name, "control-plane"]
   on_boot         = true
   started         = true
   stop_on_destroy = true
@@ -391,7 +391,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
 
   name            = "${var.cluster_name}-cp-${each.key}"
   node_name       = var.proxmox_node
-  tags            = ["kube-node", var.cluster_name, "control-plane"]
+  tags            = ["kube-compute", var.cluster_name, "control-plane"]
   on_boot         = true
   started         = true
   stop_on_destroy = true

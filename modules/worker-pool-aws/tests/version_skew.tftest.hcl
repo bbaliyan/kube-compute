@@ -20,7 +20,7 @@ run "pool_version_equal_to_spine_is_accepted" {
     k8s_version               = "v1.36.1+k3s1"
     spine_k8s_version         = "v1.36.1+k3s1"
     registration_address      = "10.0.1.5"
-    agent_token_ssm_parameter = "/kube-node/bharat/agent-token"
+    agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
     subnet_id                 = "subnet-worker-a"
   }
@@ -42,7 +42,7 @@ run "pool_version_older_than_spine_is_accepted" {
     k8s_version               = "v1.35.5+k3s1"
     spine_k8s_version         = "v1.36.1+k3s1"
     registration_address      = "10.0.1.5"
-    agent_token_ssm_parameter = "/kube-node/bharat/agent-token"
+    agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
     subnet_id                 = "subnet-worker-a"
   }
@@ -64,7 +64,7 @@ run "pool_version_newer_than_spine_is_rejected" {
     k8s_version               = "v1.37.0+k3s1"
     spine_k8s_version         = "v1.36.1+k3s1"
     registration_address      = "10.0.1.5"
-    agent_token_ssm_parameter = "/kube-node/bharat/agent-token"
+    agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
     subnet_id                 = "subnet-worker-a"
   }

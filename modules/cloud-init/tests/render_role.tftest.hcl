@@ -72,7 +72,7 @@ run "worker_role_renders_agent_join" {
     k8s_version               = "v1.36.1+k3s1"
     node_role                 = "worker"
     registration_address      = "10.0.1.5"
-    agent_token_fetch_command = "aws ssm get-parameter --name /kube-node/test1/agent-token --with-decryption --query Parameter.Value --output text --region eu-west-1"
+    agent_token_fetch_command = "aws ssm get-parameter --name /kube-compute/test1/agent-token --with-decryption --query Parameter.Value --output text --region eu-west-1"
     node_labels               = { "topology.kubernetes.io/zone" = "eu-west-1a" }
   }
 
@@ -266,14 +266,14 @@ run "etcd_snapshot_object_store_renders_s3_flags" {
     cluster_name                        = "test1"
     k8s_version                         = "v1.36.1+k3s1"
     etcd_snapshot_enabled               = true
-    etcd_snapshot_object_store_bucket   = "kube-node-test1-snapshots"
+    etcd_snapshot_object_store_bucket   = "kube-compute-test1-snapshots"
     etcd_snapshot_object_store_region   = "eu-west-1"
     etcd_snapshot_object_store_endpoint = "https://s3.eu-west-1.amazonaws.com"
     etcd_snapshot_object_store_folder   = "test1"
   }
 
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-s3 --etcd-s3-bucket kube-node-test1-snapshots")
+    condition     = strcontains(nonsensitive(output.cloud_init), "--etcd-s3 --etcd-s3-bucket kube-compute-test1-snapshots")
     error_message = "an object-store bucket must render --etcd-s3 --etcd-s3-bucket"
   }
   assert {

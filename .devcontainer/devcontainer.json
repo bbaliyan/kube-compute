@@ -1,7 +1,7 @@
 {
   // renovate: datasource=docker depName=ghcr.io/bbaliyan/kube-devenv
   "image": "ghcr.io/bbaliyan/kube-devenv:0.1.5",
-  "name": "kube-node",
+  "name": "kube-compute",
 
   "initializeCommand": "mkdir -p ~/.aws ~/.kube ~/.config/age",
   "postStartCommand": "mkdir -p .vscode && cp /usr/share/kube-devenv/tasks.json .vscode/tasks.json",

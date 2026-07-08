@@ -10,7 +10,7 @@ module "bootstrap" {
   k8s_version               = "v1.36.1+k3s1"
   node_role                 = "worker"
   registration_address      = "10.0.1.5"
-  agent_token_fetch_command = "aws ssm get-parameter --name /kube-node/render-check/agent-token --with-decryption --query Parameter.Value --output text --region eu-west-1"
+  agent_token_fetch_command = "aws ssm get-parameter --name /kube-compute/render-check/agent-token --with-decryption --query Parameter.Value --output text --region eu-west-1"
   node_labels               = { "topology.kubernetes.io/zone" = "eu-west-1a" }
 }
 

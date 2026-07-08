@@ -82,7 +82,7 @@ run "cilium_manifest_present_and_correct_on_server_init" {
   }
   assert {
     condition     = strcontains(nonsensitive(output.cloud_init), "/var/lib/rancher/k3s/server/manifests/cilium.yaml")
-    error_message = "the Cilium HelmChart CR must be written to K3s's own auto-deploy manifests directory, not /etc/kube-node/manifests (which is only kubectl-applied post-node-Ready, too late for a CNI)"
+    error_message = "the Cilium HelmChart CR must be written to K3s's own auto-deploy manifests directory, not /etc/kube-compute/manifests (which is only kubectl-applied post-node-Ready, too late for a CNI)"
   }
   assert {
     condition     = strcontains(nonsensitive(output.cloud_init), "repo: https://helm.cilium.io/")

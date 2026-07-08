@@ -10,24 +10,24 @@ check_render() {
   local fixture_dir="$1" state_name="$2"
   (
     cd "fixtures/${fixture_dir}"
-    STATE="/tmp/kube-node-render-check-${state_name}.tfstate"
+    STATE="/tmp/kube-compute-render-check-${state_name}.tfstate"
     tofu init -backend=false >/dev/null
     tofu apply -auto-approve -state="$STATE" >/dev/null
-    tofu output -state="$STATE" -raw cloud_init >"/tmp/kube-node-ci-${state_name}.yaml"
+    tofu output -state="$STATE" -raw cloud_init >"/tmp/kube-compute-ci-${state_name}.yaml"
   )
 
-  python3 -c "import yaml; yaml.safe_load(open('/tmp/kube-node-ci-${state_name}.yaml'))"
+  python3 -c "import yaml; yaml.safe_load(open('/tmp/kube-compute-ci-${state_name}.yaml'))"
   echo "OK: ${fixture_dir} cloud-init is valid YAML"
 
   python3 - "$state_name" <<'PY'
 import sys, yaml
 state_name = sys.argv[1]
-doc = yaml.safe_load(open(f"/tmp/kube-node-ci-{state_name}.yaml"))
+doc = yaml.safe_load(open(f"/tmp/kube-compute-ci-{state_name}.yaml"))
 script = next(f["content"] for f in doc["write_files"]
-              if f["path"] == "/usr/local/bin/kube-node-bootstrap.sh")
-open(f"/tmp/kube-node-bootstrap-{state_name}.sh", "w").write(script)
+              if f["path"] == "/usr/local/bin/kube-compute-bootstrap.sh")
+open(f"/tmp/kube-compute-bootstrap-{state_name}.sh", "w").write(script)
 PY
-  bash -n "/tmp/kube-node-bootstrap-${state_name}.sh"
+  bash -n "/tmp/kube-compute-bootstrap-${state_name}.sh"
   echo "OK: ${fixture_dir} embedded bootstrap script passes bash -n"
 }
 

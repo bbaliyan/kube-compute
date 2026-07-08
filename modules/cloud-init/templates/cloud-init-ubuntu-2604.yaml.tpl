@@ -5,7 +5,7 @@
 # their status line even when their body is skipped.
 hostname: ${cluster_name}
 write_files:
-  - path: /etc/kube-node/env
+  - path: /etc/kube-compute/env
     permissions: "0640"
     owner: root:root
     content: |
@@ -47,7 +47,7 @@ write_files:
           endpoint: ["${registry_mirror_url}"]
 %{ endif ~}
 %{ if gitops_platform_repo_url != null && node_role == "server-init" ~}
-  - path: /etc/kube-node/manifests/00-argocd-helmchart.yaml
+  - path: /etc/kube-compute/manifests/00-argocd-helmchart.yaml
     permissions: "0644"
     owner: root:root
     content: |
@@ -71,7 +71,7 @@ write_files:
             params:
               # Deliberate: TLS terminates upstream (ingress / load balancer); Argo CD serves plain HTTP behind it.
               server.insecure: "true"
-  - path: /etc/kube-node/manifests/10-platform-app.yaml
+  - path: /etc/kube-compute/manifests/10-platform-app.yaml
     permissions: "0644"
     owner: root:root
     content: |
@@ -151,16 +151,16 @@ write_files:
       ${indent(6, content)}
 %{ endfor ~}
 %{ endif ~}
-  - path: /usr/local/bin/kube-node-bootstrap.sh
+  - path: /usr/local/bin/kube-compute-bootstrap.sh
     permissions: "0755"
     owner: root:root
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-      source /etc/kube-node/env
+      source /etc/kube-compute/env
 
-      STATUS_FILE=/var/log/kube-node/bootstrap-status
-      KUBECONFIG_OUT=/var/lib/kube-node/kubeconfig
+      STATUS_FILE=/var/log/kube-compute/bootstrap-status
+      KUBECONFIG_OUT=/var/lib/kube-compute/kubeconfig
       mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$KUBECONFIG_OUT")"
       status() { echo "$1" >"$STATUS_FILE"; echo "[bootstrap] $1"; }
 
@@ -292,10 +292,10 @@ write_files:
       status "stage-6:argo-bootstrap"
       %{ if gitops_platform_repo_url != null && node_role == "server-init" ~}
       KC=/etc/rancher/k3s/k3s.yaml
-      kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/00-argocd-helmchart.yaml
+      kubectl --kubeconfig "$KC" apply -f /etc/kube-compute/manifests/00-argocd-helmchart.yaml
       echo "[bootstrap] waiting for argocd-server to be ready..."
       timeout 600 bash -c 'until kubectl --kubeconfig '"$KC"' -n argocd rollout status deployment/argocd-server --timeout=30s 2>/dev/null; do sleep 15; done'
-      kubectl --kubeconfig "$KC" apply -f /etc/kube-node/manifests/10-platform-app.yaml
+      kubectl --kubeconfig "$KC" apply -f /etc/kube-compute/manifests/10-platform-app.yaml
       %{ endif ~}
 
       status "stage-7:kubeconfig-publish"
@@ -323,4 +323,4 @@ bootcmd:
   - [ systemctl, stop, systemd-networkd-wait-online.service ]
   - [ systemctl, mask, systemd-networkd-wait-online.service ]
 runcmd:
-  - ["/usr/local/bin/kube-node-bootstrap.sh"]
+  - ["/usr/local/bin/kube-compute-bootstrap.sh"]

@@ -23,7 +23,7 @@ locals {
 
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
-    ManagedBy   = "kube-node"
+    ManagedBy   = "kube-compute"
   })
 }
 
@@ -44,7 +44,7 @@ module "bootstrap" {
 
 # ---- IAM: SSM-managed instance, scoped to read only this cluster's agent token ----
 resource "aws_iam_role" "worker" {
-  name_prefix = "kube-node-${var.cluster_name}-worker-"
+  name_prefix = "kube-compute-${var.cluster_name}-worker-"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -63,7 +63,7 @@ resource "aws_iam_role_policy_attachment" "worker_ssm_core" {
 
 # Inline JSON avoids a data.aws_iam_policy_document block that mock_provider cannot evaluate.
 resource "aws_iam_role_policy" "worker_agent_token" {
-  name = "kube-node-${var.cluster_name}-agent-token-read"
+  name = "kube-compute-${var.cluster_name}-agent-token-read"
   role = aws_iam_role.worker.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -90,14 +90,14 @@ resource "aws_iam_role_policy" "worker_agent_token" {
 }
 
 resource "aws_iam_instance_profile" "worker" {
-  name_prefix = "kube-node-${var.cluster_name}-worker-"
+  name_prefix = "kube-compute-${var.cluster_name}-worker-"
   role        = aws_iam_role.worker.name
   tags        = local.common_tags
 }
 
 # ---- Fixed worker pool: ASG + launch template ----
 resource "aws_launch_template" "worker" {
-  name_prefix   = "kube-node-${var.cluster_name}-worker-"
+  name_prefix   = "kube-compute-${var.cluster_name}-worker-"
   image_id      = local.effective_ami_id
   instance_type = var.instance_type
 
@@ -127,7 +127,7 @@ resource "aws_launch_template" "worker" {
 
   tag_specifications {
     resource_type = "instance"
-    tags          = merge(local.common_tags, { Name = "kube-node-${var.cluster_name}-worker" })
+    tags          = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-worker" })
   }
 
   lifecycle {
@@ -141,7 +141,7 @@ resource "aws_launch_template" "worker" {
 }
 
 resource "aws_autoscaling_group" "worker" {
-  name_prefix         = "kube-node-${var.cluster_name}-worker-"
+  name_prefix         = "kube-compute-${var.cluster_name}-worker-"
   min_size            = var.desired_count
   max_size            = var.desired_count
   desired_capacity    = var.desired_count
@@ -154,7 +154,7 @@ resource "aws_autoscaling_group" "worker" {
 
   tag {
     key                 = "Name"
-    value               = "kube-node-${var.cluster_name}-worker"
+    value               = "kube-compute-${var.cluster_name}-worker"
     propagate_at_launch = true
   }
   tag {

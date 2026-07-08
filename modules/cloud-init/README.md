@@ -14,7 +14,7 @@ environment needs. `trusted_ca_pem`, `registry_mirror_url`, the `gitops_*` input
   --disable-kube-proxy` on every server and installs Cilium via a HelmChart CR with
   `bootstrap: true` written to K3s's own `/var/lib/rancher/k3s/server/manifests/` (Cilium
   must exist before the node goes Ready, so it uses K3s's own bootstrap-manifest mechanism,
-  not the post-Ready `/etc/kube-node/manifests/` + kubectl-apply path used for Argo/platform).
+  not the post-Ready `/etc/kube-compute/manifests/` + kubectl-apply path used for Argo/platform).
   
   **Currently only implemented in the AL2023 cloud-init template.** The Ubuntu 26.04
   template does not yet take a `cni` input (pre-existing gap — see issue 018/019 for
