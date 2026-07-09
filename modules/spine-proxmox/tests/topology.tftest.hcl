@@ -90,6 +90,17 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
     error_message = "control_plane_count > 1 must use the kube-vip VIP as registration_address"
   }
   assert {
+    condition = alltrue([
+      for k, v in output.rendered_cloud_init_additional :
+      yamldecode(v).hostname != yamldecode(output.rendered_cloud_init).hostname
+    ])
+    error_message = "every additional control-plane node's rendered hostname must differ from the genesis node's — k3s/kubelet default the registered Kubernetes node name to the OS hostname, so a collision makes every kubelet register as the same node, silently clobbering each other"
+  }
+  assert {
+    condition = length(distinct([for k, v in output.rendered_cloud_init_additional : yamldecode(v).hostname])) == length(output.rendered_cloud_init_additional)
+    error_message = "additional control-plane nodes must each get a distinct hostname from one another too, not just from genesis"
+  }
+  assert {
     condition     = length(output.control_plane_node_refs) == 3
     error_message = "control_plane_node_refs must have one entry per control-plane node"
   }

@@ -30,6 +30,11 @@ locals {
 module "bootstrap" {
   source = "../cloud-init"
 
+  # node_name deliberately omitted: this one cloud-init payload is shared by
+  # every instance the ASG creates (Terraform never sees individual
+  # instances), so there's no static per-instance name to assign here. Leaving
+  # it null lets cloud-init's EC2 datasource assign its own naturally-unique
+  # per-instance hostname instead of every instance colliding on the same one.
   cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name
   k8s_version               = var.k8s_version

@@ -2,6 +2,7 @@
 locals {
   cloud_init = templatefile(var.cloud_init_template, {
     cluster_name                        = var.cluster_name
+    node_name                           = var.node_name
     k8s_version                         = var.k8s_version
     cluster_fqdn                        = var.cluster_fqdn
     node_role                           = var.node_role

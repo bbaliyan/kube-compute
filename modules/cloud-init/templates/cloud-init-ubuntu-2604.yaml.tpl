@@ -3,7 +3,9 @@
 # Status is written to a local file and read out-of-band by the control-plane
 # verb-scripts (no inbound port). Stage sequence is fixed; optional stages emit
 # their status line even when their body is skipped.
-hostname: ${cluster_name}
+%{ if node_name != null ~}
+hostname: ${node_name}
+%{ endif ~}
 write_files:
   - path: /etc/kube-compute/env
     permissions: "0640"

@@ -98,6 +98,7 @@ module "bootstrap" {
 
   cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name
+  node_name                 = "${var.cluster_name}-worker-${each.key}"
   k8s_version               = var.k8s_version
   node_role                 = "worker"
   registration_address      = var.registration_address

@@ -178,6 +178,7 @@ module "bootstrap" {
 
   cloud_init_template                 = local.cloud_init_template
   cluster_name                        = var.cluster_name
+  node_name                           = "${var.cluster_name}-cp-1"
   k8s_version                         = var.k8s_version
   cluster_fqdn                        = local.cluster_fqdn
   node_role                           = "server-init"
@@ -218,6 +219,7 @@ module "bootstrap_additional" {
 
   cloud_init_template                 = local.cloud_init_template
   cluster_name                        = var.cluster_name
+  node_name                           = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
   k8s_version                         = var.k8s_version
   cluster_fqdn                        = local.cluster_fqdn
   node_role                           = "server-join"

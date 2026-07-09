@@ -9,6 +9,12 @@ variable "cluster_name" {
   type        = string
 }
 
+variable "node_name" {
+  description = "Unique per-node hostname (e.g. '<cluster_name>-cp-0', '<cluster_name>-worker-1'). K3s/kubelet defaults the registered Kubernetes node name to the OS hostname, so every node in a multi-node cluster MUST get a distinct value here — reusing cluster_name across nodes makes every kubelet register under the same node name, silently clobbering each other. Null omits the hostname cloud-config directive entirely, letting cloud-init's own datasource assign its naturally-unique per-instance hostname instead (EC2/Azure both do this automatically) — required for ASG/VMSS-backed worker pools, where Terraform applies one shared cloud-init payload to every instance the autoscaler creates and never sees individual instances to assign a static name to."
+  type        = string
+  default     = null
+}
+
 variable "k8s_version" {
   description = "K8s distro version to install (a K3s release string today, e.g. v1.36.1+k3s1). Neutral name so a future distro hop does not change the interface."
   type        = string
