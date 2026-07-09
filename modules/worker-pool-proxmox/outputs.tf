@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 output "worker_node_refs" {
-  description = "Map of worker VM name -> {instance_id, provider}."
+  description = "Map of worker VM name -> {instance_id, ip, provider}."
   value = {
     for k, vm in proxmox_virtual_environment_vm.worker :
     "${var.cluster_name}-worker-${k}" => {
       instance_id = tostring(vm.vm_id)
+      ip          = local.worker_ips[k]
       provider    = "proxmox"
     }
   }

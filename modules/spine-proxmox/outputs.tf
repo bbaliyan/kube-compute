@@ -68,11 +68,12 @@ output "cluster_ipset_name" {
 }
 
 output "control_plane_node_refs" {
-  description = "Map of control-plane node name -> {instance_id, provider}."
+  description = "Map of control-plane node name -> {instance_id, ip, provider}."
   value = merge(
     {
       "${var.cluster_name}-cp-0" = {
         instance_id = tostring(proxmox_virtual_environment_vm.control_plane.vm_id)
+        ip          = local.cp_ips["0"]
         provider    = "proxmox"
       }
     },
@@ -80,6 +81,7 @@ output "control_plane_node_refs" {
       for k, vm in proxmox_virtual_environment_vm.control_plane_additional :
       "${var.cluster_name}-cp-${k}" => {
         instance_id = tostring(vm.vm_id)
+        ip          = local.cp_ips[k]
         provider    = "proxmox"
       }
     }

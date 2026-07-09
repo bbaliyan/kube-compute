@@ -189,6 +189,16 @@ resource "proxmox_virtual_environment_vm" "worker" {
   }
 }
 
+locals {
+  # Resolved IP per worker VM, static or via guest agent — same pattern spine-proxmox uses.
+  worker_ips = {
+    for k, vm in proxmox_virtual_environment_vm.worker :
+    k => local.static_ips ? split("/", var.worker_ip_addresses[tonumber(k)])[0] : try(
+      [for ip in flatten(vm.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
+    )
+  }
+}
+
 resource "proxmox_virtual_environment_firewall_options" "worker" {
   for_each = proxmox_virtual_environment_vm.worker
 
