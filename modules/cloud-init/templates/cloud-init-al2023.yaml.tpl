@@ -148,6 +148,17 @@ write_files:
           kubeProxyReplacement: true
           k8sServiceHost: "127.0.0.1"
           k8sServicePort: 6444
+          # cilium-operator registers the CRDs cilium-agent waits on before it can
+          # start — without this, a dedicated_control_plane node's
+          # CriticalAddonsOnly=true:NoExecute taint (see control_plane_taint above)
+          # leaves both operator replicas permanently Pending (cilium-agent tolerates
+          # everything via its own chart-default toleration, but the operator doesn't
+          # know about this project's custom taint), so the agent waits forever for
+          # CRDs that never arrive and eventually crash-loops on its startup probe.
+          operator:
+            tolerations:
+              - key: CriticalAddonsOnly
+                operator: Exists
           ipam:
             operator:
               clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
