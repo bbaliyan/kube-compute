@@ -335,9 +335,9 @@ write_files:
 
       status "stage-5:k8s-wait"
       %{ if node_role == "worker" ~}
-      timeout 300 bash -c 'until systemctl is-active --quiet k3s-agent; do sleep 5; done'
+      timeout 300 bash -c 'until systemctl is-active --quiet k3s-agent; do sleep 5; done' || { status "FAILED:k8s-wait"; exit 1; }
       %{ else ~}
-      timeout 300 bash -c 'until kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'
+      timeout 300 bash -c 'until kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done' || { status "FAILED:k8s-wait"; exit 1; }
       %{ endif ~}
 
       status "stage-6:argo-bootstrap"
@@ -345,7 +345,7 @@ write_files:
       KC=/etc/rancher/k3s/k3s.yaml
       kubectl --kubeconfig "$KC" apply -f /etc/kube-compute/manifests/00-argocd-helmchart.yaml
       echo "[bootstrap] waiting for argocd-server to be ready..."
-      timeout 600 bash -c 'until kubectl --kubeconfig '"$KC"' -n argocd rollout status deployment/argocd-server --timeout=30s 2>/dev/null; do sleep 15; done'
+      timeout 600 bash -c 'until kubectl --kubeconfig '"$KC"' -n argocd rollout status deployment/argocd-server --timeout=30s 2>/dev/null; do sleep 15; done' || { status "FAILED:argo-bootstrap"; exit 1; }
       kubectl --kubeconfig "$KC" apply -f /etc/kube-compute/manifests/10-platform-app.yaml
       %{ endif ~}
 
