@@ -149,16 +149,19 @@ write_files:
           k8sServiceHost: "127.0.0.1"
           k8sServicePort: 6444
           # cilium-operator registers the CRDs cilium-agent waits on before it can
-          # start — without this, a dedicated_control_plane node's
-          # CriticalAddonsOnly=true:NoExecute taint (see control_plane_taint above)
-          # leaves both operator replicas permanently Pending (cilium-agent tolerates
-          # everything via its own chart-default toleration, but the operator doesn't
-          # know about this project's custom taint), so the agent waits forever for
-          # CRDs that never arrive and eventually crash-loops on its startup probe.
+          # start. cilium-agent's chart-default toleration is a genuine blanket
+          # one (key-less "Exists", matches every taint) — cilium-operator's
+          # defaults to empty. During bootstrap the node can carry more than one
+          # blocking taint at once: this project's own CriticalAddonsOnly (see
+          # control_plane_taint above) AND Kubernetes' own automatic
+          # node.kubernetes.io/not-ready, since the node can't report Ready until
+          # Cilium is actually running — a chicken-and-egg trap if the operator
+          # only tolerates one of them. Match cilium-agent's own blanket
+          # toleration exactly rather than enumerating individual taints one
+          # discovery at a time.
           operator:
             tolerations:
-              - key: CriticalAddonsOnly
-                operator: Exists
+              - operator: Exists
           ipam:
             operator:
               clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
