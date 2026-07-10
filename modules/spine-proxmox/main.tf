@@ -187,6 +187,7 @@ locals {
           hostNetwork: true
           containers:
             - name: kube-vip
+              # renovate: datasource=docker depName=ghcr.io/kube-vip/kube-vip
               image: ghcr.io/kube-vip/kube-vip:v0.8.9
               imagePullPolicy: IfNotPresent
               args: ["manager"]

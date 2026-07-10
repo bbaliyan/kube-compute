@@ -25,6 +25,14 @@
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?) registryUrl=(?<registryUrl>.*?)\\s+cilium_version\\s*=\\s*\"(?<currentValue>[^\"]+)\"",
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?) registryUrl=(?<registryUrl>.*?)\\s+argocd_version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "kube-vip image tag pinned in spine-proxmox's HA DaemonSet manifest",
+      "fileMatch": ["^modules/spine-proxmox/main\\.tf$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+image:\\s*ghcr\\.io/kube-vip/kube-vip:(?<currentValue>[^\\s]+)"
+      ]
     }
   ],
   "packageRules": [
