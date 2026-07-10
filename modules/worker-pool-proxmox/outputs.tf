@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
+output "node_provider" {
+  description = "Provider identifier the control-plane verb-scripts use to dispatch (Proxmox = direct SSH to the node)."
+  value       = "proxmox"
+}
+
 output "worker_node_refs" {
   description = "Map of worker VM name -> {instance_id, ip, provider}."
   value = {

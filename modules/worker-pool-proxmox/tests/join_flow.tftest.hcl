@@ -48,4 +48,8 @@ run "worker_gets_agent_token_via_cloud_init_not_ssm" {
     condition     = alltrue([for k, r in proxmox_virtual_environment_firewall_rules.worker : strcontains(coalesce(r.rule[0].source, ""), "kube-compute-bharat-cluster")])
     error_message = "every worker VM's firewall rule must reference the spine's cluster ipset by name, never create its own"
   }
+  assert {
+    condition     = output.node_provider == "proxmox"
+    error_message = "module must expose a node_provider output — kube-shell/kube-status/kube-start read it from terragrunt output to dispatch; without it they get literal JSON null and fail with \"unknown node_provider 'null'\" when run from a worker-pool directory"
+  }
 }
