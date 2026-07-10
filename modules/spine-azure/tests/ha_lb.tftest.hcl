@@ -47,7 +47,7 @@ run "single_node_creates_no_lb" {
   }
   assert {
     condition     = length(azurerm_lb.control_plane) == 0
-    error_message = "control_plane_count = 1 must create no load balancer (ADR 0003 — no registration endpoint at all)"
+    error_message = "control_plane_count = 1 must create no load balancer (no registration endpoint at all)"
   }
   assert {
     condition     = output.registration_address == null

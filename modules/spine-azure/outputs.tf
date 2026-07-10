@@ -61,7 +61,7 @@ output "k8s_version" {
 
 # ---- Join flow: consumed by worker-pool-azure ----
 output "registration_address" {
-  description = "Address workers/joining servers use to reach the cluster API: null for control_plane_count = 1 (ADR 0003 — no endpoint at all), the internal Standard LB's frontend private IP otherwise."
+  description = "Address workers/joining servers use to reach the cluster API: null for control_plane_count = 1 (no endpoint at all), the internal Standard LB's frontend private IP otherwise."
   value       = local.registration_address
 }
 

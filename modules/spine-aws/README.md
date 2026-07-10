@@ -111,7 +111,7 @@ and optional upload.
 ## Registration endpoint modes (`endpoint_mode`)
 
 Only relevant once `control_plane_count > 1` — a single control-plane node has no registration
-endpoint at all (ADR 0003).
+endpoint at all.
 
 - **`loadbalancer`** (default) — an internal NLB across all control-plane nodes on 6443.
 - **`dns`** — one Route53 A record per control-plane node under a shared name

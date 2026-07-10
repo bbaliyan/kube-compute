@@ -113,7 +113,7 @@ variable "control_plane_subnets" {
 }
 
 variable "endpoint_mode" {
-  description = "How joining nodes reach the registration endpoint once control_plane_count > 1 (ignored for control_plane_count = 1, which has no endpoint at all — ADR 0003): \"loadbalancer\" (default) creates an internal NLB; \"dns\" creates Route53 multivalue-answer A records with CloudWatch-alarm-backed health checks (cheaper, TTL-bound failover; requires cluster_domain plus a resolvable hosted zone); \"static\" creates neither and uses static_registration_address verbatim (bring your own load balancer/address)."
+  description = "How joining nodes reach the registration endpoint once control_plane_count > 1 (ignored for control_plane_count = 1, which has no endpoint at all): \"loadbalancer\" (default) creates an internal NLB; \"dns\" creates Route53 multivalue-answer A records with CloudWatch-alarm-backed health checks (cheaper, TTL-bound failover; requires cluster_domain plus a resolvable hosted zone); \"static\" creates neither and uses static_registration_address verbatim (bring your own load balancer/address)."
   type        = string
   default     = "loadbalancer"
   validation {

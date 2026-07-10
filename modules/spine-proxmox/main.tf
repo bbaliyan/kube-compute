@@ -18,7 +18,7 @@ locals {
   effective_cni                    = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "flannel")
   effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
-  # Null for control_plane_count = 1 (no registration endpoint — ADR 0003), the VIP otherwise.
+  # Null for control_plane_count = 1 (no registration endpoint), the VIP otherwise.
   registration_address = var.control_plane_count == 1 ? null : var.control_plane_vip_address
 
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"

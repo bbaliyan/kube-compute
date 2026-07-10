@@ -148,7 +148,7 @@ variable "registration_address" {
 }
 
 variable "cluster_agent_token" {
-  description = "The spine's cluster_agent_token output. Embedded directly into this pool's cloud-init (no managed secret store on Proxmox — ADR 0004). Sensitive."
+  description = "The spine's cluster_agent_token output. Embedded directly into this pool's cloud-init (no managed secret store on Proxmox). Sensitive."
   type        = string
   sensitive   = true
 }

@@ -34,7 +34,7 @@ locals {
   image_sku       = var.os_image_urn != null ? local.image_parts[2] : "server-gen2"
   image_version   = var.os_image_urn != null ? local.image_parts[3] : "latest"
 
-  # Null for control_plane_count = 1 (no registration endpoint — ADR 0003); the internal
+  # Null for control_plane_count = 1 (no registration endpoint); the internal
   # Standard LB's dynamic private frontend IP otherwise (see Task 5).
   registration_address = var.control_plane_count == 1 ? null : try(azurerm_lb.control_plane[0].frontend_ip_configuration[0].private_ip_address, null)
 
@@ -48,7 +48,7 @@ locals {
 # Two tokens, least privilege: the server token grants joining etcd/control-plane (embedded
 # directly into this spine's own cloud-init calls — control-plane nodes never fetch
 # anything from Key Vault); the agent token is all a worker ever receives, delivered via
-# Key Vault + managed identity (ADR 0004's Azure answer) so a compromised worker cannot
+# Key Vault + managed identity so a compromised worker cannot
 # rejoin as a control-plane/etcd member.
 resource "random_password" "server_token" {
   length  = 48
@@ -366,7 +366,7 @@ resource "azurerm_linux_virtual_machine" "control_plane_additional" {
 # ---- Internal Standard LB fronting the control plane on 6443 (control_plane_count > 1) ----
 # A floating VIP is impossible on Azure (a private IP is subnet-scoped, and Azure VNets are
 # not flat L2 across zones any more than AWS VPCs are across AZs) — an internal Standard LB
-# is the only registration-endpoint primitive here, matching spine-aws's NLB and ADR 0003.
+# is the only registration-endpoint primitive here, matching spine-aws's NLB.
 resource "azurerm_lb" "control_plane" {
   count               = var.control_plane_count > 1 ? 1 : 0
   name                = "lb-${var.cluster_name}-cp"

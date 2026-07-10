@@ -34,7 +34,7 @@ run "worker_gets_agent_token_via_cloud_init_not_ssm" {
 
   assert {
     condition     = alltrue([for k, ci in output.rendered_cloud_init : strcontains(nonsensitive(ci), "echo 'agent-secret-abc123'")])
-    error_message = "every worker's cloud-init must embed the agent token directly via agent_token_fetch_command (Proxmox has no SSM equivalent — ADR 0004)"
+    error_message = "every worker's cloud-init must embed the agent token directly via agent_token_fetch_command (Proxmox has no SSM equivalent)"
   }
   assert {
     condition     = alltrue([for k, ci in output.rendered_cloud_init : !strcontains(nonsensitive(ci), "aws ssm")])

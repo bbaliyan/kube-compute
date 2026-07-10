@@ -29,12 +29,11 @@ Azure has no default VNet (unlike AWS), so both are always required.
   `agent-token` secret on a brand-new vault, re-run `tofu apply` — the role assignment
   will have propagated by then. This module does not add a blocking sleep for this.
 - **No `dns`/`static` endpoint_mode.** Unlike `spine-aws`, this module supports only the
-  internal-LB registration endpoint — `dns`/`static` alternatives are unrequested scope
-  (issue 019's acceptance criteria test the LB only) and can be added later behind the
-  same `endpoint_mode` variable name spine-aws already uses, if a future issue asks for it.
+  internal-LB registration endpoint — `dns`/`static` alternatives are out of scope and
+  can be added later behind the same `endpoint_mode` variable name spine-aws already uses.
 - **Single-region placement only.** All control-plane VMs land in `location`, spread across
   `availability_zones` — cross-region spread is out of scope (matches spine-proxmox's
   single-Proxmox-node limitation note).
-- **No working example provided.** Per issue 019's acceptance criteria, Azure validation is
-  manual-tier — this repo has no live Azure subscription to test `init`/`plan`/`apply`
-  against. `examples/basic/main.tf` is unverified beyond `tofu validate`.
+- **No working example provided.** Azure validation is manual-tier — this repo has no
+  live Azure subscription to test `init`/`plan`/`apply` against. `examples/basic/main.tf`
+  is unverified beyond `tofu validate`.

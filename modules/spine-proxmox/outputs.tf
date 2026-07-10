@@ -57,7 +57,7 @@ output "registration_address" {
 }
 
 output "cluster_agent_token" {
-  description = "The agent join token. Delivered to worker-pool-proxmox directly (no managed secret store on Proxmox — ADR 0004); embed it in cloud-init only, never log it."
+  description = "The agent join token. Delivered to worker-pool-proxmox directly (no managed secret store on Proxmox); embed it in cloud-init only, never log it."
   value       = random_password.agent_token.result
   sensitive   = true
 }

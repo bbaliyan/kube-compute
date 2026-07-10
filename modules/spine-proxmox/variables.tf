@@ -244,7 +244,7 @@ variable "vm_gateway" {
 }
 
 variable "control_plane_vip_address" {
-  description = "kube-vip virtual IP (bare IPv4, no CIDR suffix) on the cluster's L2 subnet, used as the registration_address when control_plane_count > 1. Required in that case — Proxmox has no load balancer primitive, so a floating ARP VIP is the HA registration endpoint (ADR 0003)."
+  description = "kube-vip virtual IP (bare IPv4, no CIDR suffix) on the cluster's L2 subnet, used as the registration_address when control_plane_count > 1. Required in that case — Proxmox has no load balancer primitive, so a floating ARP VIP is the HA registration endpoint."
   type        = string
   default     = null
 
@@ -255,7 +255,7 @@ variable "control_plane_vip_address" {
 }
 
 variable "cluster_network_cidr" {
-  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'), used as the sole member of the cluster-wide firewall ipset. Proxmox multi-node is a single flat L2 subnet (ADR 0005/0003), and bpg/proxmox's ipset resource is owned monolithically by one Terraform state, so exact per-VM membership (AWS's self-referencing security group) can't span the spine's and each worker pool's separate states — this CIDR is the pragmatic Proxmox equivalent of 'this cluster's own members'. Required when control_plane_count > 1 or when any worker pool will attach; optional (module still creates the ipset) for a single-node cluster with no pools."
+  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'), used as the sole member of the cluster-wide firewall ipset. Proxmox multi-node is a single flat L2 subnet, and bpg/proxmox's ipset resource is owned monolithically by one Terraform state, so exact per-VM membership (AWS's self-referencing security group) can't span the spine's and each worker pool's separate states — this CIDR is the pragmatic Proxmox equivalent of 'this cluster's own members'. Required when control_plane_count > 1 or when any worker pool will attach; optional (module still creates the ipset) for a single-node cluster with no pools."
   type        = string
   default     = null
 }

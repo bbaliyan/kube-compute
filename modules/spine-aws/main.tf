@@ -58,7 +58,7 @@ locals {
   # in a different VPC than where the instances actually launch.
   module_vpc_id = var.control_plane_count > 1 ? data.aws_subnet.control_plane_genesis[0].vpc_id : data.aws_subnet.selected.vpc_id
 
-  # Null for control_plane_count = 1 (no registration endpoint — ADR 0003). For control_plane_count
+  # Null for control_plane_count = 1 (no registration endpoint). For control_plane_count
   # > 1, the shape depends on endpoint_mode: the NLB's DNS name (loadbalancer, the default), the
   # shared Route53 record name (dns), or the consumer-supplied address verbatim (static).
   registration_address = var.control_plane_count == 1 ? null : (
@@ -67,10 +67,10 @@ locals {
     try(aws_lb.control_plane[0].dns_name, null)
   )
 
-  # Durability default-on for HA, optional for single-node (ADR 0009) — null means "auto".
+  # Durability default-on for HA, optional for single-node — null means "auto".
   effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
-  # CNI default is topology-aware (ADR 0006) — null means "auto": cilium for multi-node
+  # CNI default is topology-aware — null means "auto": cilium for multi-node
   # (control_plane_count > 1), flannel for single-node. Same "worker pools are invisible to this
   # module" caveat as control_plane_taint above: a 1-CP-plus-workers topology still resolves via
   # control_plane_count alone, matching the existing etcd_snapshots_enabled precedent.
@@ -216,9 +216,15 @@ module "bootstrap" {
 }
 
 # ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
-# Explicitly depends_on the genesis node (ADR 0007's first-server ordering) — server-join
-# retries against the registration endpoint, so no ordering among the additional nodes
-# themselves is needed, only "after the genesis node exists."
+# Explicitly depends_on the genesis node — the first server must exist before any additional
+# server can join it. Ordering *among* the additional nodes themselves was originally
+# assumed unnecessary (server-join retries against the registration endpoint), but in
+# practice two siblings booting close together can still race K3s' embedded-etcd
+# bootstrap-data reconciliation and one loses permanently. cloud-init's server-join stage
+# now staggers each sibling by its own node_name-derived index and self-heals via a wipe
+# + retry loop — see the "Additional control-plane nodes join..." comment in
+# modules/cloud-init/templates/cloud-init-al2023.yaml.tpl (and the Ubuntu template) for
+# the mechanics.
 module "bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
@@ -247,7 +253,7 @@ module "bootstrap_additional" {
   cert_mode                           = var.cert_mode
   extra_tags                          = var.extra_tags
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
-  # first server only (ADR 0007) — cloud-init also enforces this at the render level.
+  # first server only — cloud-init also enforces this at the render level.
 }
 
 resource "aws_instance" "control_plane_additional" {
@@ -286,7 +292,7 @@ resource "aws_instance" "control_plane_additional" {
 }
 
 # ---- Internal NLB fronting the control plane on 6443 (control_plane_count > 1, endpoint_mode = "loadbalancer" only) ----
-# ADR 0003: no registration endpoint at all for control_plane_count = 1; an internal NLB is the
+# No registration endpoint at all for control_plane_count = 1; an internal NLB is the
 # default HA mode on cloud (a floating VIP cannot cross AWS AZ boundaries). See endpoint_mode for
 # the dns/static alternatives, gated below.
 resource "aws_lb" "control_plane" {

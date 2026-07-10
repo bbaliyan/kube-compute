@@ -31,16 +31,16 @@ described above).
 
 ## Known limitations
 
-- **No working example provided.** Per issue 019's acceptance criteria, Azure validation
-  is manual-tier — this repo has no live Azure subscription to test `init`/`plan`/`apply`
-  against. `examples/basic/main.tf` is unverified beyond `tofu validate`.
-- **One pool = one zone**, by design (see spine-azure design note 7) — spreading a single
-  pool across zones is out of scope; create one `worker-pool-azure` module instance per
-  zone instead, same as `worker-pool-aws`.
+- **No working example provided.** Azure validation is manual-tier — this repo has no
+  live Azure subscription to test `init`/`plan`/`apply` against. `examples/basic/main.tf`
+  is unverified beyond `tofu validate`.
+- **One pool = one zone**, by design — spreading a single pool across zones is out of
+  scope; create one `worker-pool-azure` module instance per zone instead, same as
+  `worker-pool-aws`.
 - **`registration_address` must resolve to a real address.** This module is intended to
   pair with an HA spine (`control_plane_count > 1`), whose `registration_address` output
   is a real LB frontend IP. A spine with `control_plane_count = 1` has no registration
-  endpoint (ADR 0003) and exposes `registration_address = null`; wiring this module
+  endpoint and exposes `registration_address = null`; wiring this module
   against such a spine by passing that `null` through will not work. If you must pair
   this pool with a single-node spine, pass that spine's `cluster_ip` output explicitly
   instead of its `registration_address` output.

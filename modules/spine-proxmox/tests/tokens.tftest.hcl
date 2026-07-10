@@ -39,6 +39,6 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   }
   assert {
     condition     = nonsensitive(output.cluster_agent_token) == nonsensitive(random_password.agent_token.result)
-    error_message = "cluster_agent_token output must be the agent token (delivered via cloud-init, not a secret store, per ADR 0004)"
+    error_message = "cluster_agent_token output must be the agent token (delivered via cloud-init, not a secret store)"
   }
 }
