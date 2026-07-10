@@ -55,8 +55,8 @@ run "server_init_wires_cluster_tokens" {
   }
 
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "INSTALL_K3S_TOKEN=\"cluster-secret-abc123\"")
-    error_message = "server-init must set INSTALL_K3S_TOKEN from cluster_token so servers/agents share the base join secret"
+    condition     = strcontains(nonsensitive(output.cloud_init), "K3S_TOKEN=\"cluster-secret-abc123\"")
+    error_message = "server-init must set K3S_TOKEN from cluster_token so servers/agents share the base join secret (K3S_TOKEN, not INSTALL_K3S_TOKEN — the k3s installer only recognizes the former; the latter is silently ignored)"
   }
   assert {
     condition     = strcontains(nonsensitive(output.cloud_init), "--agent-token agent-secret-xyz789")
@@ -96,6 +96,10 @@ run "worker_role_renders_agent_join" {
     condition     = strcontains(nonsensitive(output.cloud_init), "agent --server https://10.0.1.5:6443")
     error_message = "sanity: the assembled agent exec string must be present"
   }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "K3S_TOKEN=\"$AGENT_TOKEN\"")
+    error_message = "worker role must set K3S_TOKEN (not INSTALL_K3S_TOKEN, which the k3s installer silently ignores) from the fetched agent token"
+  }
 }
 
 run "invalid_role_rejected" {
@@ -126,8 +130,8 @@ run "server_join_renders_join_install" {
     error_message = "server-join must render a plain server join against registration_address"
   }
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "INSTALL_K3S_TOKEN=\"cluster-secret-join1\"")
-    error_message = "server-join must set INSTALL_K3S_TOKEN from cluster_token"
+    condition     = strcontains(nonsensitive(output.cloud_init), "K3S_TOKEN=\"cluster-secret-join1\"")
+    error_message = "server-join must set K3S_TOKEN from cluster_token (K3S_TOKEN, not INSTALL_K3S_TOKEN — the k3s installer only recognizes the former; the latter is silently ignored)"
   }
   assert {
     condition     = !strcontains(nonsensitive(output.cloud_init), "--cluster-init")
