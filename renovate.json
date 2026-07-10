@@ -6,7 +6,27 @@
     ":dependencyDashboard"
   ],
   "labels": ["renovate"],
-  "enabledManagers": ["terraform", "github-actions"],
+  "enabledManagers": ["terraform", "github-actions", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "K3s version — single source of truth in modules/component-versions/main.tf, coalesced as the default fallback by every spine/worker-pool module and cloud-init",
+      "fileMatch": ["^modules/component-versions/main\\.tf$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+k8s_version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\+k3s(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Helm chart versions (Cilium, Argo CD) — single source of truth in modules/component-versions/main.tf, coalesced as the default fallback by cloud-init. Both use plain semver, so one manager covers both.",
+      "fileMatch": ["^modules/component-versions/main\\.tf$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?) registryUrl=(?<registryUrl>.*?)\\s+cilium_version\\s*=\\s*\"(?<currentValue>[^\"]+)\"",
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?) registryUrl=(?<registryUrl>.*?)\\s+argocd_version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ]
+    }
+  ],
   "packageRules": [
     {
       "description": "Batch routine patch updates into one weekly PR",

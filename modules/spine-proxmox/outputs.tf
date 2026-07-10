@@ -47,7 +47,7 @@ output "proxmox_node" {
 
 output "k8s_version" {
   description = "K8s distro version installed on this spine's control-plane nodes. Wire worker-pool-proxmox's spine_k8s_version to this output so the version-skew guard is enforced automatically rather than by convention."
-  value       = var.k8s_version
+  value       = local.k8s_version
 }
 
 # ---- Join flow: consumed by worker-pool-proxmox ----

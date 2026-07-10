@@ -1,9 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
+module "component_versions" {
+  source = "../component-versions"
+}
+
 locals {
+  # Fall back to the platform-wide default
+  # when a caller doesn't override these.
+  k8s_version    = coalesce(var.k8s_version, module.component_versions.k8s_version)
+  cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
+  argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
+
   cloud_init = templatefile(var.cloud_init_template, {
     cluster_name                        = var.cluster_name
     node_name                           = var.node_name
-    k8s_version                         = var.k8s_version
+    k8s_version                         = local.k8s_version
+    cilium_version                      = local.cilium_version
+    argocd_version                      = local.argocd_version
     cluster_fqdn                        = var.cluster_fqdn
     node_role                           = var.node_role
     control_plane_taint                 = var.control_plane_taint

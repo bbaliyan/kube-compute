@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+module "component_versions" {
+  source = "../component-versions"
+}
+
 locals {
   cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
+
+  # Falls back to the platform-wide default when the caller doesn't override k8s_version.
+  k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
   static_ips = var.worker_ip_addresses != null
 
@@ -9,7 +16,7 @@ locals {
   agent_token_fetch_command = "echo '${var.cluster_agent_token}'"
 
   version_regex       = "^v(\\d+)\\.(\\d+)\\.(\\d+)\\+"
-  pool_version_parts  = regex(local.version_regex, var.k8s_version)
+  pool_version_parts  = regex(local.version_regex, local.k8s_version)
   spine_version_parts = regex(local.version_regex, var.spine_k8s_version)
   pool_version_num    = tonumber(local.pool_version_parts[0]) * 1000000 + tonumber(local.pool_version_parts[1]) * 1000 + tonumber(local.pool_version_parts[2])
   spine_version_num   = tonumber(local.spine_version_parts[0]) * 1000000 + tonumber(local.spine_version_parts[1]) * 1000 + tonumber(local.spine_version_parts[2])
@@ -99,7 +106,7 @@ module "bootstrap" {
   cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name
   node_name                 = "${var.cluster_name}-worker-${each.key}"
-  k8s_version               = var.k8s_version
+  k8s_version               = local.k8s_version
   node_role                 = "worker"
   registration_address      = var.registration_address
   agent_token_fetch_command = local.agent_token_fetch_command
@@ -185,7 +192,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
     }
     precondition {
       condition     = local.pool_version_num <= local.spine_version_num
-      error_message = "k8s_version (${var.k8s_version}) must not be newer than the spine's k8s_version (${var.spine_k8s_version})."
+      error_message = "k8s_version (${local.k8s_version}) must not be newer than the spine's k8s_version (${var.spine_k8s_version})."
     }
   }
 }

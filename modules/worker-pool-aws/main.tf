@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
+module "component_versions" {
+  source = "../component-versions"
+}
+
 locals {
   cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-al2023.yaml.tpl")
 
@@ -13,10 +17,13 @@ locals {
 
   node_labels = merge({ "topology.kubernetes.io/zone" = local.availability_zone }, var.extra_node_labels)
 
+  # Falls back to the platform-wide default when the caller doesn't override k8s_version.
+  k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
+
   # Version-skew check: kubelet may trail the API server, never lead it. k8s_version is
   # "vMAJOR.MINOR.PATCH+k3sN"; only major/minor/patch are compared numerically.
   version_regex       = "^v(\\d+)\\.(\\d+)\\.(\\d+)\\+"
-  pool_version_parts  = regex(local.version_regex, var.k8s_version)
+  pool_version_parts  = regex(local.version_regex, local.k8s_version)
   spine_version_parts = regex(local.version_regex, var.spine_k8s_version)
   pool_version_num    = tonumber(local.pool_version_parts[0]) * 1000000 + tonumber(local.pool_version_parts[1]) * 1000 + tonumber(local.pool_version_parts[2])
   spine_version_num   = tonumber(local.spine_version_parts[0]) * 1000000 + tonumber(local.spine_version_parts[1]) * 1000 + tonumber(local.spine_version_parts[2])
@@ -37,7 +44,7 @@ module "bootstrap" {
   # per-instance hostname instead of every instance colliding on the same one.
   cloud_init_template       = local.cloud_init_template
   cluster_name              = var.cluster_name
-  k8s_version               = var.k8s_version
+  k8s_version               = local.k8s_version
   node_role                 = "worker"
   registration_address      = var.registration_address
   agent_token_fetch_command = local.agent_token_fetch_command
@@ -140,7 +147,7 @@ resource "aws_launch_template" "worker" {
 
     precondition {
       condition     = local.pool_version_num <= local.spine_version_num
-      error_message = "k8s_version (${var.k8s_version}) must not be newer than the spine's k8s_version (${var.spine_k8s_version}) — a kubelet may trail the API server by up to 3 minors, never lead it."
+      error_message = "k8s_version (${local.k8s_version}) must not be newer than the spine's k8s_version (${var.spine_k8s_version}) — a kubelet may trail the API server by up to 3 minors, never lead it."
     }
   }
 }

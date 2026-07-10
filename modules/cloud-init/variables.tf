@@ -16,9 +16,15 @@ variable "node_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version to install (a K3s release string today, e.g. v1.36.1+k3s1). Neutral name so a future distro hop does not change the interface."
+  description = "K8s distro version to install (a K3s release string today, e.g. v1.36.1+k3s1). Neutral name so a future distro hop does not change the interface. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
-  default     = "v1.36.1+k3s1"
+  default     = null
+}
+
+variable "cilium_version" {
+  description = "Cilium Helm chart version, only meaningful when cni = \"cilium\". Null uses the platform default (module.component_versions.cilium_version)."
+  type        = string
+  default     = null
 }
 
 variable "cluster_fqdn" {
@@ -148,6 +154,12 @@ variable "registry_mirror_url" {
 
 variable "gitops_platform_repo_url" {
   description = "Optional Argo CD platform Application source repo (kube-platform or a fork). Null = skip all Argo CD wiring."
+  type        = string
+  default     = null
+}
+
+variable "argocd_version" {
+  description = "Argo CD Helm chart version, only meaningful when gitops_platform_repo_url is set. Null uses the platform default (module.component_versions.argocd_version)."
   type        = string
   default     = null
 }

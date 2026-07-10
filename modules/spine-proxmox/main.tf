@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+module "component_versions" {
+  source = "../component-versions"
+}
+
 locals {
   cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
+
+  # Falls back to the platform-wide default when the caller doesn't override k8s_version.
+  k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
   has_domain    = var.cluster_domain != null
   fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
@@ -220,7 +227,7 @@ module "bootstrap" {
   cloud_init_template            = local.cloud_init_template
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
-  k8s_version                    = var.k8s_version
+  k8s_version                    = local.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
@@ -254,7 +261,7 @@ module "bootstrap_additional" {
   cloud_init_template         = local.cloud_init_template
   cluster_name                = var.cluster_name
   node_name                   = "${var.cluster_name}-cp-${each.key}"
-  k8s_version                 = var.k8s_version
+  k8s_version                 = local.k8s_version
   cluster_fqdn                = local.cluster_fqdn
   node_role                   = "server-join"
   control_plane_taint         = local.control_plane_taint

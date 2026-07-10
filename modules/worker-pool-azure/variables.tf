@@ -17,9 +17,9 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version this pool's workers install. Must not be newer than spine_k8s_version."
+  description = "K8s distro version this pool's workers install. Must not be newer than spine_k8s_version. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
-  default     = "v1.36.1+k3s1"
+  default     = null
 }
 
 variable "trusted_ca_pem" {

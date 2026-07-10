@@ -76,6 +76,7 @@ write_files:
       spec:
         repo: https://argoproj.github.io/argo-helm
         chart: argo-cd
+        version: "${argocd_version}"
         targetNamespace: argocd
         createNamespace: false
         valuesContent: |-
@@ -143,7 +144,7 @@ write_files:
       spec:
         repo: https://helm.cilium.io/
         chart: cilium
-        version: "1.19.5"
+        version: "${cilium_version}"
         targetNamespace: kube-system
         bootstrap: true
         valuesContent: |-
