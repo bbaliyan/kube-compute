@@ -331,7 +331,32 @@ write_files:
       CNI_ARGS="${cni == "cilium" ? "--flannel-backend=none --disable-network-policy --disable-kube-proxy" : ""}"
       SERVER_ARGS="--secrets-encryption --disable traefik --disable-cloud-controller --node-ip $NODE_IP $TLS_SANS --write-kubeconfig-mode 0644${control_plane_taint ? " --node-taint CriticalAddonsOnly=true:NoExecute" : ""} $SNAPSHOT_ARGS $CNI_ARGS"
       export INSTALL_K3S_EXEC="server --server https://${registration_address}:6443 $SERVER_ARGS"
-      curl -sfL https://get.k3s.io | sh -
+
+      # Additional control-plane nodes join K3s' embedded-etcd cluster one at a time by
+      # design (K3s HA docs: concurrent server joins are unsupported). The original design
+      # assumed server-join's retry-against-registration-endpoint behavior made ordering
+      # between siblings unnecessary (see spine-aws's control_plane_additional comment) —
+      # in practice, two siblings booting close together still race K3s' bootstrap-data
+      # reconciliation and the loser fails permanently ("cred/passwd newer than
+      # datastore"). This does NOT self-heal via systemd's restart-on-failure, since the
+      # stale local bootstrap files persist across every restart. This block supersedes
+      # that assumption: it staggers by this node's own index (parsed from its hostname
+      # suffix — only needs to be distinct per sibling within one provider; the numeric
+      # base need not match across providers), and self-heals by wiping local server
+      # state — TLS, credentials, and any partially-written etcd data — and retrying if a
+      # collision still slips through.
+      NODE_INDEX="$(hostname | grep -oE '[0-9]+$' || echo 0)"
+      sleep $((NODE_INDEX * 60))
+
+      JOIN_ATTEMPT=0
+      until curl -sfL https://get.k3s.io | sh - && timeout 90 bash -c 'until kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
+        JOIN_ATTEMPT=$((JOIN_ATTEMPT + 1))
+        [ "$JOIN_ATTEMPT" -ge 3 ] && { status "FAILED:k8s-install-join-race"; exit 1; }
+        status "stage-4:k8s-install:retry-$JOIN_ATTEMPT"
+        systemctl stop k3s 2>/dev/null || true
+        rm -rf /var/lib/rancher/k3s/server/tls /var/lib/rancher/k3s/server/cred /var/lib/rancher/k3s/server/db
+        sleep 15
+      done
       %{ endif ~}
       %{ if node_role == "worker" ~}
       AGENT_TOKEN="$(${agent_token_fetch_command})"

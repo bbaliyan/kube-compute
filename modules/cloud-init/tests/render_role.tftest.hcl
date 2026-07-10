@@ -147,6 +147,35 @@ run "server_join_renders_join_install" {
   }
 }
 
+run "server_join_staggers_and_self_heals_on_join_race" {
+  command = plan
+
+  variables {
+    cluster_name         = "test1"
+    k8s_version          = "v1.36.1+k3s1"
+    node_role            = "server-join"
+    registration_address = "10.0.1.10"
+    cluster_token        = "cluster-secret-join1"
+  }
+
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "NODE_INDEX=\"$(hostname | grep -oE '[0-9]+$' || echo 0)\"")
+    error_message = "server-join must stagger its install by a per-node index parsed from the hostname, so concurrently-created siblings don't race K3s' embedded-etcd bootstrap"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "sleep $((NODE_INDEX * 60))")
+    error_message = "server-join must sleep proportionally to its node index before installing"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "rm -rf /var/lib/rancher/k3s/server/tls /var/lib/rancher/k3s/server/cred /var/lib/rancher/k3s/server/db")
+    error_message = "a losing join must wipe TLS, credentials, AND any partially-written etcd data (server/db) before retrying — leaving server/db behind can make every retry fail for a different (etcd WAL/member-ID) reason"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "status \"FAILED:k8s-install-join-race\"")
+    error_message = "server-join must report a distinct FAILED status when it exhausts its join retries"
+  }
+}
+
 run "server_init_runtime_probe_present" {
   command = plan
 
