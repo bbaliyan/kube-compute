@@ -83,6 +83,14 @@ run "worker_role_renders_agent_join" {
     condition     = strcontains(nonsensitive(output.cloud_init), "--node-label topology.kubernetes.io/zone=homelab")
     error_message = "worker role must render node_labels as --node-label flags"
   }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "export K3S_TOKEN=\"$AGENT_TOKEN\"")
+    error_message = "K3S_TOKEN must be set via a standalone export, not as a pipeline-prefix assignment on the curl|sh line (VAR=value cmd1 | cmd2 only scopes VAR to cmd1 — sh, which actually runs the installer and needs to see it, never gets it, so k3s-agent fails with \"--token is required\" even though the token was 'set' right there on the same line)"
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(output.cloud_init), "K3S_TOKEN=\"$AGENT_TOKEN\" curl")
+    error_message = "K3S_TOKEN must not be set as a same-line prefix to the curl|sh pipeline — see above"
+  }
 }
 
 run "cilium_manifest_renders_for_server_init" {

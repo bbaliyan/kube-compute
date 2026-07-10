@@ -341,7 +341,8 @@ write_files:
       %{ endfor ~}
       export INSTALL_K3S_VERSION="${k8s_version}"
       export INSTALL_K3S_EXEC="agent --server https://${registration_address}:6443 --node-ip $NODE_IP$NODE_LABEL_FLAGS"
-      K3S_TOKEN="$AGENT_TOKEN" curl -sfL https://get.k3s.io | sh -
+      export K3S_TOKEN="$AGENT_TOKEN"
+      curl -sfL https://get.k3s.io | sh -
       %{ endif ~}
       %{ if node_role != "server-init" && node_role != "server-join" && node_role != "worker" ~}
       echo "[bootstrap] node_role=${node_role} is not implemented by this build of node-bootstrap" >&2
