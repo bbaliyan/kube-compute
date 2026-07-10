@@ -1,0 +1,145 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Release split (Proxmox)
+
+# Publishes the Proxmox provider slice of this repo (component-versions,
+# cloud-init, control-plane-proxmox, node-pool-proxmox) to the read-only
+# mirror repo terraform-proxmox-kube-compute, but only when that path set
+# actually changed since the last version published there.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+env:
+  SPLIT_REPO: bbaliyan/terraform-proxmox-kube-compute
+  PATH_SET: "component-versions cloud-init control-plane-proxmox node-pool-proxmox"
+
+jobs:
+  release-split-proxmox:
+    runs-on: ubuntu-latest
+    container: ghcr.io/bbaliyan/kube-devenv:0.1.6
+    steps:
+      - name: Checkout kube-compute (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine baseline tag from the split repo
+        id: baseline
+        env:
+          GH_TOKEN: ${{ secrets.SPLIT_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          new_tag="${GITHUB_REF_NAME}"
+          echo "new_tag=${new_tag}" >> "$GITHUB_OUTPUT"
+
+          baseline="$(gh api "repos/${SPLIT_REPO}/tags" --jq '.[].name' 2>/dev/null \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1 || true)"
+
+          if [[ -z "$baseline" ]]; then
+            echo "no existing tag in ${SPLIT_REPO} — first-ever release, always publish"
+            echo "baseline=" >> "$GITHUB_OUTPUT"
+            echo "has_baseline=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "baseline tag: ${baseline}"
+            echo "baseline=${baseline}" >> "$GITHUB_OUTPUT"
+            echo "has_baseline=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Diff-gate against the path set
+        id: diffgate
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.baseline.outputs.has_baseline }}" != "true" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          baseline="${{ steps.baseline.outputs.baseline }}"
+          new_tag="${{ steps.baseline.outputs.new_tag }}"
+
+          if git diff --quiet "${baseline}..${new_tag}" -- ${PATH_SET}; then
+            echo "no change in ${PATH_SET} between ${baseline} and ${new_tag} — skipping"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout split repo
+        if: steps.diffgate.outputs.publish == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SPLIT_REPO }}
+          token: ${{ secrets.SPLIT_REPO_PAT }}
+          path: split-repo
+          fetch-depth: 0
+
+      - name: Build release tree
+        if: steps.diffgate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          ./scripts/release-split.sh proxmox "${GITHUB_WORKSPACE}/split-repo" "${GITHUB_WORKSPACE}"
+
+      - name: Validate the built tree
+        if: steps.diffgate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          cd split-repo
+          tofu fmt -check -recursive
+          tofu init -backend=false
+          tofu validate
+
+      - name: Commit, tag, and push
+        if: steps.diffgate.outputs.publish == 'true'
+        env:
+          NEW_TAG: ${{ steps.baseline.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+          cd split-repo
+          git config user.name "Bharat Baliyan"
+          git config user.email "bharat.baliyan19@gmail.com"
+          git add -A
+          git commit -s -m "release: ${NEW_TAG}"
+          git tag "${NEW_TAG}"
+          git push origin HEAD:refs/heads/main
+          git push origin "${NEW_TAG}"
+
+      - name: Generate release notes
+        if: steps.diffgate.outputs.publish == 'true'
+        id: notes
+        env:
+          HAS_BASELINE: ${{ steps.baseline.outputs.has_baseline }}
+          BASELINE: ${{ steps.baseline.outputs.baseline }}
+          NEW_TAG: ${{ steps.baseline.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+          notes_file="$(mktemp)"
+          if [[ "${HAS_BASELINE}" == "true" ]]; then
+            {
+              echo "Changes to ${PATH_SET} between ${BASELINE} and ${NEW_TAG}:"
+              echo
+              git log "${BASELINE}..${NEW_TAG}" --oneline -- ${PATH_SET}
+            } > "${notes_file}"
+          else
+            echo "First release of the Proxmox split repo (${NEW_TAG})." > "${notes_file}"
+          fi
+          {
+            echo "notes_file=${notes_file}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release on the split repo
+        if: steps.diffgate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SPLIT_REPO_PAT }}
+          NEW_TAG: ${{ steps.baseline.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+          gh release create "${NEW_TAG}" \
+            --repo "${SPLIT_REPO}" \
+            --title "${NEW_TAG}" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}"

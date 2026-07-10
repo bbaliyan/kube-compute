@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Single source of truth for default software versions shared across every
-# spine-*/worker-pool-* module and cloud-init. Not user-facing on its own —
+# control-plane-*/node-pool-* module and cloud-init. Not user-facing on its own —
 # callers reference these as fallback defaults (coalesce(var.x, module.component_versions.x)),
 # so a version bump here propagates everywhere without hunting down each
 # module's own copy of the same literal.

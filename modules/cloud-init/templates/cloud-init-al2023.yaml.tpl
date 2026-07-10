@@ -335,7 +335,7 @@ write_files:
       # Additional control-plane nodes join K3s' embedded-etcd cluster one at a time by
       # design (K3s HA docs: concurrent server joins are unsupported). The original design
       # assumed server-join's retry-against-registration-endpoint behavior made ordering
-      # between siblings unnecessary (see spine-aws's control_plane_additional comment) —
+      # between siblings unnecessary (see control-plane-aws's control_plane_additional comment) —
       # in practice, two siblings booting close together still race K3s' bootstrap-data
       # reconciliation and the loser fails permanently ("cred/passwd newer than
       # datastore"). This does NOT self-heal via systemd's restart-on-failure, since the

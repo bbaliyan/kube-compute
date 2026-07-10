@@ -10,7 +10,7 @@ variable "cluster_name" {
 }
 
 variable "node_name" {
-  description = "Unique per-node hostname (e.g. '<cluster_name>-cp-0', '<cluster_name>-worker-1'). K3s/kubelet defaults the registered Kubernetes node name to the OS hostname, so every node in a multi-node cluster MUST get a distinct value here — reusing cluster_name across nodes makes every kubelet register under the same node name, silently clobbering each other. Null omits the hostname cloud-config directive entirely, letting cloud-init's own datasource assign its naturally-unique per-instance hostname instead (EC2/Azure both do this automatically) — required for ASG/VMSS-backed worker pools, where Terraform applies one shared cloud-init payload to every instance the autoscaler creates and never sees individual instances to assign a static name to."
+  description = "Unique per-node hostname (e.g. '<cluster_name>-cp-0', '<cluster_name>-worker-1'). K3s/kubelet defaults the registered Kubernetes node name to the OS hostname, so every node in a multi-node cluster MUST get a distinct value here — reusing cluster_name across nodes makes every kubelet register under the same node name, silently clobbering each other. Null omits the hostname cloud-config directive entirely, letting cloud-init's own datasource assign its naturally-unique per-instance hostname instead (EC2/Azure both do this automatically) — required for ASG/VMSS-backed node pools, where Terraform applies one shared cloud-init payload to every instance the autoscaler creates and never sees individual instances to assign a static name to."
   type        = string
   default     = null
 }
@@ -64,13 +64,13 @@ variable "cluster_agent_token" {
 }
 
 variable "registration_address" {
-  description = "IP or FQDN of the existing cluster's registration endpoint (a spine's registration_address output). Used to build --server https://<address>:6443 for the k3s agent/server join. Required when node_role is server-join or worker; ignored for server-init."
+  description = "IP or FQDN of the existing cluster's registration endpoint (a control plane's registration_address output). Used to build --server https://<address>:6443 for the k3s agent/server join. Required when node_role is server-join or worker; ignored for server-init."
   type        = string
   default     = null
 }
 
 variable "agent_token_fetch_command" {
-  description = "Shell command that prints the k3s agent join token to stdout when run at boot (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store, assembled by a worker-pool module). Keeps cloud-init provider-neutral: the caller decides how the token is fetched and delivered to the instance; cloud-init only executes the command it is given. Required when node_role is worker."
+  description = "Shell command that prints the k3s agent join token to stdout when run at boot (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store, assembled by a node-pool module). Keeps cloud-init provider-neutral: the caller decides how the token is fetched and delivered to the instance; cloud-init only executes the command it is given. Required when node_role is worker."
   type        = string
   default     = null
 }
@@ -88,7 +88,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'flannel' (K3s built-in, default) or 'cilium'. Only meaningful for node_role server-init/server-join — a worker never renders CNI flags or manifests of its own. The caller (a spine module) resolves any topology-aware default; cloud-init always renders whichever value it is given."
+  description = "CNI to install: 'flannel' (K3s built-in, default) or 'cilium'. Only meaningful for node_role server-init/server-join — a worker never renders CNI flags or manifests of its own. The caller (a control-plane module) resolves any topology-aware default; cloud-init always renders whichever value it is given."
   type        = string
   default     = "flannel"
   validation {
@@ -116,7 +116,7 @@ variable "etcd_snapshot_retention" {
 }
 
 variable "etcd_snapshot_object_store_bucket" {
-  description = "Optional object-store bucket name for uploading etcd snapshots off-node (S3-compatible API — k3s --etcd-s3-bucket). Null = local-only snapshots. Provider-neutral name: the caller (a spine module) resolves this to whatever object store its provider uses."
+  description = "Optional object-store bucket name for uploading etcd snapshots off-node (S3-compatible API — k3s --etcd-s3-bucket). Null = local-only snapshots. Provider-neutral name: the caller (a control-plane module) resolves this to whatever object store its provider uses."
   type        = string
   default     = null
 }
@@ -217,7 +217,7 @@ variable "extra_tags" {
 }
 
 variable "extra_server_manifests" {
-  description = "Arbitrary K3s auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/k3s/server/manifests/ on server-init/server-join nodes only. cloud-init does not interpret the content — a spine module uses this to drop provider-specific server-side add-ons (e.g. a kube-vip DaemonSet on Proxmox) without cloud-init knowing what they are."
+  description = "Arbitrary K3s auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/k3s/server/manifests/ on server-init/server-join nodes only. cloud-init does not interpret the content — a control-plane module uses this to drop provider-specific server-side add-ons (e.g. a kube-vip DaemonSet on Proxmox) without cloud-init knowing what they are."
   type        = map(string)
   default     = {}
 }

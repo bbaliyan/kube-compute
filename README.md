@@ -3,9 +3,10 @@
 Reusable OpenTofu/Terragrunt modules for the compute layer of a K3s cluster —
 control-plane and worker nodes, the load balancer/VIP and DNS needed to reach them,
 and node-scoped firewalling — on the provider of choice (AWS, Proxmox, or Azure) with
-minimal per-provider code. Not a single node: a cluster is a **spine** (control-plane
-node(s) plus cluster-wide resources) optionally joined by one or more **worker pools**;
-`control_plane_count = 1` with no worker pools is a complete single-node cluster.
+minimal per-provider code. Not a single node: a cluster is a **control plane**
+(control-plane node(s) plus cluster-wide resources) optionally joined by one or more
+**node pools**; `control_plane_count = 1` with no node pools is a complete
+single-node cluster.
 
 This is the compute half of the stack — what runs *on top* (GitOps, platform services)
 is [`kube-platform`](https://github.com/bbaliyan/kube-platform).
@@ -17,32 +18,31 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 
 | Module | Purpose |
 |--------|---------|
-| `modules/cloud-init`          | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by spine-aws and worker-pool-aws) and Ubuntu 26.04 LTS (used by the Proxmox and Azure modules). No provider resources. |
-| `modules/spine-aws`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (Amazon Linux 2023). |
-| `modules/worker-pool-aws`     | Fixed, AZ-pinned AWS worker pool (ASG + launch template) that joins an existing spine-aws cluster (Amazon Linux 2023). |
-| `modules/spine-proxmox`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (Ubuntu 26.04 LTS). |
-| `modules/worker-pool-proxmox` | Fixed Proxmox worker pool (discrete VMs) that joins an existing spine-proxmox cluster (Ubuntu 26.04 LTS). |
-| `modules/spine-azure`         | Azure control-plane node(s) + shared cluster resources: join tokens via Key Vault (RBAC), cluster/etcd Application Security Groups, internal Standard LB registration endpoint (Ubuntu 26.04 LTS). |
-| `modules/worker-pool-azure`   | Fixed, AZ-pinned Azure worker pool (VM Scale Set, manual upgrade mode) that joins an existing spine-azure cluster (Ubuntu 26.04 LTS). |
+| `modules/cloud-init`          | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by control-plane-aws and node-pool-aws) and Ubuntu 26.04 LTS (used by the Proxmox and Azure modules). No provider resources. |
+| `modules/control-plane-aws`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (Amazon Linux 2023). |
+| `modules/node-pool-aws`     | Fixed, AZ-pinned AWS node pool (ASG + launch template) that joins an existing control-plane-aws cluster (Amazon Linux 2023). |
+| `modules/control-plane-proxmox`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (Ubuntu 26.04 LTS). |
+| `modules/node-pool-proxmox` | Fixed Proxmox node pool (discrete VMs) that joins an existing control-plane-proxmox cluster (Ubuntu 26.04 LTS). |
+| `modules/control-plane-azure`         | Azure control-plane node(s) + shared cluster resources: join tokens via Key Vault (RBAC), cluster/etcd Application Security Groups, internal Standard LB registration endpoint (Ubuntu 26.04 LTS). |
+| `modules/node-pool-azure`   | Fixed, AZ-pinned Azure node pool (VM Scale Set, manual upgrade mode) that joins an existing control-plane-azure cluster (Ubuntu 26.04 LTS). |
 
 ## Concepts
 
-- **Spine and worker pools** — a cluster is a **spine** (its control-plane node(s), plus
-  cluster-wide resources: join tokens, cluster firewall, registration endpoint, DNS) optionally
-  joined by one or more **worker pools**. `control_plane_count` sets how many control-plane nodes
-  the spine has — 1, 3, or 5. A spine with `control_plane_count = 1` and no worker pools is a
-  complete single-node cluster on its own. "Spine" is a term coined for this project, not a
-  standard Kubernetes one.
+- **Control plane and node pools** — a cluster is a **control plane** (its control-plane
+  node(s), plus cluster-wide resources: join tokens, cluster firewall, registration endpoint,
+  DNS) optionally joined by one or more **node pools**. `control_plane_count` sets how many
+  control-plane nodes the control plane has — 1, 3, or 5. A control plane with
+  `control_plane_count = 1` and no node pools is a complete single-node cluster on its own.
 - **`cluster_type`** — whether control-plane nodes run user workloads. `all_in_one` (the
   default) keeps them schedulable; every single-node cluster uses this. `dedicated_control_plane`
-  taints control-plane nodes so user workloads run only on worker pools.
+  taints control-plane nodes so user workloads run only on node pools.
 - **Datastore** — every cluster, including single-node, runs K3s with embedded etcd
   (`--cluster-init`) rather than the SQLite default, for one consistent datastore and uniform
   snapshot behavior across topologies.
-- **Join flow** — a spine generates a server token, for control-plane nodes joining the same
-  spine, and a separate agent token, handed to worker pools (via an SSM `SecureString` on AWS, a
-  Key Vault secret on Azure, or cloud-init on Proxmox). A compromised worker can rejoin only as a
-  worker, never as a control-plane/etcd member.
+- **Join flow** — a control plane generates a server token, for control-plane nodes joining the
+  same control plane, and a separate agent token, handed to node pools (via an SSM `SecureString`
+  on AWS, a Key Vault secret on Azure, or cloud-init on Proxmox). A compromised worker can rejoin
+  only as a worker, never as a control-plane/etcd member.
 
 ### High availability (`control_plane_count = 3` or `5`)
 
@@ -56,7 +56,7 @@ required) and gives joining nodes a stable `registration_address`:
 - **Proxmox** — no managed load-balancer primitive, so a [kube-vip](https://kube-vip.io)
   ARP-mode VIP floats across the control-plane nodes instead; `registration_address` is that VIP.
   Verify VIP failover and the live join flow against a real Proxmox cluster before relying on
-  `spine-proxmox`/`worker-pool-proxmox` in production — they're validated with `tofu test`
+  `control-plane-proxmox`/`node-pool-proxmox` in production — they're validated with `tofu test`
   against a mocked provider only.
 
 On every provider, a control-plane node probes `registration_address` at boot before deciding
