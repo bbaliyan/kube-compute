@@ -8,7 +8,7 @@ data "aws_subnet" "selected" {
 
 data "aws_caller_identity" "current" {}
 
-# Authoritative arch lookup, same approach as control-plane-aws: AWS's own API reports
+# Authoritative arch lookup, same approach as aws-control-plane: AWS's own API reports
 # supported_architectures for any instance type, past or future.
 data "aws_ec2_instance_type" "selected" {
   instance_type = var.instance_type

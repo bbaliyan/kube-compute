@@ -12,15 +12,15 @@
 #   source_dir  path to the kube-compute checkout to copy from (default: repo
 #               root, derived from this script's own location)
 #
-# Path-set copied in: component-versions, cloud-init, control-plane-<provider>
-# (becomes the split repo's root module), node-pool-<provider> (nests under
-# modules/).
+# Path-set copied in: component-versions, cloud-init, <provider>-control-plane
+# (becomes the split repo's root module, renamed to bare "control-plane" — the
+# split repo's own name already carries the provider), <provider>-node-pool
+# (nests under modules/, renamed to bare "node-pool" for the same reason).
 #
-# Only control-plane-<provider>/main.tf's "../cloud-init" and
-# "../component-versions" source lines are rewritten (sibling -> parent-child,
-# since control-plane-<provider> moves from being a sibling of those two
-# modules to being their parent in the split repo). No other content differs
-# between source and output.
+# Only the root module's "../cloud-init" and "../component-versions" source
+# lines are rewritten (sibling -> parent-child, since it moves from being a
+# sibling of those two modules to being their parent in the split repo). No
+# other content differs between source and output.
 
 set -euo pipefail
 
@@ -34,8 +34,8 @@ target_dir="$2"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source_dir="${3:-$(cd "$script_dir/.." && pwd)}"
 
-control_plane_mod="control-plane-${provider}"
-node_pool_mod="node-pool-${provider}"
+control_plane_mod="${provider}-control-plane"
+node_pool_mod="${provider}-node-pool"
 
 for mod in "$control_plane_mod" "$node_pool_mod" component-versions cloud-init; do
   if [[ ! -d "$source_dir/modules/$mod" ]]; then
@@ -63,8 +63,12 @@ mkdir -p "$target_dir"
 rsync -a --exclude='.terraform/' "$source_dir/modules/$control_plane_mod/" "$target_dir/"
 
 # ---- Copy the rest under modules/<name>/ ----
+# node-pool drops its provider prefix here (the split repo's own name already
+# carries the provider); cloud-init/component-versions are already
+# provider-neutral, so their destination name matches their source name.
 mkdir -p "$target_dir/modules"
-for mod in "$node_pool_mod" cloud-init component-versions; do
+rsync -a --exclude='.terraform/' "$source_dir/modules/$node_pool_mod/" "$target_dir/modules/node-pool/"
+for mod in cloud-init component-versions; do
   mkdir -p "$target_dir/modules/$mod"
   rsync -a --exclude='.terraform/' "$source_dir/modules/$mod/" "$target_dir/modules/$mod/"
 done
@@ -108,7 +112,7 @@ check_parity() {
   done
 }
 check_parity "$control_plane_mod" "$source_dir/modules/$control_plane_mod" "$target_dir"
-check_parity "$node_pool_mod" "$source_dir/modules/$node_pool_mod" "$target_dir/modules/$node_pool_mod"
+check_parity "$node_pool_mod" "$source_dir/modules/$node_pool_mod" "$target_dir/modules/node-pool"
 check_parity "cloud-init" "$source_dir/modules/cloud-init" "$target_dir/modules/cloud-init"
 check_parity "component-versions" "$source_dir/modules/component-versions" "$target_dir/modules/component-versions"
 

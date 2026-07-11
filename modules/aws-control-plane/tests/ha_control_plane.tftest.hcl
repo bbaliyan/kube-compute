@@ -3,7 +3,7 @@
 # load_balancer_arn/target_group_arn arguments, which the AWS provider's own schema validates
 # as ARN-shaped — the mock provider's default random string for a computed "arn" attribute
 # fails that validation. Static, valid-looking ARNs sidestep it (mirrors the aws_launch_template
-# mock_resource pattern already used in node-pool-aws/tests/pool.tftest.hcl).
+# mock_resource pattern already used in aws-node-pool/tests/pool.tftest.hcl).
 mock_provider "aws" {
   mock_resource "aws_lb" {
     defaults = { arn = "arn:aws:elasticloadbalancing:eu-west-1:123456789012:loadbalancer/net/cp-lb-mock/1234567890123456" }

@@ -1,4 +1,4 @@
-# control-plane-azure
+# azure-control-plane
 
 Control plane for a kube-compute cluster on Azure: discrete `azurerm_linux_virtual_machine`
 control-plane pets (1, 3, or 5 — one per availability zone), an internal Standard Load Balancer
@@ -12,7 +12,7 @@ tokens delivered via Key Vault (RBAC authorization).
   control-plane NIC. `registration_address` is this LB's frontend private IP.
 - Two Application Security Groups: `cluster` (all members, all ports/protocols) and `etcd`
   (control-plane-only, ports 2379-2380) — the Azure equivalent of AWS's self-referencing
-  security group. `node-pool-azure` joins the `cluster` ASG by id; it never creates one.
+  security group. `azure-node-pool` joins the `cluster` ASG by id; it never creates one.
 - One Key Vault (`rbac_authorization_enabled = true`) holding the agent join token as a secret.
   The server token is passed directly to `cloud-init` within this module's own state —
   control-plane nodes never read from Key Vault.
@@ -28,11 +28,11 @@ Azure has no default VNet (unlike AWS), so both are always required.
   (documented delay of up to a few minutes). If `tofu apply` fails writing the
   `agent-token` secret on a brand-new vault, re-run `tofu apply` — the role assignment
   will have propagated by then. This module does not add a blocking sleep for this.
-- **No `dns`/`static` endpoint_mode.** Unlike `control-plane-aws`, this module supports only the
+- **No `dns`/`static` endpoint_mode.** Unlike `aws-control-plane`, this module supports only the
   internal-LB registration endpoint — `dns`/`static` alternatives are out of scope and
-  can be added later behind the same `endpoint_mode` variable name control-plane-aws already uses.
+  can be added later behind the same `endpoint_mode` variable name aws-control-plane already uses.
 - **Single-region placement only.** All control-plane VMs land in `location`, spread across
-  `availability_zones` — cross-region spread is out of scope (matches control-plane-proxmox's
+  `availability_zones` — cross-region spread is out of scope (matches proxmox-control-plane's
   single-Proxmox-node limitation note).
 - **No working example provided.** Azure validation is manual-tier — this repo has no
   live Azure subscription to test `init`/`plan`/`apply` against. `examples/basic/main.tf`

@@ -198,7 +198,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
 }
 
 locals {
-  # Resolved IP per worker VM, static or via guest agent — same pattern control-plane-proxmox uses.
+  # Resolved IP per worker VM, static or via guest agent — same pattern proxmox-control-plane uses.
   worker_ips = {
     for k, vm in proxmox_virtual_environment_vm.worker :
     k => local.static_ips ? split("/", var.worker_ip_addresses[tonumber(k)])[0] : try(

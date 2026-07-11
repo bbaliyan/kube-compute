@@ -18,13 +18,13 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 
 | Module | Purpose |
 |--------|---------|
-| `modules/cloud-init`          | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by control-plane-aws and node-pool-aws) and Ubuntu 26.04 LTS (used by the Proxmox and Azure modules). No provider resources. |
-| `modules/control-plane-aws`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (Amazon Linux 2023). |
-| `modules/node-pool-aws`     | Fixed, AZ-pinned AWS node pool (ASG + launch template) that joins an existing control-plane-aws cluster (Amazon Linux 2023). |
-| `modules/control-plane-proxmox`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (Ubuntu 26.04 LTS). |
-| `modules/node-pool-proxmox` | Fixed Proxmox node pool (discrete VMs) that joins an existing control-plane-proxmox cluster (Ubuntu 26.04 LTS). |
-| `modules/control-plane-azure`         | Azure control-plane node(s) + shared cluster resources: join tokens via Key Vault (RBAC), cluster/etcd Application Security Groups, internal Standard LB registration endpoint (Ubuntu 26.04 LTS). |
-| `modules/node-pool-azure`   | Fixed, AZ-pinned Azure node pool (VM Scale Set, manual upgrade mode) that joins an existing control-plane-azure cluster (Ubuntu 26.04 LTS). |
+| `modules/cloud-init`          | K3s cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships two OS templates: AL2023 (used by aws-control-plane and aws-node-pool) and Ubuntu 26.04 LTS (used by the Proxmox and Azure modules). No provider resources. |
+| `modules/aws-control-plane`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (Amazon Linux 2023). |
+| `modules/aws-node-pool`     | Fixed, AZ-pinned AWS node pool (ASG + launch template) that joins an existing aws-control-plane cluster (Amazon Linux 2023). |
+| `modules/proxmox-control-plane`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (Ubuntu 26.04 LTS). |
+| `modules/proxmox-node-pool` | Fixed Proxmox node pool (discrete VMs) that joins an existing proxmox-control-plane cluster (Ubuntu 26.04 LTS). |
+| `modules/azure-control-plane`         | Azure control-plane node(s) + shared cluster resources: join tokens via Key Vault (RBAC), cluster/etcd Application Security Groups, internal Standard LB registration endpoint (Ubuntu 26.04 LTS). |
+| `modules/azure-node-pool`   | Fixed, AZ-pinned Azure node pool (VM Scale Set, manual upgrade mode) that joins an existing azure-control-plane cluster (Ubuntu 26.04 LTS). |
 
 ## Concepts
 
@@ -56,7 +56,7 @@ required) and gives joining nodes a stable `registration_address`:
 - **Proxmox** — no managed load-balancer primitive, so a [kube-vip](https://kube-vip.io)
   ARP-mode VIP floats across the control-plane nodes instead; `registration_address` is that VIP.
   Verify VIP failover and the live join flow against a real Proxmox cluster before relying on
-  `control-plane-proxmox`/`node-pool-proxmox` in production — they're validated with `tofu test`
+  `proxmox-control-plane`/`proxmox-node-pool` in production — they're validated with `tofu test`
   against a mocked provider only.
 
 On every provider, a control-plane node probes `registration_address` at boot before deciding

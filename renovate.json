@@ -28,8 +28,8 @@
     },
     {
       "customType": "regex",
-      "description": "kube-vip image tag pinned in control-plane-proxmox's HA DaemonSet manifest",
-      "fileMatch": ["^modules/control-plane-proxmox/main\\.tf$"],
+      "description": "kube-vip image tag pinned in proxmox-control-plane's HA DaemonSet manifest",
+      "fileMatch": ["^modules/proxmox-control-plane/main\\.tf$"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+image:\\s*ghcr\\.io/kube-vip/kube-vip:(?<currentValue>[^\\s]+)"
       ]

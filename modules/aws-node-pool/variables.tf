@@ -42,7 +42,7 @@ variable "aws_region" {
 }
 
 variable "control_plane_k8s_version" {
-  description = "The control plane's k8s_version. Pass the same value given to (or output by) the control-plane-aws module for this cluster; this pool's k8s_version is rejected if it is newer."
+  description = "The control plane's k8s_version. Pass the same value given to (or output by) the aws-control-plane module for this cluster; this pool's k8s_version is rejected if it is newer."
   type        = string
 }
 

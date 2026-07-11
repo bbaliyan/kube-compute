@@ -2,7 +2,7 @@
 name: Release split (Proxmox)
 
 # Publishes the Proxmox provider slice of this repo (component-versions,
-# cloud-init, control-plane-proxmox, node-pool-proxmox) to the read-only
+# cloud-init, proxmox-control-plane, proxmox-node-pool) to the read-only
 # mirror repo terraform-proxmox-kube-compute, but only when that path set
 # actually changed since the last version published there.
 
@@ -16,7 +16,7 @@ permissions:
 
 env:
   SPLIT_REPO: bbaliyan/terraform-proxmox-kube-compute
-  PATH_SET: "component-versions cloud-init control-plane-proxmox node-pool-proxmox"
+  PATH_SET: "component-versions cloud-init proxmox-control-plane proxmox-node-pool"
 
 jobs:
   release-split-proxmox:

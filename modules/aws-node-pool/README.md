@@ -1,7 +1,7 @@
-# node-pool-aws
+# aws-node-pool
 
 Provisions a fixed-size pool of K3s worker nodes on AWS (ASG + launch template) that joins an
-existing `control-plane-aws` cluster via its join-token flow. One pool = one subnet = one availability
+existing `aws-control-plane` cluster via its join-token flow. One pool = one subnet = one availability
 zone; AZ-locality workloads (e.g. a SQL client local to its AZ) use one pool per AZ.
 
 ## Scope
@@ -43,14 +43,14 @@ into. `extra_node_labels` adds any further labels (e.g. a workload-identity labe
 ## Access
 
 Operator access to workers is via AWS SSM (the IAM role attaches
-`AmazonSSMManagedInstanceCore`), the same as `control-plane-aws` — no inbound shell port. IMDSv2 is
+`AmazonSSMManagedInstanceCore`), the same as `aws-control-plane` — no inbound shell port. IMDSv2 is
 enforced on the launch template.
 
 ## Inputs
 
 See `variables.tf`. Compute sizing is AWS-native: `instance_type`, `root_volume_size_gb`,
 `root_volume_type`. `os_image_ami_id` defaults to the latest Amazon Linux 2023 for the derived
-architecture, matching `control-plane-aws`.
+architecture, matching `aws-control-plane`.
 
 ## Outputs
 
@@ -59,7 +59,7 @@ architecture, matching `control-plane-aws`.
 
 ## Testing
 
-    cd modules/node-pool-aws
+    cd modules/aws-node-pool
     tofu init -backend=false && tofu test   # offline — mock_provider "aws", no credentials
 
 Real `plan`/`apply` against AWS, and confirming the agent actually joins, is run by the operator

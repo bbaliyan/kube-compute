@@ -155,7 +155,7 @@ resource "azurerm_network_security_rule" "cluster_self" {
 }
 
 # etcd (2379-2380) is control-plane-to-control-plane only, via the separate etcd ASG that
-# node-pool-azure never joins.
+# azure-node-pool never joins.
 resource "azurerm_network_security_rule" "etcd_peer" {
   name                                       = "allow-etcd-peer"
   resource_group_name                        = var.resource_group_name
@@ -366,7 +366,7 @@ resource "azurerm_linux_virtual_machine" "control_plane_additional" {
 # ---- Internal Standard LB fronting the control plane on 6443 (control_plane_count > 1) ----
 # A floating VIP is impossible on Azure (a private IP is subnet-scoped, and Azure VNets are
 # not flat L2 across zones any more than AWS VPCs are across AZs) — an internal Standard LB
-# is the only registration-endpoint primitive here, matching control-plane-aws's NLB.
+# is the only registration-endpoint primitive here, matching aws-control-plane's NLB.
 resource "azurerm_lb" "control_plane" {
   count               = var.control_plane_count > 1 ? 1 : 0
   name                = "lb-${var.cluster_name}-cp"

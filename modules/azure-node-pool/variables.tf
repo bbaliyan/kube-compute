@@ -41,7 +41,7 @@ variable "extra_tags" {
   default     = {}
 }
 
-# ---- Azure-specific inputs (mirrors control-plane-azure/node-azure) ----
+# ---- Azure-specific inputs (mirrors azure-control-plane/node-azure) ----
 variable "resource_group_name" {
   description = "Azure resource group to create every pool resource in (VM Scale Set, role assignment)."
   type        = string
@@ -103,7 +103,7 @@ variable "admin_ssh_public_key" {
 }
 
 variable "zone" {
-  description = "Single Azure availability zone this pool is pinned to (one pool = one zone, matching node-pool-aws's one-pool-per-subnet-per-AZ convention). The module never spreads one pool across zones."
+  description = "Single Azure availability zone this pool is pinned to (one pool = one zone, matching aws-node-pool's one-pool-per-subnet-per-AZ convention). The module never spreads one pool across zones."
   type        = string
 }
 

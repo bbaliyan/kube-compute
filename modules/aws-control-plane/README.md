@@ -1,4 +1,4 @@
-# control-plane-aws
+# aws-control-plane
 
 Provisions the AWS control plane for a K3s cluster — its control-plane node(s) plus the
 cluster-wide resources — consuming `cloud-init` for the K3s cloud-init. A control plane with
@@ -154,7 +154,7 @@ one.
 
 ## Testing
 
-    cd modules/control-plane-aws
+    cd modules/aws-control-plane
     tofu init -backend=false && tofu test   # offline — mock_provider "aws", no credentials
 
 Real `plan`/`apply` against AWS is run by the operator from a consumer repo.

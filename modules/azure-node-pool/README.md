@@ -1,10 +1,10 @@
-# node-pool-azure
+# azure-node-pool
 
-A fixed-size node pool for a `control-plane-azure` cluster, pinned to a single availability zone
-(one pool = one zone, matching `node-pool-aws`'s one-pool-per-subnet-per-AZ convention).
+A fixed-size node pool for a `azure-control-plane` cluster, pinned to a single availability zone
+(one pool = one zone, matching `aws-node-pool`'s one-pool-per-subnet-per-AZ convention).
 Backed by an `azurerm_linux_virtual_machine_scale_set` with `upgrade_mode = "Manual"` (no
 autoscaling, no rolling upgrades — a fixed pool is the safe default for stateful workloads,
-same rationale as `node-pool-aws`).
+same rationale as `aws-node-pool`).
 
 ## Join flow
 
@@ -35,8 +35,8 @@ described above).
   live Azure subscription to test `init`/`plan`/`apply` against. `examples/basic/main.tf`
   is unverified beyond `tofu validate`.
 - **One pool = one zone**, by design — spreading a single pool across zones is out of
-  scope; create one `node-pool-azure` module instance per zone instead, same as
-  `node-pool-aws`.
+  scope; create one `azure-node-pool` module instance per zone instead, same as
+  `aws-node-pool`.
 - **`registration_address` must resolve to a real address.** This module is intended to
   pair with an HA control plane (`control_plane_count > 1`), whose `registration_address` output
   is a real LB frontend IP. A control plane with `control_plane_count = 1` has no registration

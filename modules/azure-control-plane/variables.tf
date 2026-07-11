@@ -232,7 +232,7 @@ variable "control_plane_count" {
 }
 
 variable "availability_zones" {
-  description = "Azure availability zones control-plane VMs are spread across, cycling round-robin by index (VM i lands in zone availability_zones[i % length(availability_zones)]). Required to have at least 3 distinct entries when control_plane_count > 1 — enforced at plan time via a resource precondition, matching control-plane-aws's >= 3 distinct AZ requirement."
+  description = "Azure availability zones control-plane VMs are spread across, cycling round-robin by index (VM i lands in zone availability_zones[i % length(availability_zones)]). Required to have at least 3 distinct entries when control_plane_count > 1 — enforced at plan time via a resource precondition, matching aws-control-plane's >= 3 distinct AZ requirement."
   type        = list(string)
   default     = ["1", "2", "3"]
 }

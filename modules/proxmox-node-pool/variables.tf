@@ -35,7 +35,7 @@ variable "registry_mirror_url" {
   default     = null
 }
 
-# ---- Proxmox-specific inputs (mirrors node-proxmox/control-plane-proxmox) ----
+# ---- Proxmox-specific inputs (mirrors proxmox-control-plane) ----
 variable "proxmox_node" {
   description = "Proxmox node name every worker VM in this pool is placed on."
   type        = string

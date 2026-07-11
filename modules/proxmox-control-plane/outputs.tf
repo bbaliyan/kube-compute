@@ -46,18 +46,18 @@ output "proxmox_node" {
 }
 
 output "k8s_version" {
-  description = "K8s distro version installed on this control plane's control-plane nodes. Wire node-pool-proxmox's control_plane_k8s_version to this output so the version-skew guard is enforced automatically rather than by convention."
+  description = "K8s distro version installed on this control plane's control-plane nodes. Wire proxmox-node-pool's control_plane_k8s_version to this output so the version-skew guard is enforced automatically rather than by convention."
   value       = local.k8s_version
 }
 
-# ---- Join flow: consumed by node-pool-proxmox ----
+# ---- Join flow: consumed by proxmox-node-pool ----
 output "registration_address" {
   description = "Address workers/joining servers use to reach the cluster API: the genesis node's IP for control_plane_count = 1, the kube-vip VIP otherwise."
   value       = local.registration_address != null ? local.registration_address : local.cp_ips["0"]
 }
 
 output "cluster_agent_token" {
-  description = "The agent join token. Delivered to node-pool-proxmox directly (no managed secret store on Proxmox); embed it in cloud-init only, never log it."
+  description = "The agent join token. Delivered to proxmox-node-pool directly (no managed secret store on Proxmox); embed it in cloud-init only, never log it."
   value       = random_password.agent_token.result
   sensitive   = true
 }

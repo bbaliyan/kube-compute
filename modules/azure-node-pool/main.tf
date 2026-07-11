@@ -7,7 +7,7 @@ locals {
   cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
 
   # Azure-native delivery: raw IMDS + Key Vault REST calls, no az CLI dependency (see
-  # control-plane-azure's design note 6 — Ubuntu 26.04 is not guaranteed to ship the Azure CLI, but
+  # azure-control-plane's design note 6 — Ubuntu 26.04 is not guaranteed to ship the Azure CLI, but
   # curl + python3 are always present). cloud-init only ever sees an opaque command it
   # executes at boot, never the Key Vault API itself.
   agent_token_fetch_command = "TOKEN=$(curl -s -H Metadata:true \"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access_token\"])') && curl -s -H \"Authorization: Bearer $TOKEN\" \"https://${var.key_vault_name}.vault.azure.net/secrets/${var.agent_token_secret_name}?api-version=7.4\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"value\"])'"
@@ -40,7 +40,7 @@ locals {
 # alone (below, on the VMSS network_interface) is not equivalent to attaching a security
 # group: on Azure, an ASG is purely a label that NSG rules reference, and a NIC with no
 # NSG attached falls back to the platform default rules (AllowVnetInBound), which permit
-# all intra-VNet traffic including SSH. Mirrors control-plane-azure's control_plane NSG shape.
+# all intra-VNet traffic including SSH. Mirrors azure-control-plane's control_plane NSG shape.
 resource "azurerm_network_security_group" "worker" {
   name                = "nsg-${var.cluster_name}-worker"
   resource_group_name = var.resource_group_name
@@ -49,7 +49,7 @@ resource "azurerm_network_security_group" "worker" {
 }
 
 # SSH is always denied, at the highest priority (lowest number) — same rule shape as
-# control-plane-azure's deny_ssh. Out-of-band access is via `az vm run-command invoke`.
+# azure-control-plane's deny_ssh. Out-of-band access is via `az vm run-command invoke`.
 resource "azurerm_network_security_rule" "deny_ssh" {
   name                        = "deny-ssh"
   resource_group_name         = var.resource_group_name
@@ -67,7 +67,7 @@ resource "azurerm_network_security_rule" "deny_ssh" {
 # East-west, cluster-wide: any protocol/port among members of the control plane's cluster ASG —
 # this pool's worker NICs are already members of that ASG (via application_security_group_ids
 # below), so this rule lets them receive traffic from any other cluster member (control-plane
-# or worker). Priority 110, same as control-plane-azure's cluster_self rule.
+# or worker). Priority 110, same as azure-control-plane's cluster_self rule.
 resource "azurerm_network_security_rule" "cluster_self" {
   name                                       = "allow-cluster-self"
   resource_group_name                        = var.resource_group_name
