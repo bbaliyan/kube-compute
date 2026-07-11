@@ -57,21 +57,25 @@ find "$target_dir" -mindepth 1 -maxdepth 1 \
   -exec rm -rf {} +
 
 # ---- Copy control-plane-<provider> to the split repo root ----
-# rsync excludes local tofu-init artifacts (.terraform/) that must never leave
-# a developer checkout; .terraform.lock.hcl IS copied (committed per CLAUDE.md).
+# cp -a (not rsync, to avoid an extra tool dependency in the CI image) copies
+# everything including local tofu-init artifacts (.terraform/); those are
+# stripped in a single cleanup pass below. .terraform.lock.hcl IS kept
+# (committed per CLAUDE.md).
 mkdir -p "$target_dir"
-rsync -a --exclude='.terraform/' "$source_dir/modules/$control_plane_mod/" "$target_dir/"
+cp -a "$source_dir/modules/$control_plane_mod/." "$target_dir/"
 
 # ---- Copy the rest under modules/<name>/ ----
 # node-pool drops its provider prefix here (the split repo's own name already
 # carries the provider); cloud-init/component-versions are already
 # provider-neutral, so their destination name matches their source name.
-mkdir -p "$target_dir/modules"
-rsync -a --exclude='.terraform/' "$source_dir/modules/$node_pool_mod/" "$target_dir/modules/node-pool/"
+mkdir -p "$target_dir/modules/node-pool"
+cp -a "$source_dir/modules/$node_pool_mod/." "$target_dir/modules/node-pool/"
 for mod in cloud-init component-versions; do
   mkdir -p "$target_dir/modules/$mod"
-  rsync -a --exclude='.terraform/' "$source_dir/modules/$mod/" "$target_dir/modules/$mod/"
+  cp -a "$source_dir/modules/$mod/." "$target_dir/modules/$mod/"
 done
+
+find "$target_dir" -type d -name ".terraform" -exec rm -rf {} +
 
 # ---- Rewrite the root module's known relative references to cloud-init /
 # component-versions ----
