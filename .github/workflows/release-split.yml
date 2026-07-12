@@ -34,13 +34,21 @@ jobs:
       - name: Determine baseline tag from the split repo
         id: baseline
         env:
-          GH_TOKEN: ${{ secrets.SPLIT_REPO_PAT }}
+          SPLIT_REPO_PAT: ${{ secrets.SPLIT_REPO_PAT }}
         run: |
           set -euo pipefail
           new_tag="${GITHUB_REF_NAME}"
           echo "new_tag=${new_tag}" >> "$GITHUB_OUTPUT"
 
-          baseline="$(gh api "repos/${SPLIT_REPO}/tags" --jq '.[].name' 2>/dev/null \
+          if ! tags_json="$(curl -sf \
+            -H "Authorization: Bearer ${SPLIT_REPO_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${SPLIT_REPO}/tags")"; then
+            echo "error: failed to query tags for ${SPLIT_REPO}" >&2
+            exit 1
+          fi
+
+          baseline="$(echo "$tags_json" | jq -r '.[].name' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -V | tail -1 || true)"
 
@@ -138,11 +146,16 @@ jobs:
       - name: Create GitHub Release on the split repo
         if: steps.diffgate.outputs.publish == 'true'
         env:
-          GH_TOKEN: ${{ secrets.SPLIT_REPO_PAT }}
+          SPLIT_REPO_PAT: ${{ secrets.SPLIT_REPO_PAT }}
           NEW_TAG: ${{ steps.baseline.outputs.new_tag }}
         run: |
           set -euo pipefail
-          gh release create "${NEW_TAG}" \
-            --repo "${SPLIT_REPO}" \
-            --title "${NEW_TAG}" \
-            --notes-file "${{ steps.notes.outputs.notes_file }}"
+          release_body="$(jq -n \
+            --arg tag "${NEW_TAG}" \
+            --arg body "$(cat "${{ steps.notes.outputs.notes_file }}")" \
+            '{tag_name: $tag, name: $tag, body: $body}')"
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${SPLIT_REPO_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${SPLIT_REPO}/releases" \
+            -d "${release_body}" >/dev/null
