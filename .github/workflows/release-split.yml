@@ -29,6 +29,9 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Configure git safe.directory
+        run: git config --global --add safe.directory '*'
+
       - name: Checkout kube-compute (full history + tags)
         uses: actions/checkout@v4
         with:
