@@ -133,7 +133,7 @@ IMDSv2 is enforced. Operator access to the node is via AWS SSM (the IAM role att
 
 See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing
 is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `root_volume_type`.
-`os_image_ami_id` defaults to the latest Amazon Linux 2023 for the derived architecture.
+`os_image_ami_id` defaults to the latest AlmaLinux 9 for the derived architecture.
 
 ## Outputs
 

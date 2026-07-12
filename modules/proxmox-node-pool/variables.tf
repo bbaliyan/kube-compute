@@ -2,7 +2,7 @@
 
 # ---- Common inputs (pass through to cloud-init) ----
 variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled Ubuntu 26.04 LTS template."
+  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 9 template."
   type        = string
   default     = null
 }

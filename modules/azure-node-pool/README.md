@@ -12,7 +12,7 @@ Every worker's system-assigned managed identity is granted `Key Vault Secrets Us
 scoped to exactly the control plane's `agent-token` secret (never the whole vault). At boot, the
 worker fetches an OAuth token from Azure's Instance Metadata Service and calls the Key
 Vault Secrets REST API directly via `curl` + `python3` — no Azure CLI dependency, since
-the Ubuntu 26.04 image is not guaranteed to ship it.
+the AlmaLinux 9 image is not guaranteed to ship it.
 
 ## Firewall
 

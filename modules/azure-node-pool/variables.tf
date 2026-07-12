@@ -2,7 +2,7 @@
 
 # ---- Common inputs (pass through to cloud-init) ----
 variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled Ubuntu 26.04 LTS template."
+  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 9 template."
   type        = string
   default     = null
 }
@@ -86,7 +86,7 @@ variable "os_disk_type" {
 }
 
 variable "os_image_urn" {
-  description = "Azure Marketplace image URN. Null = Ubuntu 26.04 LTS gen2 (x86_64)."
+  description = "Azure Marketplace image URN. Null = almalinux:almalinux-x86_64:9-gen2:latest. Requires one-time-per-subscription Marketplace terms acceptance (`az vm image terms accept`) before first deploy — not automated by this module."
   type        = string
   default     = null
 }

@@ -16,7 +16,7 @@ environment needs. `trusted_ca_pem`, `registry_mirror_url`, the `gitops_*` input
   must exist before the node goes Ready, so it uses K3s's own bootstrap-manifest mechanism,
   not the post-Ready `/etc/kube-compute/manifests/` + kubectl-apply path used for Argo/platform).
   
-  Implemented identically in both the AL2023 and Ubuntu 26.04 cloud-init templates.
+  Implemented in the AlmaLinux 9 cloud-init template.
 
   The rendered Cilium values set no `operator.replicas`, so Cilium's own chart default
   (`2`, with pod anti-affinity) applies. On a genuinely single-node cluster (only reachable

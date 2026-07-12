@@ -4,7 +4,7 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
 
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
@@ -27,11 +27,11 @@ locals {
   kv_name = "${substr("kv${replace(var.cluster_name, "-", "")}", 0, 18)}${random_string.kv_suffix.result}"
 
   # OS image: split a user-provided URN (Publisher:Offer:SKU:Version) or default to
-  # Ubuntu 26.04 LTS gen2, same convention as node-azure.
+  # AlmaLinux 9 gen2, same convention as node-azure.
   image_parts     = var.os_image_urn != null ? split(":", var.os_image_urn) : []
-  image_publisher = var.os_image_urn != null ? local.image_parts[0] : "Canonical"
-  image_offer     = var.os_image_urn != null ? local.image_parts[1] : "ubuntu-26_04-lts"
-  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "server-gen2"
+  image_publisher = var.os_image_urn != null ? local.image_parts[0] : "almalinux"
+  image_offer     = var.os_image_urn != null ? local.image_parts[1] : "almalinux-x86_64"
+  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "9-gen2"
   image_version   = var.os_image_urn != null ? local.image_parts[3] : "latest"
 
   # Null for control_plane_count = 1 (no registration endpoint); the internal

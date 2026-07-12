@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 variables {
-  cloud_init_template = "templates/cloud-init-al2023.yaml.tpl"
+  cloud_init_template = "templates/cloud-init-almalinux-9.yaml.tpl"
 }
 
 run "flannel_is_the_default_no_cni_flags_or_manifest" {

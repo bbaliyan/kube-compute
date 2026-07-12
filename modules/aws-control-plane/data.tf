@@ -63,14 +63,21 @@ data "aws_ec2_instance_type" "selected" {
   instance_type = var.instance_type
 }
 
-# Latest Amazon Linux 2023 for the derived arch — only when no explicit AMI is given.
-data "aws_ami" "al2023" {
+# Latest AlmaLinux 9 for the derived arch — only when no explicit AMI is given.
+# Owner 764336703387 is the AlmaLinux OS Foundation's own AWS account (verified against
+# the AlmaLinux bug tracker and the AlmaLinux/cloud-images repo) — architecture isn't
+# embedded in the name (unlike AL2023's pattern), so it's filtered separately below.
+data "aws_ami" "almalinux9" {
   count       = var.os_image_ami_id == null ? 1 : 0
   most_recent = true
-  owners      = ["amazon"]
+  owners      = ["764336703387"]
   filter {
     name   = "name"
-    values = ["al2023-ami-2023.*-${local.ami_arch}"]
+    values = ["AlmaLinux OS 9*"]
+  }
+  filter {
+    name   = "architecture"
+    values = [local.ami_arch]
   }
   filter {
     name   = "virtualization-type"

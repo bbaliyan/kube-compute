@@ -5,7 +5,7 @@
 module "bootstrap" {
   source = "../../.."
 
-  cloud_init_template       = "${path.module}/../../../templates/cloud-init-al2023.yaml.tpl"
+  cloud_init_template       = "${path.module}/../../../templates/cloud-init-almalinux-9.yaml.tpl"
   cluster_name              = "render-check-worker"
   k8s_version               = "v1.36.1+k3s1"
   node_role                 = "worker"

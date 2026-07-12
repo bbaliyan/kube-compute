@@ -4,7 +4,7 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-ubuntu-2604.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
 
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)

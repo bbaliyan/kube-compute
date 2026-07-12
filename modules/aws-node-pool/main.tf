@@ -4,10 +4,10 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-al2023.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
 
   ami_arch         = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
-  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.al2023[*].id)
+  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.almalinux9[*].id)
 
   availability_zone = data.aws_subnet.selected.availability_zone
 

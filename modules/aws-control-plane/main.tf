@@ -4,7 +4,7 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-al2023.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
 
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
@@ -12,7 +12,7 @@ locals {
   # Arch from AWS's own metadata — covers all present and future instance types.
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
 
-  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.al2023[*].id)
+  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.almalinux9[*].id)
 
   # VPC ID resolved from vpc_name, or null when vpc_name is not provided.
   named_vpc_id = try(data.aws_vpc.named[0].id, null)
@@ -223,8 +223,7 @@ module "bootstrap" {
 # bootstrap-data reconciliation and one loses permanently. cloud-init's server-join stage
 # now staggers each sibling by its own node_name-derived index and self-heals via a wipe
 # + retry loop — see the "Additional control-plane nodes join..." comment in
-# modules/cloud-init/templates/cloud-init-al2023.yaml.tpl (and the Ubuntu template) for
-# the mechanics.
+# modules/cloud-init/templates/cloud-init-almalinux-9.yaml.tpl for the mechanics.
 module "bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
@@ -553,7 +552,7 @@ resource "aws_instance" "control_plane" {
   }
 
   lifecycle {
-    # Don't replace on AL2023 AMI patch drift; remove to deliberately upgrade.
+    # Don't replace on AlmaLinux 9 AMI patch drift; remove to deliberately upgrade.
     ignore_changes = [ami]
 
     precondition {

@@ -1,5 +1,5 @@
 #cloud-config
-# K3s node bootstrap — Amazon Linux 2023.
+# K3s node bootstrap — AlmaLinux 9.
 # Status is written to a local file and read out-of-band by the control-plane
 # verb-scripts (no inbound port). Stage sequence is fixed; optional stages emit
 # their status line even when their body is skipped.
@@ -19,13 +19,26 @@ write_files:
   # inotify limits — written here so systemd-sysctl.service applies them on
   # every boot (including stop-start cycles) before K3s and containerd start.
   # K3s + containerd + pods exhaust the kernel default of 128 inotify instances
-  # within ~1 hour, leaving the SSM session-worker unable to open a pty.
-  - path: /etc/sysctl.d/99-k3s.conf
+  # within ~1 hour, leaving the control-plane session-worker unable to open a pty.
+  # Separate filename from the stage-0 bridge/forwarding sysctls below (both live
+  # under /etc/sysctl.d/, `sysctl --system` in stage-0 applies both).
+  - path: /etc/sysctl.d/99-k3s-inotify.conf
     permissions: "0644"
     owner: root:root
     content: |
       fs.inotify.max_user_instances=1024
       fs.inotify.max_user_watches=524288
+
+  # Bring hot-added vCPUs online. Ubuntu/RHEL-family guests on KVM-based hosts
+  # (Proxmox) need this rule for CPU hotplug to be usable; inert (never fires) on
+  # AWS/Azure, where instances don't get live vCPU hot-add. Hot-added memory needs
+  # no rule: the kernel onlines it automatically (memory_hotplug.online_policy
+  # defaults to auto-online).
+  - path: /etc/udev/rules.d/80-hotplug-cpu-online.rules
+    permissions: "0644"
+    owner: root:root
+    content: |
+      SUBSYSTEM=="cpu", ACTION=="add", TEST=="online", ATTR{online}!="1", ATTR{online}="1"
 
 %{ if trusted_ca_pem != null ~}
   - path: /etc/pki/ca-trust/source/anchors/trusted-ca.crt
@@ -199,7 +212,21 @@ write_files:
       # sysinit.target — before cloud-init on first boot — so the sysctl.d file written
       # by write_files hasn't been read yet. Applying it here ensures the limits are in
       # place before K3s and containerd start. The sysctl.d file covers stop-start boots.
-      sysctl -p /etc/sysctl.d/99-k3s.conf
+      sysctl -p /etc/sysctl.d/99-k3s-inotify.conf
+
+      status "stage-0:os-prep"
+      dnf makecache
+      dnf install -y ca-certificates curl
+      # br_netfilter and overlay are RHEL9-family prerequisites for any CNI (every
+      # RKE2/kubeadm RHEL9 install guide calls for this explicitly) — carried over
+      # from the previous Ubuntu template rather than the previous AL2023 template,
+      # which omitted this step for reasons that were never verified. Cheap and
+      # idempotent even if the modules turn out to already be loaded/built-in.
+      printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/k3s.conf
+      printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\nnet.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-k3s-bridge.conf
+      modprobe br_netfilter
+      modprobe overlay
+      sysctl --system
 
       status "stage-1:os-trust"
       %{ if trusted_ca_pem != null ~}
@@ -400,7 +427,8 @@ write_files:
       [ -n "$CLUSTER_FQDN" ] && SERVER="$CLUSTER_FQDN"
       [ -n "$REGISTRATION_ADDRESS" ] && SERVER="$REGISTRATION_ADDRESS"
       sed "s|https://127.0.0.1:6443|https://$SERVER:6443|g" /etc/rancher/k3s/k3s.yaml >"$KUBECONFIG_OUT"
-      chmod 0600 "$KUBECONFIG_OUT"
+      chmod 0640 "$KUBECONFIG_OUT"
+      chown root:almalinux "$KUBECONFIG_OUT"
       %{ endif ~}
 
       status "complete"

@@ -49,7 +49,7 @@ enforced on the launch template.
 ## Inputs
 
 See `variables.tf`. Compute sizing is AWS-native: `instance_type`, `root_volume_size_gb`,
-`root_volume_type`. `os_image_ami_id` defaults to the latest Amazon Linux 2023 for the derived
+`root_volume_type`. `os_image_ami_id` defaults to the latest AlmaLinux 9 for the derived
 architecture, matching `aws-control-plane`.
 
 ## Outputs

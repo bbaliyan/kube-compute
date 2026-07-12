@@ -4,7 +4,7 @@
 module "bootstrap" {
   source = "../../.."
 
-  cloud_init_template       = "${path.module}/../../../templates/cloud-init-al2023.yaml.tpl"
+  cloud_init_template       = "${path.module}/../../../templates/cloud-init-almalinux-9.yaml.tpl"
   cluster_name              = "render-check"
   k8s_version               = "v1.36.1+k3s1"
   cluster_fqdn              = "api.render-check.example.test"

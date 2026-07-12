@@ -2,7 +2,7 @@
 
 # ---- Common inputs (pass through to cloud-init) ----
 variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AL2023 template."
+  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 9 template."
   type        = string
   default     = null
 }
@@ -83,7 +83,7 @@ variable "instance_type" {
 }
 
 variable "os_image_ami_id" {
-  description = "AMI ID for the workers. MUST be a RHEL-family image (AL2023, Rocky, AlmaLinux) — cloud-init uses dnf and update-ca-trust. Null = latest Amazon Linux 2023 for the derived architecture via data lookup."
+  description = "AMI ID for the workers. Tested with AlmaLinux 9 (RHEL-family — cloud-init uses dnf and update-ca-trust). Other RHEL-family images (Rocky, AL2023) may work but are untested — no compatibility guarantee. Null = latest AlmaLinux 9 for the derived architecture via data lookup."
   type        = string
   default     = null
 }
