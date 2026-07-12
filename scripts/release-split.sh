@@ -50,10 +50,14 @@ if [[ ! -d "$target_dir/.git" ]]; then
 fi
 
 # ---- Wipe target, preserving .git/ and the exclude-list ----
-# Exclude-list: README.md (static, hand-written per split repo) and .github/
-# (repo settings only, no CI of its own). Never overwritten by a release.
+# Exclude-list: README.md (static, hand-written per split repo), .github/
+# (repo settings only, no CI of its own), and .gitignore (ignores .terraform/
+# etc. - without this, a later `tofu init` run in this checkout, e.g. this
+# same pipeline's own "Validate the built tree" step, would recreate
+# .terraform/ after this cleanup and it would get swept into the release
+# commit by `git add -A`). Never overwritten by a release.
 find "$target_dir" -mindepth 1 -maxdepth 1 \
-  ! -name ".git" ! -name "README.md" ! -name ".github" \
+  ! -name ".git" ! -name "README.md" ! -name ".github" ! -name ".gitignore" \
   -exec rm -rf {} +
 
 # ---- Copy control-plane-<provider> to the split repo root ----
