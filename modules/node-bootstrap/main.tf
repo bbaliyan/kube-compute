@@ -75,6 +75,10 @@ resource "null_resource" "ansible_bootstrap" {
   }
 
   provisioner "local-exec" {
+    # local-exec defaults to /bin/sh (dash on Debian, which this command's
+    # host image — kube-devenv — is based on), and dash doesn't support
+    # `set -o pipefail`. Force bash explicitly rather than drop pipefail.
+    interpreter = ["/bin/bash", "-c"]
     environment = local.secret_env
 
     command = <<-EOT
