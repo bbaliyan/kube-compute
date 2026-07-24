@@ -1,0 +1,7 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+cluster_fqdn: ""
+registration_address: ""
+extra_tls_sans: []
+control_plane_taint: false
+cni: "default"

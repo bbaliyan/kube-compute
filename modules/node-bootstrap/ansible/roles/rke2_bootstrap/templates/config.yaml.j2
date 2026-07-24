@@ -1,0 +1,36 @@
+{# SPDX-License-Identifier: Apache-2.0 #}
+{% if node_role == 'worker' %}
+server: https://{{ registration_address }}:9345
+token: {{ resolved_agent_token }}
+node-ip: {{ ansible_default_ipv4.address }}
+{% else %}
+{% if server_line %}
+{{ server_line }}
+{% endif %}
+token: {{ resolved_cluster_token }}
+agent-token: {{ resolved_cluster_agent_token }}
+node-ip: {{ ansible_default_ipv4.address }}
+tls-san:
+  - {{ ansible_default_ipv4.address }}
+{% if cluster_fqdn %}
+  - {{ cluster_fqdn }}
+{% endif %}
+{% for san in extra_tls_sans %}
+  - {{ san }}
+{% endfor %}
+write-kubeconfig-mode: "0644"
+secrets-encryption: true
+disable-cloud-controller: true
+{# Disables whatever RKE2's default ingress controller is for the installed
+   version (ingress-nginx or Traefik) — this project doesn't bundle one at
+   bootstrap, mirroring cloud-init's --disable traefik precedent. #}
+ingress-controller: none
+{% if control_plane_taint %}
+node-taint:
+  - "CriticalAddonsOnly=true:NoExecute"
+{% endif %}
+{% if cni == 'cilium' %}
+cni: cilium
+disable-kube-proxy: true
+{% endif %}
+{% endif %}

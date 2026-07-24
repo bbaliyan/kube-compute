@@ -1,0 +1,163 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# Core RKE2 install/join mechanics only — see this module's README.md
+# "Scope of this build" for what's deliberately deferred (OS prep/CA
+# trust/registry mirror/Cilium manifest/etcd snapshots/GitOps bootstrap).
+
+- name: Read secrets from the control node's environment
+  ansible.builtin.set_fact:
+    resolved_cluster_token: "{{ lookup('env', 'CLUSTER_TOKEN') }}"
+    resolved_cluster_agent_token: "{{ lookup('env', 'CLUSTER_AGENT_TOKEN') }}"
+    resolved_agent_token_fetch_command: "{{ lookup('env', 'AGENT_TOKEN_FETCH_COMMAND') }}"
+  no_log: true
+
+- name: Ensure /etc/rancher/rke2 exists
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0755"
+
+# ---- server-init: genesis, with rejoin-detection ----
+# RKE2 has no --cluster-init flag: the first server is simply the one whose
+# config.yaml has no "server:" key. A replaced genesis node must instead
+# rejoin an already-healthy cluster (registration_address reachable) rather
+# than blindly re-initializing etcd, which would split-brain a live quorum.
+- name: server-init | probe registration endpoint for rejoin detection
+  ansible.builtin.uri:
+    url: "https://{{ registration_address }}:6443/readyz"
+    validate_certs: false
+    status_code: [200, 401, 403, -1]
+  register: rejoin_probe
+  failed_when: false
+  when:
+    - node_role == "server-init"
+    - registration_address | length > 0
+
+- name: server-init | set server_line when a healthy cluster was detected
+  ansible.builtin.set_fact:
+    server_line: >-
+      {{ ("server: https://" + registration_address + ":9345")
+         if (node_role == "server-init" and registration_address | length > 0
+             and rejoin_probe is defined and rejoin_probe.status is defined
+             and rejoin_probe.status in [200, 401, 403])
+         else "" }}
+  when: node_role == "server-init"
+
+- name: server-join | server_line is unconditional (always joining an existing cluster)
+  ansible.builtin.set_fact:
+    server_line: "server: https://{{ registration_address }}:9345"
+  when: node_role == "server-join"
+
+- name: server-init/server-join | render config.yaml
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0600"
+  when: node_role in ["server-init", "server-join"]
+
+- name: server-init/server-join | install RKE2
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -sfL https://get.rke2.io | sh -
+  args:
+    creates: /usr/local/bin/rke2-uninstall.sh
+  environment:
+    INSTALL_RKE2_VERSION: "{{ k8s_version }}"
+  when: node_role in ["server-init", "server-join"]
+
+- name: server-init | enable and start rke2-server
+  ansible.builtin.systemd:
+    name: rke2-server
+    enabled: true
+    state: started
+  when: node_role == "server-init"
+
+# Additional control-plane nodes join RKE2's embedded-etcd cluster one at a
+# time: an upstream etcd limitation (only one non-voting "learner" member
+# allowed at a time — https://etcd.io/docs/v3.4/learning/design-learner/),
+# not a K3s-only quirk (rancher/rke2#3562, #4035, #349). This staggers by the
+# node's own index (parsed from node_name's numeric suffix) and self-heals by
+# wiping local server state and retrying if a collision still slips through —
+# reproducing cloud-init's proven mechanics one-for-one.
+- name: server-join | staggered, self-healing join
+  ansible.builtin.shell: |
+    set -euo pipefail
+    NODE_INDEX="$(echo '{{ node_name }}' | grep -oE '[0-9]+$' || echo 0)"
+    sleep $((NODE_INDEX * 60))
+
+    systemctl enable rke2-server.service
+    JOIN_ATTEMPT=0
+    until systemctl start rke2-server.service && timeout 90 bash -c 'until kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
+      JOIN_ATTEMPT=$((JOIN_ATTEMPT + 1))
+      [ "$JOIN_ATTEMPT" -ge 3 ] && { echo "join-race exhausted after 3 attempts" >&2; exit 1; }
+      systemctl stop rke2-server 2>/dev/null || true
+      rm -rf /var/lib/rancher/rke2/server/tls /var/lib/rancher/rke2/server/cred /var/lib/rancher/rke2/server/db
+      sleep 15
+    done
+  when: node_role == "server-join"
+
+# ---- worker: fetch its own agent token, install as agent ----
+- name: worker | fetch agent token from the provider's secret store
+  ansible.builtin.command: "{{ resolved_agent_token_fetch_command }}"
+  register: agent_token_result
+  no_log: true
+  when: node_role == "worker"
+
+- name: worker | set resolved_agent_token
+  ansible.builtin.set_fact:
+    resolved_agent_token: "{{ agent_token_result.stdout }}"
+  no_log: true
+  when: node_role == "worker"
+
+- name: worker | fail fast on an empty fetched token
+  ansible.builtin.fail:
+    msg: "agent_token_fetch_command produced an empty token"
+  when: node_role == "worker" and (resolved_agent_token | default('')) | length == 0
+
+- name: worker | render config.yaml
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0600"
+  when: node_role == "worker"
+
+- name: worker | install RKE2 agent
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -sfL https://get.rke2.io | sh -
+  args:
+    creates: /usr/local/bin/rke2-uninstall.sh
+  environment:
+    INSTALL_RKE2_VERSION: "{{ k8s_version }}"
+    INSTALL_RKE2_TYPE: "agent"
+  when: node_role == "worker"
+
+- name: worker | enable and start rke2-agent
+  ansible.builtin.systemd:
+    name: rke2-agent
+    enabled: true
+    state: started
+  when: node_role == "worker"
+
+# ---- wait for readiness, so Ansible's own synchronous output (this project's
+#      primary live-visibility mechanism per Ticket 02) reflects real success/
+#      failure rather than "service started" alone ----
+- name: server-init/server-join | wait for this node to report Ready
+  ansible.builtin.shell: |
+    set -euo pipefail
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -q Ready
+  register: ready_check
+  until: ready_check.rc == 0
+  retries: 60
+  delay: 5
+  changed_when: false
+  when: node_role in ["server-init", "server-join"]
+
+- name: worker | wait for rke2-agent to be active
+  ansible.builtin.systemd:
+    name: rke2-agent
+  register: agent_status
+  until: agent_status.status.ActiveState == "active"
+  retries: 60
+  delay: 5
+  when: node_role == "worker"

@@ -1,0 +1,8 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+- name: RKE2 node bootstrap (AlmaLinux 9)
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - rke2_bootstrap
