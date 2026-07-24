@@ -1,0 +1,44 @@
+{# SPDX-License-Identifier: Apache-2.0 #}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: {{ gitops_platform_repo_url }}
+    targetRevision: {{ gitops_platform_revision }}
+    path: bootstrap
+    helm:
+      parameters:
+        - name: platformRepoURL
+          value: "{{ gitops_platform_repo_url }}"
+        - name: platformRevision
+          value: "{{ gitops_platform_revision }}"
+        - name: certMode
+          value: "{{ cert_mode }}"
+        - name: clusterName
+          value: "{{ cluster_name }}"
+        - name: clusterFqdnSuffix
+          value: "{{ cluster_fqdn }}"
+        - name: trustedCaPemB64
+          value: "{{ resolved_trusted_ca_pem | b64encode }}"
+        - name: workloadsRepoURL
+          value: "{{ gitops_workloads_repo_url }}"
+        - name: workloadsRevision
+          value: "{{ gitops_workloads_revision }}"
+        - name: workloadsPath
+          value: "{{ gitops_workloads_path }}"
+{% for name, val in platform_extra_helm_parameters.items() %}
+        - name: {{ name }}
+          value: "{{ val }}"
+{% endfor %}
+      valuesObject:
+{{ (platform_helm_values_object | combine({'extraTags': extra_tags})) | to_nice_yaml(indent=2) | indent(8, first=true) }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: ["CreateNamespace=true"]

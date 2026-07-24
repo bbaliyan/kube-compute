@@ -214,7 +214,7 @@
 
     systemctl enable rke2-server.service
     JOIN_ATTEMPT=0
-    until systemctl start rke2-server.service && timeout 90 bash -c 'until kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
+    until systemctl start rke2-server.service && timeout 90 bash -c 'until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
       JOIN_ATTEMPT=$((JOIN_ATTEMPT + 1))
       [ "$JOIN_ATTEMPT" -ge 3 ] && { echo "join-race exhausted after 3 attempts" >&2; exit 1; }
       systemctl stop rke2-server 2>/dev/null || true
@@ -272,7 +272,7 @@
 - name: server-init/server-join | wait for this node to report Ready
   ansible.builtin.shell: |
     set -euo pipefail
-    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -q Ready
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -q Ready
   register: ready_check
   until: ready_check.rc == 0
   retries: 60
@@ -288,3 +288,49 @@
   retries: 60
   delay: 5
   when: node_role == "worker"
+
+# ---- GitOps/Argo CD bootstrap: server-init only, after the node is Ready ----
+- name: gitops | ensure the manifests directory exists
+  ansible.builtin.file:
+    path: /etc/kube-compute/manifests
+    state: directory
+    mode: "0755"
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+
+- name: gitops | render the Argo CD HelmChart manifest
+  ansible.builtin.template:
+    src: argocd-helmchart.yaml.j2
+    dest: /etc/kube-compute/manifests/00-argocd-helmchart.yaml
+    mode: "0644"
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+
+- name: gitops | render the platform Application manifest
+  ansible.builtin.template:
+    src: platform-app.yaml.j2
+    dest: /etc/kube-compute/manifests/10-platform-app.yaml
+    mode: "0644"
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+  no_log: true
+
+- name: gitops | apply the Argo CD HelmChart manifest
+  ansible.builtin.command: >-
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    apply -f /etc/kube-compute/manifests/00-argocd-helmchart.yaml
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+
+- name: gitops | wait for argocd-server to be ready
+  ansible.builtin.command: >-
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    -n argocd rollout status deployment/argocd-server --timeout=30s
+  register: argocd_rollout
+  until: argocd_rollout.rc == 0
+  retries: 40
+  delay: 15
+  changed_when: false
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+
+- name: gitops | apply the platform Application manifest
+  ansible.builtin.command: >-
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    apply -f /etc/kube-compute/manifests/10-platform-app.yaml
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0

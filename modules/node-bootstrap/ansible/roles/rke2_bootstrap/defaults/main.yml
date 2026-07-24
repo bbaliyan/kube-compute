@@ -16,3 +16,13 @@ etcd_snapshot_object_store_endpoint: ""
 etcd_snapshot_object_store_folder: ""
 node_labels: {}
 extra_server_manifests: {}
+gitops_platform_repo_url: ""
+argocd_version: ""
+gitops_platform_revision: "main"
+gitops_workloads_repo_url: ""
+gitops_workloads_revision: "main"
+gitops_workloads_path: "apps"
+cert_mode: "selfsigned"
+platform_extra_helm_parameters: {}
+platform_helm_values_object: {}
+extra_tags: {}

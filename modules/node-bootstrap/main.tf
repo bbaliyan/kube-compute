@@ -26,6 +26,16 @@ locals {
     etcd_snapshot_object_store_folder   = var.etcd_snapshot_object_store_folder != null ? var.etcd_snapshot_object_store_folder : ""
     node_labels                         = var.node_labels
     extra_server_manifests              = var.extra_server_manifests
+    gitops_platform_repo_url            = var.gitops_platform_repo_url != null ? var.gitops_platform_repo_url : ""
+    argocd_version                      = var.argocd_version != null ? var.argocd_version : ""
+    gitops_platform_revision            = var.gitops_platform_revision
+    gitops_workloads_repo_url           = var.gitops_workloads_repo_url != null ? var.gitops_workloads_repo_url : ""
+    gitops_workloads_revision           = var.gitops_workloads_revision
+    gitops_workloads_path               = var.gitops_workloads_path
+    cert_mode                           = var.cert_mode
+    platform_extra_helm_parameters      = var.platform_extra_helm_parameters
+    platform_helm_values_object         = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
+    extra_tags                          = var.extra_tags
   })
 
   extra_vars_json = jsonencode(local.extra_vars)

@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# NOTE — scoped build (see README.md "Scope of this build"): this module
-# still does not wire GitOps/Argo CD bootstrap (gitops_*, cert_mode,
-# platform_*, extra_tags) — that's a distinct post-install step, ported
-# separately. Nothing calls this module yet; the provider-module cutover
-# (repointing from `cloud-init`, deleting it) is also still pending.
+# NOTE — scoped build (see README.md "Scope of this build"): nothing calls
+# this module yet; the provider-module cutover (repointing from
+# `cloud-init`, deleting it) is still pending.
 
 variable "ansible_playbook_path" {
   description = "Absolute path to the Ansible playbook to run. Use the bundled AlmaLinux 9 playbook (the default), or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
@@ -164,6 +162,70 @@ variable "node_labels" {
 
 variable "extra_server_manifests" {
   description = "Arbitrary RKE2 auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/rke2/server/manifests/ on server-init/server-join nodes only. This module does not interpret the content."
+  type        = map(string)
+  default     = {}
+}
+
+variable "gitops_platform_repo_url" {
+  description = "Optional Argo CD platform Application source repo (kube-platform or a fork). Null = skip all Argo CD wiring. Only meaningful for node_role = server-init — Argo/platform bootstrap never runs on server-join or worker."
+  type        = string
+  default     = null
+}
+
+variable "argocd_version" {
+  description = "Argo CD Helm chart version. Only meaningful when gitops_platform_repo_url is set."
+  type        = string
+  default     = null
+}
+
+variable "gitops_platform_revision" {
+  description = "Branch/tag/SHA the platform Application tracks."
+  type        = string
+  default     = "main"
+}
+
+variable "gitops_workloads_repo_url" {
+  description = "Optional user workloads Application source repo. Null = no workloads Application."
+  type        = string
+  default     = null
+}
+
+variable "gitops_workloads_revision" {
+  description = "Branch/tag/SHA the workloads Application tracks."
+  type        = string
+  default     = "main"
+}
+
+variable "gitops_workloads_path" {
+  description = "Path within the workloads repo the ApplicationSet scans."
+  type        = string
+  default     = "apps"
+}
+
+variable "cert_mode" {
+  description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' needs no dependencies. 'byo' expects a Secret named byo-ca-tls in the cert-manager namespace. 'acme' requires DNS-01 config (separate setup)."
+  type        = string
+  default     = "selfsigned"
+  validation {
+    condition     = contains(["selfsigned", "byo", "acme"], var.cert_mode)
+    error_message = "cert_mode must be 'selfsigned', 'byo', or 'acme'."
+  }
+}
+
+variable "platform_extra_helm_parameters" {
+  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application."
+  type        = map(string)
+  default     = {}
+}
+
+variable "platform_helm_values_object" {
+  description = "Arbitrary object forwarded to the platform Application as helm.valuesObject. Use for nested values that cannot be expressed as flat helm.parameters strings."
+  type        = any
+  default     = null
+}
+
+variable "extra_tags" {
+  description = "Additional tags forwarded to the platform bootstrap Application (as part of helm.valuesObject.extraTags) so Kubernetes-managed resources can tag themselves consistently with the node's own tags."
   type        = map(string)
   default     = {}
 }
