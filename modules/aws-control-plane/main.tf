@@ -6,6 +6,21 @@ module "component_versions" {
 locals {
   cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
 
+  # Connectivity-only user-data for the upcoming node-bootstrap (Ansible)
+  # cutover. Not yet wired to aws_instance.control_plane.user_data_base64
+  # (that's still cloud-init's rendered payload today); a follow-up change
+  # does the actual cutover. AWS's own docs list AlmaLinux among AMIs that
+  # "likely" ship the SSM Agent pre-installed (Community/Marketplace AMIs,
+  # not AWS-guaranteed, can be present-but-not-running) — so this
+  # defensively enables/starts it rather than installing it; `|| true`
+  # tolerates the rare case it's genuinely absent (Ansible's own SSM
+  # connection attempt then fails with a clear error, rather than this
+  # user-data script failing instance boot).
+  connectivity_user_data = <<-EOT
+    #!/bin/bash
+    systemctl enable --now amazon-ssm-agent 2>/dev/null || true
+  EOT
+
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
@@ -74,7 +89,7 @@ locals {
   # (control_plane_count > 1), flannel for single-node. Same "node pools are invisible to this
   # module" caveat as control_plane_taint above: a 1-CP-plus-workers topology still resolves via
   # control_plane_count alone, matching the existing etcd_snapshots_enabled precedent.
-  effective_cni = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "flannel")
+  effective_cni = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "default")
 
   # A bucket implies a region; default to aws_region so a caller doesn't have to repeat it.
   effective_etcd_snapshot_s3_region = var.etcd_snapshot_s3_bucket != null ? coalesce(var.etcd_snapshot_s3_region, var.aws_region) : null
@@ -219,7 +234,7 @@ module "bootstrap" {
 # Explicitly depends_on the genesis node — the first server must exist before any additional
 # server can join it. Ordering *among* the additional nodes themselves was originally
 # assumed unnecessary (server-join retries against the registration endpoint), but in
-# practice two siblings booting close together can still race K3s' embedded-etcd
+# practice two siblings booting close together can still race RKE2's embedded-etcd
 # bootstrap-data reconciliation and one loses permanently. cloud-init's server-join stage
 # now staggers each sibling by its own node_name-derived index and self-heals via a wipe
 # + retry loop — see the "Additional control-plane nodes join..." comment in

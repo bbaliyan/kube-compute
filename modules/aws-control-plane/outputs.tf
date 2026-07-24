@@ -13,7 +13,7 @@ output "instance_id" {
 }
 
 output "cluster_ip" {
-  description = "Private IP of the K3s node. Register your DNS wildcard at this address."
+  description = "Private IP of the RKE2 node. Register your DNS wildcard at this address."
   value       = aws_instance.control_plane.private_ip
 }
 
@@ -117,4 +117,9 @@ output "rendered_cloud_init_additional" {
     idx => m.cloud_init
   }
   sensitive = true
+}
+
+output "connectivity_user_data_base64" {
+  description = "base64gzip of the minimal, RKE2-agnostic connectivity-only user-data (defensively enables/starts the SSM Agent) for the upcoming node-bootstrap (Ansible) cutover. Not yet attached to any instance's user_data_base64 — exposed so a follow-up change can wire it in without re-deriving it."
+  value       = base64gzip(local.connectivity_user_data)
 }

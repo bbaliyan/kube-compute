@@ -21,7 +21,7 @@ locals {
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
   # Version-skew check: kubelet may trail the API server, never lead it. k8s_version is
-  # "vMAJOR.MINOR.PATCH+k3sN"; only major/minor/patch are compared numerically.
+  # "vMAJOR.MINOR.PATCH+rke2rN"; only major/minor/patch are compared numerically.
   version_regex               = "^v(\\d+)\\.(\\d+)\\.(\\d+)\\+"
   pool_version_parts          = regex(local.version_regex, local.k8s_version)
   control_plane_version_parts = regex(local.version_regex, var.control_plane_k8s_version)
@@ -32,6 +32,16 @@ locals {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-compute"
   })
+
+  # Connectivity-only user-data for the upcoming node-bootstrap (Ansible)
+  # cutover. Not yet wired to aws_launch_template.worker.user_data (that's
+  # still cloud-init's rendered payload today); a follow-up change does the
+  # actual cutover. See aws-control-plane's identical local for the full
+  # SSM-Agent-preinstalled reasoning.
+  connectivity_user_data = <<-EOT
+    #!/bin/bash
+    systemctl enable --now amazon-ssm-agent 2>/dev/null || true
+  EOT
 }
 
 module "bootstrap" {

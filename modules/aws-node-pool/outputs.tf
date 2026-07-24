@@ -23,3 +23,8 @@ output "worker_iam_role_name" {
   description = "IAM role name attached to every worker instance in this pool."
   value       = aws_iam_role.worker.name
 }
+
+output "connectivity_user_data_base64" {
+  description = "base64gzip of the minimal, RKE2-agnostic connectivity-only user-data (defensively enables/starts the SSM Agent) for the upcoming node-bootstrap (Ansible) cutover. Not yet attached to the launch template's user_data — exposed so a follow-up change can wire it in without re-deriving it."
+  value       = base64gzip(local.connectivity_user_data)
+}
