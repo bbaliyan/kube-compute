@@ -56,7 +56,9 @@ provider module; this module is a new, independently validated build.
 - `cluster_token`/`cluster_agent_token`/`agent_token_fetch_command` are all
   `sensitive = true` and flow to the Ansible run via the `local-exec`
   `environment` block only — never as an extra-var, never in the generated
-  inventory. See Ticket 03's decision in the `kube-claude` planning repo for
-  the full reasoning (including a correction: `server-join` receives
-  `cluster_token` the same direct way `server-init` does; only `worker` uses
-  the fetch-command pattern).
+  inventory. `server-join` receives `cluster_token` the same direct way
+  `server-init` does (both get the same freshly-generated cluster secret —
+  there's no existing secret store to fetch a *server* token from); only
+  `worker` uses the fetch-command pattern, since a worker joins an
+  already-existing cluster and can pull its token from the provider's own
+  secret store.
