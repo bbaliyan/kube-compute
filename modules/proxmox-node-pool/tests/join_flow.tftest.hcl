@@ -14,12 +14,12 @@ mock_provider "proxmox" {
   }
 }
 
-run "worker_gets_agent_token_via_cloud_init_not_ssm" {
-  command = apply
+run "worker_pool_wiring" {
+  command = plan
   variables {
     cluster_name              = "bharat"
-    k8s_version               = "v1.36.1+k3s1"
-    control_plane_k8s_version = "v1.36.1+k3s1"
+    k8s_version               = "v1.36.2+rke2r1"
+    control_plane_k8s_version = "v1.36.2+rke2r1"
     proxmox_node              = "pve"
     vm_cores                  = 2
     vm_memory_mb              = 4096
@@ -32,14 +32,16 @@ run "worker_gets_agent_token_via_cloud_init_not_ssm" {
     os_image_file_name        = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
   }
 
-  assert {
-    condition     = alltrue([for k, ci in output.rendered_cloud_init : strcontains(nonsensitive(ci), "echo 'agent-secret-abc123'")])
-    error_message = "every worker's cloud-init must embed the agent token directly via agent_token_fetch_command (Proxmox has no SSM equivalent)"
-  }
-  assert {
-    condition     = alltrue([for k, ci in output.rendered_cloud_init : !strcontains(nonsensitive(ci), "aws ssm")])
-    error_message = "a Proxmox worker must never reference AWS SSM"
-  }
+  # NOTE: two assertions used to live here, checking the now-removed
+  # `rendered_cloud_init` output for the embedded agent-token fetch command and the
+  # absence of an AWS SSM reference. The agent token now flows to node-bootstrap's
+  # `agent_token_fetch_command` variable, which is merged into the local-exec
+  # provisioner's `environment` block (not a trigger or any other plan/state-visible
+  # attribute) — so there is no longer a Terraform-visible value to assert on for
+  # this content. The "never references AWS SSM" property is true by construction
+  # here (this module always sets ansible_connection_vars.ansible_connection = "ssh"),
+  # but that input isn't re-exposed as an output either. See rke2-ansible-bootstrap
+  # Ticket 14's resolution notes for this coverage gap.
   assert {
     condition     = length(proxmox_virtual_environment_vm.worker) == 2
     error_message = "desired_count = 2 must create exactly 2 worker VMs"

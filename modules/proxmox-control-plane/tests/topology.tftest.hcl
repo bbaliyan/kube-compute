@@ -15,10 +15,10 @@ mock_provider "proxmox" {
 }
 
 run "single_node_no_endpoint_no_vip" {
-  command = apply
+  command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     proxmox_node          = "pve"
     vm_cores              = 4
     vm_memory_mb          = 8192
@@ -32,10 +32,11 @@ run "single_node_no_endpoint_no_vip" {
     condition     = output.registration_address == "192.168.1.10"
     error_message = "control_plane_count = 1 must fall back to the genesis node's own IP, not a VIP"
   }
-  assert {
-    condition     = !strcontains(nonsensitive(output.rendered_cloud_init), "kind: DaemonSet")
-    error_message = "control_plane_count = 1 must never render the kube-vip manifest"
-  }
+  # NOTE: an assertion checking `!strcontains(output.rendered_cloud_init, "kind:
+  # DaemonSet")` used to live here. That output no longer exists — the kube-vip
+  # manifest (when rendered at all) is now handed to node-bootstrap as one of
+  # extra_server_manifests, not into a Terraform-visible cloud-init string. See
+  # rke2-ansible-bootstrap Ticket 14's resolution notes.
   assert {
     condition     = length(proxmox_virtual_environment_vm.control_plane_additional) == 0
     error_message = "control_plane_count = 1 must create no additional control-plane VMs"
@@ -46,7 +47,7 @@ run "invalid_control_plane_count_rejected" {
   command = plan
   variables {
     cluster_name               = "bharat"
-    k8s_version                = "v1.36.1+k3s1"
+    k8s_version                = "v1.36.2+rke2r1"
     proxmox_node               = "pve"
     vm_cores                   = 4
     vm_memory_mb               = 8192
@@ -63,10 +64,10 @@ run "invalid_control_plane_count_rejected" {
 }
 
 run "ha_control_plane_creates_n_minus_1_additional_vms" {
-  command = apply
+  command = plan
   variables {
     cluster_name               = "bharat"
-    k8s_version                = "v1.36.1+k3s1"
+    k8s_version                = "v1.36.2+rke2r1"
     proxmox_node               = "pve"
     vm_cores                   = 4
     vm_memory_mb               = 8192
@@ -91,13 +92,16 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
   }
   assert {
     condition = alltrue([
-      for k, v in output.rendered_cloud_init_additional :
-      yamldecode(v).hostname != yamldecode(output.rendered_cloud_init).hostname
+      for k, v in proxmox_virtual_environment_file.hostname_init_additional :
+      yamldecode(replace(v.source_raw[0].data, "#cloud-config\n", "")).hostname != yamldecode(replace(proxmox_virtual_environment_file.hostname_init.source_raw[0].data, "#cloud-config\n", "")).hostname
     ])
-    error_message = "every additional control-plane node's rendered hostname must differ from the genesis node's — k3s/kubelet default the registered Kubernetes node name to the OS hostname, so a collision makes every kubelet register as the same node, silently clobbering each other"
+    error_message = "every additional control-plane node's hostname-init payload must differ from the genesis node's — rke2/kubelet default the registered Kubernetes node name to the OS hostname, so a collision makes every kubelet register as the same node, silently clobbering each other"
   }
   assert {
-    condition     = length(distinct([for k, v in output.rendered_cloud_init_additional : yamldecode(v).hostname])) == length(output.rendered_cloud_init_additional)
+    condition = length(distinct([
+      for k, v in proxmox_virtual_environment_file.hostname_init_additional :
+      yamldecode(replace(v.source_raw[0].data, "#cloud-config\n", "")).hostname
+    ])) == length(proxmox_virtual_environment_file.hostname_init_additional)
     error_message = "additional control-plane nodes must each get a distinct hostname from one another too, not just from genesis"
   }
   assert {

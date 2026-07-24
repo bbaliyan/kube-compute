@@ -8,81 +8,14 @@ mock_provider "aws" {
   }
 }
 
-run "single_node_cni_defaults_to_flannel" {
-  command = apply
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-  }
-  assert {
-    condition     = !strcontains(nonsensitive(output.rendered_cloud_init), "--flannel-backend=none")
-    error_message = "control_plane_count=1 must default cni to flannel"
-  }
-}
-
-run "ha_cni_defaults_to_cilium" {
-  command = apply
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
-  }
-  assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--flannel-backend=none --disable-network-policy --disable-kube-proxy")
-    error_message = "control_plane_count>1 must default cni to cilium on the genesis node"
-  }
-  assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init_additional["1"]), "--flannel-backend=none --disable-network-policy --disable-kube-proxy")
-    error_message = "additional control-plane nodes must render the same cni default as the genesis node"
-  }
-}
-
-run "explicit_cni_overrides_single_node_default" {
-  command = apply
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    cni                   = "cilium"
-  }
-  assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--flannel-backend=none")
-    error_message = "an explicit cni=cilium must override the single-node flannel default"
-  }
-}
-
-run "explicit_cni_overrides_ha_default" {
-  command = apply
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
-    cni = "flannel"
-  }
-  assert {
-    condition     = !strcontains(nonsensitive(output.rendered_cloud_init), "--flannel-backend=none")
-    error_message = "an explicit cni=flannel must override the HA cilium default"
-  }
-}
+# NOTE: the run blocks that used to live here (single_node_cni_defaults_to_default,
+# ha_cni_defaults_to_cilium, explicit_cni_overrides_single_node_default,
+# explicit_cni_overrides_ha_default) asserted on the `rendered_cloud_init`/
+# `rendered_cloud_init_additional` outputs. Those outputs no longer exist — this
+# module now hands `cni` to `node-bootstrap`, which renders it into config.yaml via
+# Ansible at real-apply time, not into a Terraform-visible string. There is currently
+# no automated test coverage for cni-default/override rendering; see rke2-ansible-bootstrap
+# Ticket 14's resolution notes for the follow-up this needs.
 
 run "invalid_cni_rejected" {
   command = plan
@@ -97,24 +30,24 @@ run "invalid_cni_rejected" {
   expect_failures = [var.cni]
 }
 
-run "cluster_sg_self_reference_covers_flannel" {
-  command = apply
+run "cluster_sg_self_reference_covers_default_cni" {
+  command = plan
   variables {
     cluster_name          = "bharat"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
     subnet_id             = "subnet-abc"
-    cni                   = "flannel"
+    cni                   = "default"
   }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.cluster_self.ip_protocol == "-1"
-    error_message = "the cluster SG's self-referencing all-protocol rule must exist and cover flannel's ports (8472/udp, 6443/tcp, 10250/tcp) without any CNI-specific edit"
+    error_message = "the cluster SG's self-referencing all-protocol rule must exist and cover the default CNI's ports (Canal: 8472/udp, 6443/tcp, 10250/tcp) without any CNI-specific edit"
   }
 }
 
 run "cluster_sg_self_reference_covers_cilium" {
-  command = apply
+  command = plan
   variables {
     cluster_name          = "bharat"
     aws_region            = "eu-west-1"
@@ -125,6 +58,6 @@ run "cluster_sg_self_reference_covers_cilium" {
   }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.cluster_self.ip_protocol == "-1"
-    error_message = "the cluster SG's self-referencing all-protocol rule must exist and cover cilium's ports (4240/tcp, 4244/tcp, 8472-or-6081/udp, 51871/udp, 6443/tcp, 10250/tcp) identically to flannel — switching CNI must never require a security-group edit"
+    error_message = "the cluster SG's self-referencing all-protocol rule must exist and cover cilium's ports (4240/tcp, 4244/tcp, 8472-or-6081/udp, 51871/udp, 6443/tcp, 10250/tcp) identically to the default CNI — switching CNI must never require a security-group edit"
   }
 }

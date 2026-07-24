@@ -15,10 +15,10 @@ mock_provider "proxmox" {
 }
 
 run "cluster_and_etcd_ipsets_created_and_referenced" {
-  command = apply
+  command = plan
   variables {
     cluster_name               = "bharat"
-    k8s_version                = "v1.36.1+k3s1"
+    k8s_version                = "v1.36.2+rke2r1"
     proxmox_node               = "pve"
     vm_cores                   = 4
     vm_memory_mb               = 8192

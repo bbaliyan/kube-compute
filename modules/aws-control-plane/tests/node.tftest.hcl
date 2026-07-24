@@ -2,10 +2,10 @@
 mock_provider "aws" {}
 
 run "node_resources" {
-  command = apply
+  command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8", "192.168.0.0/16"]
@@ -33,7 +33,7 @@ run "node_resources" {
       [for r in aws_vpc_security_group_ingress_rule.node : r.to_port],
       [for r in aws_vpc_security_group_ingress_rule.node_extra : r.to_port]
     ), 6443)
-    error_message = "SG must open the K3s API port 6443 across all CIDRs"
+    error_message = "SG must open the Kubernetes API port 6443 across all CIDRs"
   }
   assert {
     condition = !contains(concat(

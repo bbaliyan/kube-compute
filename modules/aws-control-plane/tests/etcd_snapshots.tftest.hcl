@@ -8,67 +8,18 @@ mock_provider "aws" {
   }
 }
 
-run "single_node_snapshots_off_by_default" {
-  command = apply
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-  }
-  assert {
-    condition     = !strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-snapshot-schedule-cron")
-    error_message = "single-node (control_plane_count=1) must default etcd snapshots off"
-  }
-}
+# NOTE: single_node_snapshots_off_by_default, ha_snapshots_on_by_default,
+# explicit_false_overrides_ha_default, and single_node_snapshots_still_off_by_default_even_with_bucket
+# used to live here, asserting on `rendered_cloud_init`/`rendered_cloud_init_additional`
+# (or, in the last case, a stale `module.bootstrap.cloud_init` reference from before the
+# node-bootstrap rename). Those outputs no longer exist — the etcd-snapshot
+# enabled/schedule content is now handed to `node-bootstrap`, which renders it via
+# Ansible at real-apply time, not into a Terraform-visible string. The IAM-policy-only
+# assertions below remain (they test this module's own wiring, not rendered content).
+# See rke2-ansible-bootstrap Ticket 14's resolution notes for the coverage gap this
+# leaves (single-node-vs-HA snapshot-enabled default, explicit-override).
 
-run "ha_snapshots_on_by_default" {
-  command = apply
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
-  }
-  assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-snapshot-schedule-cron")
-    error_message = "HA (control_plane_count>1) must default etcd snapshots on"
-  }
-  assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init_additional["1"]), "--etcd-snapshot-schedule-cron")
-    error_message = "additional control-plane nodes must render the same snapshot schedule as the genesis node"
-  }
-}
-
-run "explicit_false_overrides_ha_default" {
-  command = apply
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
-    etcd_snapshots_enabled = false
-  }
-  assert {
-    condition     = !strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-snapshot-schedule-cron")
-    error_message = "an explicit etcd_snapshots_enabled=false must override the HA auto-default"
-  }
-}
-
-run "single_node_snapshots_still_off_by_default_even_with_bucket" {
+run "object_store_bucket_grants_scoped_iam_and_renders_s3_flags" {
   command = plan
   variables {
     cluster_name            = "bharat"
@@ -77,31 +28,7 @@ run "single_node_snapshots_still_off_by_default_even_with_bucket" {
     allowed_ingress_cidrs   = ["10.0.0.0/8"]
     subnet_id               = "subnet-abc"
     etcd_snapshot_s3_bucket = "kube-compute-bharat-snapshots"
-  }
-  assert {
-    condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "--etcd-snapshot-schedule-cron")
-    error_message = "control_plane_count=1 must keep snapshots off by default even when an object-store bucket is configured — only an explicit etcd_snapshots_enabled=true turns them on for single-node"
-  }
-}
-
-run "object_store_bucket_grants_scoped_iam_and_renders_s3_flags" {
-  command = apply
-  variables {
-    cluster_name            = "bharat"
-    aws_region              = "eu-west-1"
-    instance_type           = "m7g.large"
-    allowed_ingress_cidrs   = ["10.0.0.0/8"]
-    subnet_id               = "subnet-abc"
-    etcd_snapshot_s3_bucket = "kube-compute-bharat-snapshots"
     etcd_snapshots_enabled  = true
-  }
-  assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-s3-bucket kube-compute-bharat-snapshots")
-    error_message = "etcd_snapshot_s3_bucket must render as --etcd-s3-bucket in the genesis node's cloud-init"
-  }
-  assert {
-    condition     = strcontains(nonsensitive(output.rendered_cloud_init), "--etcd-s3-region eu-west-1")
-    error_message = "etcd_snapshot_s3_region must default to aws_region when a bucket is given but no region is set explicitly"
   }
   assert {
     condition     = length(aws_iam_role_policy.etcd_snapshot_s3) == 1
