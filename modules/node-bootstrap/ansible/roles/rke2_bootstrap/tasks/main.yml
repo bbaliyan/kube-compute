@@ -1,15 +1,118 @@
 ---
 # SPDX-License-Identifier: Apache-2.0
-# Core RKE2 install/join mechanics only — see this module's README.md
-# "Scope of this build" for what's deliberately deferred (OS prep/CA
-# trust/registry mirror/Cilium manifest/etcd snapshots/GitOps bootstrap).
+# GitOps/Argo CD bootstrap remains deferred — see this module's README.md
+# "Scope of this build" (a distinct post-install step, ported separately).
 
 - name: Read secrets from the control node's environment
   ansible.builtin.set_fact:
     resolved_cluster_token: "{{ lookup('env', 'CLUSTER_TOKEN') }}"
     resolved_cluster_agent_token: "{{ lookup('env', 'CLUSTER_AGENT_TOKEN') }}"
     resolved_agent_token_fetch_command: "{{ lookup('env', 'AGENT_TOKEN_FETCH_COMMAND') }}"
+    resolved_trusted_ca_pem: "{{ lookup('env', 'TRUSTED_CA_PEM') }}"
   no_log: true
+
+# ---- universal OS prep (all roles) ----
+
+- name: os-prep | inotify limits (written early — sysctl.d is only read at next
+    boot; applying now covers the current boot, matching cloud-init's ordering)
+  ansible.builtin.copy:
+    src: 99-rke2-inotify.conf
+    dest: /etc/sysctl.d/99-rke2-inotify.conf
+    mode: "0644"
+  register: inotify_conf
+
+- name: os-prep | apply inotify limits immediately
+  ansible.builtin.command: sysctl -p /etc/sysctl.d/99-rke2-inotify.conf
+  when: inotify_conf.changed
+
+- name: os-prep | hot-added vCPU online rule (inert on AWS/Azure, needed on
+    Proxmox/KVM guests)
+  ansible.builtin.copy:
+    src: 80-hotplug-cpu-online.rules
+    dest: /etc/udev/rules.d/80-hotplug-cpu-online.rules
+    mode: "0644"
+
+- name: os-prep | install ca-certificates and curl, load br_netfilter/overlay
+  ansible.builtin.shell: |
+    set -euo pipefail
+    dnf makecache
+    dnf install -y ca-certificates curl
+    printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
+    printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\nnet.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-rke2-bridge.conf
+    modprobe br_netfilter
+    modprobe overlay
+    sysctl --system
+  args:
+    creates: /etc/modules-load.d/rke2.conf
+
+- name: os-trust | add trusted CA to the OS trust store
+  ansible.builtin.copy:
+    content: "{{ resolved_trusted_ca_pem }}"
+    dest: /etc/pki/ca-trust/source/anchors/trusted-ca.crt
+    mode: "0644"
+  when: resolved_trusted_ca_pem | length > 0
+  no_log: true
+
+- name: os-trust | update-ca-trust extract
+  ansible.builtin.command: update-ca-trust extract
+  when: resolved_trusted_ca_pem | length > 0
+
+- name: registry-mirror | preflight check the mirror is reachable
+  ansible.builtin.uri:
+    url: "{{ registry_mirror_url }}/v2/"
+    status_code: [200, 401]
+  when: registry_mirror_url | length > 0
+
+- name: registry-mirror | render registries.yaml
+  ansible.builtin.template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/rke2/registries.yaml
+    mode: "0644"
+  when: registry_mirror_url | length > 0
+
+- name: selinux-prep | quiesce packagekit (holds the rpm lock intermittently)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - packagekit
+    - packagekit.socket
+  failed_when: false
+
+- name: selinux-prep | add the rancher-rke2-common repo
+  ansible.builtin.yum_repository:
+    name: rancher-rke2-common-stable
+    description: Rancher RKE2 Common (stable)
+    baseurl: https://rpm.rancher.io/rke2/stable/common/centos/9/noarch
+    enabled: true
+    gpgcheck: true
+    gpgkey: https://rpm.rancher.io/public.key
+
+- name: selinux-prep | import the Rancher GPG key (retry — transient failures)
+  ansible.builtin.rpm_key:
+    key: https://rpm.rancher.io/public.key
+    state: present
+  register: gpg_import
+  retries: 3
+  delay: 10
+  until: gpg_import is succeeded
+
+- name: selinux-prep | install rke2-selinux (retry + self-heal on lock contention)
+  # No `creates:` idempotency guard here (unlike the os-prep task above) —
+  # this project could not verify a stable marker file rke2-selinux always
+  # writes. `dnf install -y` on an already-installed package is itself a fast
+  # no-op, so this is safe to re-run every time, just not skip-reported.
+  ansible.builtin.shell: |
+    set -euo pipefail
+    dnf makecache
+    for attempt in 1 2 3 4 5; do
+      dnf install -y rke2-selinux && exit 0
+      [ "$attempt" -eq 5 ] && exit 1
+      sleep 15
+      pkill -x dnf 2>/dev/null || true
+      pkill -x rpm 2>/dev/null || true
+    done
+  changed_when: true
 
 - name: Ensure /etc/rancher/rke2 exists
   ansible.builtin.file:
@@ -53,6 +156,30 @@
     src: config.yaml.j2
     dest: /etc/rancher/rke2/config.yaml
     mode: "0600"
+  when: node_role in ["server-init", "server-join"]
+
+# ---- auto-deploy manifests: must exist before RKE2's first start, since RKE2
+#      only auto-applies whatever it finds under server/manifests/ at startup ----
+- name: server-init/server-join | ensure the server manifests directory exists
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/server/manifests
+    state: directory
+    mode: "0700"
+  when: node_role in ["server-init", "server-join"]
+
+- name: server-init/server-join | render the Cilium HelmChart manifest
+  ansible.builtin.template:
+    src: cilium-helmchart.yaml.j2
+    dest: /var/lib/rancher/rke2/server/manifests/cilium.yaml
+    mode: "0600"
+  when: node_role in ["server-init", "server-join"] and cni == "cilium"
+
+- name: server-init/server-join | write extra server manifests
+  ansible.builtin.copy:
+    content: "{{ item.value }}"
+    dest: "/var/lib/rancher/rke2/server/manifests/{{ item.key }}"
+    mode: "0600"
+  loop: "{{ extra_server_manifests | dict2items }}"
   when: node_role in ["server-init", "server-join"]
 
 - name: server-init/server-join | install RKE2

@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # NOTE — scoped build (see README.md "Scope of this build"): this module
-# currently wires only the variables needed for core RKE2 install/join
-# mechanics, secrets flow, and per-provider connectivity. cloud-init's
-# CA-trust/registry-mirror/GitOps-bootstrap/CNI-manifest/etcd-snapshot/
-# node-label/extra-tag/extra-manifest variables are deliberately NOT ported
-# yet — a follow-on ticket ports them and cuts the provider modules over from
-# `cloud-init` to this module in one atomic step, to avoid a feature
-# regression window on a working baseline.
+# still does not wire GitOps/Argo CD bootstrap (gitops_*, cert_mode,
+# platform_*, extra_tags) — that's a distinct post-install step, ported
+# separately. Nothing calls this module yet; the provider-module cutover
+# (repointing from `cloud-init`, deleting it) is also still pending.
 
 variable "ansible_playbook_path" {
   description = "Absolute path to the Ansible playbook to run. Use the bundled AlmaLinux 9 playbook (the default), or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
@@ -89,11 +86,84 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' (whatever this distro's template installs out of the box) or 'cilium'. Only sets the config.yaml cni:/disable-kube-proxy: flags in this scoped build — deploying the Cilium HelmChart manifest itself is deferred (see README). Only meaningful for node_role server-init/server-join."
+  description = "CNI to install: 'default' (whatever this distro's template installs out of the box) or 'cilium'. Sets the config.yaml cni:/disable-kube-proxy: flags and, when 'cilium', deploys the Cilium HelmChart manifest (server-init/server-join only)."
   type        = string
   default     = "default"
   validation {
     condition     = contains(["default", "cilium"], var.cni)
     error_message = "cni must be 'default' or 'cilium'."
   }
+}
+
+variable "cilium_version" {
+  description = "Cilium Helm chart version. Only meaningful when cni = \"cilium\"."
+  type        = string
+  default     = null
+}
+
+variable "trusted_ca_pem" {
+  description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive: delivered to the Ansible run via the local-exec environment block, never as an extra-var — the same treatment as the join-secret variables above."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "registry_mirror_url" {
+  description = "Optional OCI registry mirror (Nexus/Harbor/Artifactory/any). Null = pull from upstream registries directly."
+  type        = string
+  default     = null
+}
+
+variable "etcd_snapshot_enabled" {
+  description = "Enable RKE2's built-in scheduled etcd snapshots (local, with retention). Only meaningful for node_role server-init/server-join."
+  type        = bool
+  default     = false
+}
+
+variable "etcd_snapshot_schedule_cron" {
+  description = "Cron schedule for etcd snapshots (rke2 config.yaml's etcd-snapshot-schedule-cron:). Only rendered when etcd_snapshot_enabled is true."
+  type        = string
+  default     = "0 */12 * * *"
+}
+
+variable "etcd_snapshot_retention" {
+  description = "Number of local etcd snapshots to retain before the oldest is pruned (rke2 config.yaml's etcd-snapshot-retention:). Only rendered when etcd_snapshot_enabled is true."
+  type        = number
+  default     = 5
+}
+
+variable "etcd_snapshot_object_store_bucket" {
+  description = "Optional object-store bucket name for uploading etcd snapshots off-node (S3-compatible API — rke2 config.yaml's etcd-s3-bucket:). Null = local-only snapshots."
+  type        = string
+  default     = null
+}
+
+variable "etcd_snapshot_object_store_region" {
+  description = "Region for the object-store bucket above (rke2 config.yaml's etcd-s3-region:). Ignored when etcd_snapshot_object_store_bucket is null."
+  type        = string
+  default     = null
+}
+
+variable "etcd_snapshot_object_store_endpoint" {
+  description = "Optional custom S3-compatible endpoint URL (rke2 config.yaml's etcd-s3-endpoint:), for a non-default-AWS-S3 object store. Ignored when etcd_snapshot_object_store_bucket is null."
+  type        = string
+  default     = null
+}
+
+variable "etcd_snapshot_object_store_folder" {
+  description = "Optional folder/prefix within the object-store bucket (rke2 config.yaml's etcd-s3-folder:) — useful when multiple clusters share one bucket. Ignored when etcd_snapshot_object_store_bucket is null."
+  type        = string
+  default     = null
+}
+
+variable "node_labels" {
+  description = "Extra node-label: entries applied at rke2 install time, e.g. { \"topology.kubernetes.io/zone\" = \"eu-west-1a\" }. Only meaningful for node_role = worker."
+  type        = map(string)
+  default     = {}
+}
+
+variable "extra_server_manifests" {
+  description = "Arbitrary RKE2 auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/rke2/server/manifests/ on server-init/server-join nodes only. This module does not interpret the content."
+  type        = map(string)
+  default     = {}
 }

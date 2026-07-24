@@ -5,3 +5,14 @@ registration_address: ""
 extra_tls_sans: []
 control_plane_taint: false
 cni: "default"
+cilium_version: ""
+registry_mirror_url: ""
+etcd_snapshot_enabled: false
+etcd_snapshot_schedule_cron: "0 */12 * * *"
+etcd_snapshot_retention: 5
+etcd_snapshot_object_store_bucket: ""
+etcd_snapshot_object_store_region: ""
+etcd_snapshot_object_store_endpoint: ""
+etcd_snapshot_object_store_folder: ""
+node_labels: {}
+extra_server_manifests: {}

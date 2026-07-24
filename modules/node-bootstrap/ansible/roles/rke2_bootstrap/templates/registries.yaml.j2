@@ -1,0 +1,18 @@
+{# SPDX-License-Identifier: Apache-2.0 #}
+mirrors:
+  docker.io:
+    endpoint: ["{{ registry_mirror_url }}"]
+  ghcr.io:
+    endpoint: ["{{ registry_mirror_url }}"]
+  quay.io:
+    endpoint: ["{{ registry_mirror_url }}"]
+  registry.k8s.io:
+    endpoint: ["{{ registry_mirror_url }}"]
+{% if resolved_trusted_ca_pem | length > 0 %}
+{# Pin containerd's TLS verification of the mirror host to the trusted CA.
+   Belt-and-suspenders alongside the OS trust store. #}
+configs:
+  "{{ registry_mirror_url | regex_replace('^https?://', '') }}":
+    tls:
+      ca_file: /etc/pki/ca-trust/source/anchors/trusted-ca.crt
+{% endif %}

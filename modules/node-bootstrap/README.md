@@ -14,36 +14,33 @@ SSH) — never a new inbound port.
 
 ## Scope of this build
 
-This module currently reproduces only the **core RKE2 install/join
-mechanics** validated by this project's Ansible-bootstrap map (config.yaml
+This module reproduces `cloud-init`'s RKE2 install/join mechanics: config.yaml
 generation for all three roles, the etcd-learner join-race staggering,
-systemd unit management, secrets flow, and AWS+Proxmox connectivity).
+systemd unit management, secrets flow, AWS+Proxmox connectivity, OS prep
+(RHEL9 `br_netfilter`/`overlay`, sysctls, SELinux package install), CA trust
+(`trusted_ca_pem`), registry mirror (`registry_mirror_url`), the Cilium CNI
+HelmChart manifest, etcd snapshot configuration (`etcd_snapshot_*`), node
+labels (`node_labels`), and extra server manifests
+(`extra_server_manifests`).
 
 **Deliberately deferred** — present in `cloud-init`'s template but not yet
 ported here, and not yet wired into this module's variable interface:
 
-- OS prep (RHEL9 `br_netfilter`/`overlay` modules, sysctls, SELinux package
-  install) and CA-trust (`trusted_ca_pem`)
-- Registry mirror (`registry_mirror_url`)
-- Cilium CNI HelmChart manifest (this module's `cni` variable still sets the
-  `cni:`/`disable-kube-proxy:` config.yaml flags, but does not deploy the
-  Cilium HelmChart itself)
-- etcd snapshot configuration (`etcd_snapshot_*`)
 - GitOps/Argo CD bootstrap (`gitops_*`, `cert_mode`, `platform_*`,
-  `extra_tags`)
-- Node labels (`node_labels`) and extra server manifests
-  (`extra_server_manifests`)
+  `extra_tags`) — a distinct post-install step (applied via `kubectl` once
+  the cluster reports Ready, server-init only), tracked separately.
 - Kubeconfig publish-to-local-file step (cloud-init's old
   `/var/lib/kube-compute/kubeconfig` — superseded anyway by `kube-kubeconfig`
   fetching `/etc/rancher/rke2/rke2.yaml` directly)
 
-A follow-on ticket ports the remaining variables into this module's Ansible
-role **and** cuts the provider modules (`aws-control-plane`,
-`proxmox-control-plane`, `aws-node-pool`, `proxmox-node-pool`) over from
-calling `cloud-init` to calling this module, in one atomic step — avoiding a
-functionality-regression window on `kube-compute` main's working baseline.
-Until that lands, `cloud-init` remains the module actually wired into every
-provider module; this module is a new, independently validated build.
+A follow-on ticket ports GitOps bootstrap, adds the minimal connectivity-only
+user-data each provider module needs, and cuts the provider modules
+(`aws-control-plane`, `proxmox-control-plane`, `aws-node-pool`,
+`proxmox-node-pool`) over from calling `cloud-init` to calling this module,
+in one atomic step — avoiding a functionality-regression window on
+`kube-compute` main's working baseline. Until that lands, `cloud-init`
+remains the module actually wired into every provider module; this module is
+a new, independently validated build.
 
 ## Interface notes
 
