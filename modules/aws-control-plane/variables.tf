@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to cloud-init) ----
-variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 9 template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+# ---- Common inputs (pass through to node-bootstrap) ----
+variable "ansible_playbook_path" {
+  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 9 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
   type        = string
   default     = null
 }
@@ -17,7 +17,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version (a K3s release string today, e.g. v1.36.1+k3s1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
   default     = null
 }
@@ -82,12 +82,12 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'flannel' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 (multi-node — NetworkPolicy, a kube-proxy-free dataplane, and Hubble justify the extra footprint) and 'flannel' for control_plane_count = 1 (K3s built-in, zero-config, smallest footprint). Set explicitly to override either default."
+  description = "CNI to install: 'default' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 (multi-node — NetworkPolicy, a kube-proxy-free dataplane, and Hubble justify the extra footprint) and 'default' for control_plane_count = 1 (whatever this distro's template installs out of the box, zero-config, smallest footprint). Set explicitly to override either default."
   type        = string
   default     = null
   validation {
-    condition     = var.cni == null || contains(["flannel", "cilium"], var.cni)
-    error_message = "cni must be null, 'flannel', or 'cilium'."
+    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
+    error_message = "cni must be null, 'default', or 'cilium'."
   }
 }
 
@@ -134,7 +134,7 @@ variable "static_registration_address" {
 }
 
 variable "etcd_snapshots_enabled" {
-  description = "Enable K3s' built-in scheduled etcd snapshots. Null (default) auto-derives to true when control_plane_count > 1 (HA — durability is default-on) and false for control_plane_count = 1 (optional, off by default). Set explicitly to override either default."
+  description = "Enable RKE2's built-in scheduled etcd snapshots. Null (default) auto-derives to true when control_plane_count > 1 (HA — durability is default-on) and false for control_plane_count = 1 (optional, off by default). Set explicitly to override either default."
   type        = bool
   default     = null
 }
@@ -242,7 +242,7 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "ingress_ports" {
-  description = "TCP ports opened on the module SG: 443/80 Traefik, 6443 K3s API. Never add 22 (SSH)."
+  description = "TCP ports opened on the module SG: 443/80 Traefik, 6443 Kubernetes API. Never add 22 (SSH)."
   type        = list(number)
   default     = [80, 443, 6443]
 }

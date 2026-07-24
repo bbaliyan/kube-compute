@@ -4,8 +4,6 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
-
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
@@ -15,7 +13,7 @@ locals {
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
 
   control_plane_taint              = var.cluster_type == "dedicated_control_plane"
-  effective_cni                    = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "flannel")
+  effective_cni                    = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "default")
   effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   # Null for control_plane_count = 1 (no registration endpoint), the VIP otherwise.
@@ -222,10 +220,42 @@ locals {
   EOT
 }
 
-module "bootstrap" {
-  source = "../cloud-init"
+# ---- Minimal, RKE2-agnostic boot-time cloud-init: hostname only ----
+# SSH-key injection and qemu-guest-agent are already handled by vendor_data
+# above, entirely independent of RKE2. inotify sysctls and the hot-plug-CPU
+# udev rule moved into node-bootstrap's Ansible role (os-prep tasks). The
+# ONLY thing still needed at boot, before Ansible ever connects, is a
+# distinct-per-node hostname: RKE2/kubelet defaults the registered
+# Kubernetes node name to the OS hostname, so every node MUST get a unique
+# one or later nodes silently clobber earlier ones' node registration.
+resource "proxmox_virtual_environment_file" "hostname_init" {
+  content_type = "snippets"
+  datastore_id = var.iso_datastore_id
+  node_name    = var.proxmox_node
 
-  cloud_init_template            = local.cloud_init_template
+  source_raw {
+    data      = "#cloud-config\nhostname: ${var.cluster_name}-cp-0\n"
+    file_name = "${var.cluster_name}-cp-0-hostname-init.yaml"
+  }
+}
+
+resource "proxmox_virtual_environment_file" "hostname_init_additional" {
+  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
+
+  content_type = "snippets"
+  datastore_id = var.iso_datastore_id
+  node_name    = var.proxmox_node
+
+  source_raw {
+    data      = "#cloud-config\nhostname: ${var.cluster_name}-cp-${each.key}\n"
+    file_name = "${var.cluster_name}-cp-${each.key}-hostname-init.yaml"
+  }
+}
+
+module "node_bootstrap" {
+  source = "../node-bootstrap"
+
+  ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
   k8s_version                    = local.k8s_version
@@ -252,14 +282,29 @@ module "bootstrap" {
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
   platform_helm_values_object    = var.platform_helm_values_object
   extra_tags                     = var.extra_tags
+
+  ansible_connection_vars = {
+    ansible_connection           = "ssh"
+    ansible_host                 = local.cp_ips["0"]
+    ansible_user                 = var.ansible_ssh_user
+    ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
+    ansible_ssh_common_args      = "-o StrictHostKeyChecking=accept-new"
+  }
 }
 
-module "bootstrap_additional" {
+# depends_on the genesis node's node-bootstrap run (not just its VM/IP) — see
+# aws-control-plane's identical comment on module.node_bootstrap_additional
+# for the full reasoning: Ansible's local-exec model has no implicit
+# ordering across independent resources the way cloud-init's boot-time
+# model did, so this must be explicit here too.
+module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
-  source = "../cloud-init"
+  source = "../node-bootstrap"
 
-  cloud_init_template         = local.cloud_init_template
+  depends_on = [module.node_bootstrap]
+
+  ansible_playbook_path       = var.ansible_playbook_path
   cluster_name                = var.cluster_name
   node_name                   = "${var.cluster_name}-cp-${each.key}"
   k8s_version                 = local.k8s_version
@@ -279,6 +324,14 @@ module "bootstrap_additional" {
   cert_mode                   = var.cert_mode
   extra_tags                  = var.extra_tags
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
+
+  ansible_connection_vars = {
+    ansible_connection           = "ssh"
+    ansible_host                 = local.cp_ips[each.key]
+    ansible_user                 = var.ansible_ssh_user
+    ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
+    ansible_ssh_common_args      = "-o StrictHostKeyChecking=accept-new"
+  }
 }
 
 resource "proxmox_virtual_environment_file" "network_data" {
@@ -306,30 +359,6 @@ resource "proxmox_virtual_environment_file" "network_data_dhcp" {
   source_raw {
     file_name = "${var.cluster_name}-cp-0-network-data.yaml"
     data      = local.network_data_dhcp
-  }
-}
-
-resource "proxmox_virtual_environment_file" "cloud_init" {
-  content_type = "snippets"
-  datastore_id = var.iso_datastore_id
-  node_name    = var.proxmox_node
-
-  source_raw {
-    data      = module.bootstrap.cloud_init
-    file_name = "${var.cluster_name}-cp-0-cloud-init.yaml"
-  }
-}
-
-resource "proxmox_virtual_environment_file" "cloud_init_additional" {
-  for_each = module.bootstrap_additional
-
-  content_type = "snippets"
-  datastore_id = var.iso_datastore_id
-  node_name    = var.proxmox_node
-
-  source_raw {
-    data      = each.value.cloud_init
-    file_name = "${var.cluster_name}-cp-${each.key}-cloud-init.yaml"
   }
 }
 
@@ -383,7 +412,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 
   initialization {
     datastore_id         = var.disk_datastore_id
-    user_data_file_id    = proxmox_virtual_environment_file.cloud_init.id
+    user_data_file_id    = proxmox_virtual_environment_file.hostname_init.id
     vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
     network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data["0"].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
   }
@@ -397,7 +426,10 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 }
 
 resource "proxmox_virtual_environment_vm" "control_plane_additional" {
-  for_each = module.bootstrap_additional
+  # Deliberately NOT for_each = module.node_bootstrap_additional: that module
+  # depends on this VM's own IP (via local.cp_ips), so keying off it here
+  # would be circular. Same index range, computed independently.
+  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
   name            = "${var.cluster_name}-cp-${each.key}"
   node_name       = var.proxmox_node
@@ -448,7 +480,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
 
   initialization {
     datastore_id         = var.disk_datastore_id
-    user_data_file_id    = proxmox_virtual_environment_file.cloud_init_additional[each.key].id
+    user_data_file_id    = proxmox_virtual_environment_file.hostname_init_additional[each.key].id
     vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
     network_data_file_id = proxmox_virtual_environment_file.network_data[each.key].id
   }

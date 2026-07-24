@@ -16,9 +16,3 @@ output "worker_node_refs" {
     }
   }
 }
-
-output "rendered_cloud_init" {
-  description = "Map of rendered cloud-config per worker index. Sensitive — for tests/debugging only."
-  value       = { for k, m in module.bootstrap : k => m.cloud_init }
-  sensitive   = true
-}

@@ -4,8 +4,6 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
-
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
@@ -98,38 +96,30 @@ resource "proxmox_virtual_environment_file" "network_data" {
   }
 }
 
-module "bootstrap" {
-  source = "../cloud-init"
-
+# ---- Minimal, RKE2-agnostic boot-time cloud-init: hostname only ----
+# SSH-key injection and qemu-guest-agent are already handled by vendor_data
+# above. inotify sysctls and the hot-plug-CPU udev rule moved into
+# node-bootstrap's Ansible role (os-prep tasks). The only thing still needed
+# at boot, before Ansible ever connects, is a distinct-per-node hostname —
+# see proxmox-control-plane's identical resource for the full reasoning.
+resource "proxmox_virtual_environment_file" "hostname_init" {
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
-
-  cloud_init_template       = local.cloud_init_template
-  cluster_name              = var.cluster_name
-  node_name                 = "${var.cluster_name}-worker-${each.key}"
-  k8s_version               = local.k8s_version
-  node_role                 = "worker"
-  registration_address      = var.registration_address
-  agent_token_fetch_command = local.agent_token_fetch_command
-  node_labels               = var.extra_node_labels
-  trusted_ca_pem            = var.trusted_ca_pem
-  registry_mirror_url       = var.registry_mirror_url
-}
-
-resource "proxmox_virtual_environment_file" "cloud_init" {
-  for_each = module.bootstrap
 
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
 
   source_raw {
-    data      = each.value.cloud_init
-    file_name = "${var.cluster_name}-worker-${each.key}-cloud-init.yaml"
+    data      = "#cloud-config\nhostname: ${var.cluster_name}-worker-${each.key}\n"
+    file_name = "${var.cluster_name}-worker-${each.key}-hostname-init.yaml"
   }
 }
 
 resource "proxmox_virtual_environment_vm" "worker" {
-  for_each = module.bootstrap
+  # Deliberately an independent index range, not for_each = module.node_bootstrap:
+  # that module depends on this VM's own IP (via local.worker_ips), so keying off
+  # it here would be circular — see proxmox-control-plane's identical comment.
+  for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
   name            = "${var.cluster_name}-worker-${each.key}"
   node_name       = var.proxmox_node
@@ -180,7 +170,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   initialization {
     datastore_id         = var.disk_datastore_id
-    user_data_file_id    = proxmox_virtual_environment_file.cloud_init[each.key].id
+    user_data_file_id    = proxmox_virtual_environment_file.hostname_init[each.key].id
     vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
     network_data_file_id = proxmox_virtual_environment_file.network_data[each.key].id
   }
@@ -204,6 +194,38 @@ locals {
     k => local.static_ips ? split("/", var.worker_ip_addresses[tonumber(k)])[0] : try(
       [for ip in flatten(vm.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
     )
+  }
+}
+
+# Workers don't need to wait on each other the way server-join siblings do
+# (no etcd learner race — each worker independently fetches its own agent
+# token and joins). RKE2's agent process natively retries against the join
+# URL if the control plane isn't reachable yet, so no explicit depends_on
+# on the control-plane's own bootstrap is added here either; the consumer's
+# root module still creates the natural data dependency via
+# var.registration_address.
+module "node_bootstrap" {
+  source = "../node-bootstrap"
+
+  for_each = { for i in range(var.desired_count) : tostring(i) => i }
+
+  ansible_playbook_path     = var.ansible_playbook_path
+  cluster_name              = var.cluster_name
+  node_name                 = "${var.cluster_name}-worker-${each.key}"
+  k8s_version               = local.k8s_version
+  node_role                 = "worker"
+  registration_address      = var.registration_address
+  agent_token_fetch_command = local.agent_token_fetch_command
+  node_labels               = var.extra_node_labels
+  trusted_ca_pem            = var.trusted_ca_pem
+  registry_mirror_url       = var.registry_mirror_url
+
+  ansible_connection_vars = {
+    ansible_connection           = "ssh"
+    ansible_host                 = local.worker_ips[each.key]
+    ansible_user                 = var.ansible_ssh_user
+    ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
+    ansible_ssh_common_args      = "-o StrictHostKeyChecking=accept-new"
   }
 }
 

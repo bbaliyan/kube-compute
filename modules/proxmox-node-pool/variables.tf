@@ -1,10 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to cloud-init) ----
-variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 9 template."
+# ---- Common inputs (pass through to node-bootstrap) ----
+variable "ansible_playbook_path" {
+  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 9 playbook."
   type        = string
   default     = null
+}
+
+variable "ansible_ssh_private_key_file" {
+  description = "Path to the SSH private key Ansible uses to reach each worker (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
+  type        = string
+  default     = "~/.ssh/id_ed25519_kube_cluster"
+}
+
+variable "ansible_ssh_user" {
+  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 9 image."
+  type        = string
+  default     = "almalinux"
 }
 
 variable "cluster_name" {
@@ -143,7 +155,7 @@ variable "control_plane_k8s_version" {
 }
 
 variable "registration_address" {
-  description = "The control plane's registration_address output (kube-vip VIP for HA, or the sole node's IP for single-node). Workers join via --server https://<this>:6443."
+  description = "The control plane's registration_address output (kube-vip VIP for HA, or the sole node's IP for single-node). Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
   type        = string
 }
 
@@ -159,7 +171,7 @@ variable "cluster_ipset_name" {
 }
 
 variable "extra_node_labels" {
-  description = "Additional --node-label flags for every worker in this pool."
+  description = "Additional node-label: entries for every worker in this pool."
   type        = map(string)
   default     = {}
 }

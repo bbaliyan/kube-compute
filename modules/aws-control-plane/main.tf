@@ -4,22 +4,24 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
-
-  # Connectivity-only user-data for the upcoming node-bootstrap (Ansible)
-  # cutover. Not yet wired to aws_instance.control_plane.user_data_base64
-  # (that's still cloud-init's rendered payload today); a follow-up change
-  # does the actual cutover. AWS's own docs list AlmaLinux among AMIs that
-  # "likely" ship the SSM Agent pre-installed (Community/Marketplace AMIs,
-  # not AWS-guaranteed, can be present-but-not-running) — so this
-  # defensively enables/starts it rather than installing it; `|| true`
-  # tolerates the rare case it's genuinely absent (Ansible's own SSM
-  # connection attempt then fails with a clear error, rather than this
-  # user-data script failing instance boot).
+  # Connectivity-only user-data replacing cloud-init's full RKE2 payload.
+  # AWS's own docs list AlmaLinux among AMIs that "likely" ship the SSM
+  # Agent pre-installed (Community/Marketplace AMIs, not AWS-guaranteed, can
+  # be present-but-not-running) — so this defensively enables/starts it
+  # rather than installing it; `|| true` tolerates the rare case it's
+  # genuinely absent (Ansible's own SSM connection attempt then fails with a
+  # clear error, rather than this user-data script failing instance boot).
   connectivity_user_data = <<-EOT
     #!/bin/bash
     systemctl enable --now amazon-ssm-agent 2>/dev/null || true
   EOT
+
+  # amazon.aws.aws_ssm's connection plugin mandatorily stages every file
+  # transfer through an S3 bucket, "required even for modules which do not
+  # explicitly send files" (no bucketless mode exists) — this bucket is new
+  # infrastructure the Ansible-bootstrap swap needs; nothing in this
+  # project used S3-backed SSM file transfer before.
+  ansible_ssm_bucket_name = "kube-compute-${var.cluster_name}-ansible-ssm-${data.aws_caller_identity.current.account_id}"
 
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
@@ -195,10 +197,67 @@ resource "aws_vpc_security_group_egress_rule" "etcd_all" {
   tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd-egress-all" })
 }
 
-module "bootstrap" {
-  source = "../cloud-init"
+# ---- S3 staging bucket for amazon.aws.aws_ssm's Ansible connection plugin ----
+# Mandatory infrastructure for the AWS transport (see the local above) — not optional,
+# not just for large files. Blocks all public access; SSE by default; a short lifecycle
+# expiration since staged objects are transient per-task artifacts, not meant to persist.
+resource "aws_s3_bucket" "ansible_ssm" {
+  bucket        = local.ansible_ssm_bucket_name
+  force_destroy = true
+  tags          = local.common_tags
+}
 
-  cloud_init_template                 = local.cloud_init_template
+resource "aws_s3_bucket_public_access_block" "ansible_ssm" {
+  bucket                  = aws_s3_bucket.ansible_ssm.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "ansible_ssm" {
+  bucket = aws_s3_bucket.ansible_ssm.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "ansible_ssm" {
+  bucket = aws_s3_bucket.ansible_ssm.id
+  rule {
+    id     = "expire-staged-objects"
+    status = "Enabled"
+    filter {}
+    expiration {
+      days = 1
+    }
+  }
+}
+
+# Grants the NODE's IAM role (not the operator's own credentials, which use their
+# ambient AWS auth) read/write on the staging bucket — the SSM Agent running on the
+# instance itself uploads/downloads through this bucket as part of a session.
+resource "aws_iam_role_policy" "ansible_ssm_s3" {
+  name = "kube-compute-${var.cluster_name}-ansible-ssm-s3"
+  role = aws_iam_role.node.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject", "s3:GetEncryptionConfiguration"]
+        Resource = ["${aws_s3_bucket.ansible_ssm.arn}", "${aws_s3_bucket.ansible_ssm.arn}/*"]
+      }
+    ]
+  })
+}
+
+module "node_bootstrap" {
+  source = "../node-bootstrap"
+
+  ansible_playbook_path               = var.ansible_playbook_path
   cluster_name                        = var.cluster_name
   node_name                           = "${var.cluster_name}-cp-1"
   k8s_version                         = local.k8s_version
@@ -228,23 +287,35 @@ module "bootstrap" {
   platform_extra_helm_parameters      = var.platform_extra_helm_parameters
   platform_helm_values_object         = var.platform_helm_values_object
   extra_tags                          = var.extra_tags
+
+  ansible_connection_vars = {
+    ansible_connection          = "amazon.aws.aws_ssm"
+    ansible_aws_ssm_instance_id = aws_instance.control_plane.id
+    ansible_aws_ssm_region      = var.aws_region
+    ansible_aws_ssm_bucket_name = aws_s3_bucket.ansible_ssm.id
+  }
 }
 
 # ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
-# Explicitly depends_on the genesis node — the first server must exist before any additional
-# server can join it. Ordering *among* the additional nodes themselves was originally
-# assumed unnecessary (server-join retries against the registration endpoint), but in
-# practice two siblings booting close together can still race RKE2's embedded-etcd
-# bootstrap-data reconciliation and one loses permanently. cloud-init's server-join stage
-# now staggers each sibling by its own node_name-derived index and self-heals via a wipe
-# + retry loop — see the "Additional control-plane nodes join..." comment in
-# modules/cloud-init/templates/cloud-init-almalinux-9.yaml.tpl for the mechanics.
-module "bootstrap_additional" {
+# Explicitly depends_on the genesis node's node-bootstrap run (not just its instance) —
+# the first server must actually finish installing/starting RKE2 before any additional
+# server can join it. This is a stricter requirement than cloud-init had: cloud-init ran
+# at each instance's own boot time independently, so genesis's install was reliably well
+# underway before staggered siblings' delayed retry attempts landed; Ansible's
+# local-exec has no such implicit head start — without this depends_on, Terraform could
+# run every node's Ansible install concurrently, and server-join siblings would race
+# genesis's own install, not just each other.
+# Ordering *among* the additional nodes themselves remains handled by node-bootstrap's own
+# staggered, self-healing join-race retry (see modules/node-bootstrap/ansible/roles/
+# rke2_bootstrap/tasks/main.yml's "server-join | staggered, self-healing join" task).
+module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
-  source = "../cloud-init"
+  source = "../node-bootstrap"
 
-  cloud_init_template                 = local.cloud_init_template
+  depends_on = [module.node_bootstrap]
+
+  ansible_playbook_path               = var.ansible_playbook_path
   cluster_name                        = var.cluster_name
   node_name                           = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
   k8s_version                         = local.k8s_version
@@ -267,7 +338,14 @@ module "bootstrap_additional" {
   cert_mode                           = var.cert_mode
   extra_tags                          = var.extra_tags
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
-  # first server only — cloud-init also enforces this at the render level.
+  # first server only — node-bootstrap also enforces this at the task level.
+
+  ansible_connection_vars = {
+    ansible_connection          = "amazon.aws.aws_ssm"
+    ansible_aws_ssm_instance_id = aws_instance.control_plane_additional[each.key].id
+    ansible_aws_ssm_region      = var.aws_region
+    ansible_aws_ssm_bucket_name = aws_s3_bucket.ansible_ssm.id
+  }
 }
 
 resource "aws_instance" "control_plane_additional" {
@@ -293,7 +371,7 @@ resource "aws_instance" "control_plane_additional" {
     tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}-root" })
   }
 
-  user_data_base64            = module.bootstrap_additional[each.key].user_data_base64
+  user_data_base64            = base64gzip(local.connectivity_user_data)
   user_data_replace_on_change = true
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}" })
@@ -536,7 +614,7 @@ resource "aws_instance" "control_plane" {
     tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-root" })
   }
 
-  user_data_base64            = module.bootstrap.user_data_base64
+  user_data_base64            = base64gzip(local.connectivity_user_data)
   user_data_replace_on_change = true # disposable nodes: replace on bootstrap change
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}" })

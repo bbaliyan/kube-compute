@@ -1,10 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to cloud-init) ----
-variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 9 template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+# ---- Common inputs (pass through to node-bootstrap) ----
+variable "ansible_playbook_path" {
+  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 9 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
   type        = string
   default     = null
+}
+
+variable "ansible_ssh_private_key_file" {
+  description = "Path to the SSH private key Ansible uses to reach the node (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
+  type        = string
+  default     = "~/.ssh/id_ed25519_kube_cluster"
+}
+
+variable "ansible_ssh_user" {
+  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 9 image."
+  type        = string
+  default     = "almalinux"
 }
 
 variable "cluster_name" {
@@ -17,7 +29,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version (a K3s release string today, e.g. v1.36.1+k3s1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
   default     = null
 }
@@ -76,17 +88,17 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'flannel' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 and 'flannel' for control_plane_count = 1. Set explicitly to override."
+  description = "CNI to install: 'default' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 and 'default' for control_plane_count = 1. Set explicitly to override."
   type        = string
   default     = null
   validation {
-    condition     = var.cni == null || contains(["flannel", "cilium"], var.cni)
-    error_message = "cni must be null, 'flannel', or 'cilium'."
+    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
+    error_message = "cni must be null, 'default', or 'cilium'."
   }
 }
 
 variable "etcd_snapshots_enabled" {
-  description = "Enable K3s' built-in scheduled etcd snapshots (local only — Proxmox has no S3-equivalent wired in this module; use a future NFS/S3-compatible option if needed). Null (default) auto-derives to true when control_plane_count > 1 and false for control_plane_count = 1."
+  description = "Enable RKE2's built-in scheduled etcd snapshots (local only — Proxmox has no S3-equivalent wired in this module; use a future NFS/S3-compatible option if needed). Null (default) auto-derives to true when control_plane_count > 1 and false for control_plane_count = 1."
   type        = bool
   default     = null
 }
@@ -266,7 +278,7 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "ingress_ports" {
-  description = "TCP ports opened from allowed_ingress_cidrs on every control-plane VM: 443/80 Traefik, 6443 K3s API. Never add 22 (SSH)."
+  description = "TCP ports opened from allowed_ingress_cidrs on every control-plane VM: 443/80 Traefik, 6443 Kubernetes API. Never add 22 (SSH)."
   type        = list(number)
   default     = [80, 443, 6443]
 }

@@ -25,8 +25,8 @@ output "node_provider" {
   value       = "proxmox"
 }
 
-output "bootstrap_status_ref" {
-  description = "Genesis VM ID used to read bootstrap status: qm guest exec <vmid> -- cat /var/log/kube-compute/bootstrap-status."
+output "node_control_ref" {
+  description = "Genesis VM ID, for control-plane verb-scripts that need a single node reference. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that Ansible (not cloud-init) owns bootstrap."
   value       = tostring(proxmox_virtual_environment_vm.control_plane.vm_id)
 }
 
@@ -86,16 +86,4 @@ output "control_plane_node_refs" {
       }
     }
   )
-}
-
-output "rendered_cloud_init" {
-  description = "Plaintext rendered cloud-config for the genesis node, passed through from cloud-init. Sensitive — for tests/debugging only."
-  value       = module.bootstrap.cloud_init
-  sensitive   = true
-}
-
-output "rendered_cloud_init_additional" {
-  description = "Map of rendered cloud-config for additional control-plane nodes, keyed by index. Sensitive."
-  value       = { for k, m in module.bootstrap_additional : k => m.cloud_init }
-  sensitive   = true
 }

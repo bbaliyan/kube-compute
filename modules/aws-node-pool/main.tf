@@ -32,16 +32,6 @@ locals {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-compute"
   })
-
-  # Connectivity-only user-data for the upcoming node-bootstrap (Ansible)
-  # cutover. Not yet wired to aws_launch_template.worker.user_data (that's
-  # still cloud-init's rendered payload today); a follow-up change does the
-  # actual cutover. See aws-control-plane's identical local for the full
-  # SSM-Agent-preinstalled reasoning.
-  connectivity_user_data = <<-EOT
-    #!/bin/bash
-    systemctl enable --now amazon-ssm-agent 2>/dev/null || true
-  EOT
 }
 
 module "bootstrap" {

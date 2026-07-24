@@ -27,8 +27,8 @@ output "node_provider" {
   value       = "azure"
 }
 
-output "bootstrap_status_ref" {
-  description = "Genesis VM resource ID used to read bootstrap status. Usage: az vm run-command invoke --ids <this> --command-id RunShellScript --scripts 'cat /var/log/kube-compute/bootstrap-status'"
+output "node_control_ref" {
+  description = "Genesis VM resource ID, for control-plane verb-scripts that need a single node reference. Usage: az vm run-command invoke --ids <this> --command-id RunShellScript. Renamed from bootstrap_status_ref for naming consistency with AWS/Proxmox (Azure is not part of the Ansible-bootstrap cutover — see kube-compute's node-bootstrap module — and still uses cloud-init; this is a naming-only fix)."
   value       = azurerm_linux_virtual_machine.control_plane.id
 }
 

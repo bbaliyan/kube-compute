@@ -27,8 +27,8 @@ output "node_provider" {
   value       = "aws"
 }
 
-output "bootstrap_status_ref" {
-  description = "Handle the control-plane uses to read bootstrap status/kubeconfig. For AWS: the instance ID, targeted via 'aws ssm send-command' in region aws_region."
+output "node_control_ref" {
+  description = "Handle the control-plane verb-scripts use to reach the node out-of-band (kubeconfig fetch, break-glass shell). For AWS: the instance ID, targeted via 'aws ssm send-command'/'aws ssm start-session' in region aws_region. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that Ansible (not cloud-init) owns bootstrap, and this was always really just a node-addressing handle."
   value       = aws_instance.control_plane.id
 }
 
@@ -86,7 +86,7 @@ output "cluster_security_group_id" {
 }
 
 output "control_plane_node_refs" {
-  description = "Map of control-plane node name -> {instance_id, provider}. The control-plane abstraction (SSM send-command today) targets every node from this map instead of a single bootstrap_status_ref."
+  description = "Map of control-plane node name -> {instance_id, provider}. The control-plane abstraction (SSM send-command today) targets every node from this map instead of a single node_control_ref."
   value = merge(
     {
       "${var.cluster_name}-cp-1" = {
@@ -104,22 +104,12 @@ output "control_plane_node_refs" {
   )
 }
 
-output "rendered_cloud_init" {
-  description = "Plaintext rendered cloud-config passed through from cloud-init. Sensitive — contains the cluster/agent tokens. Exposed for tests and debugging only; not part of the module's operational interface."
-  value       = module.bootstrap.cloud_init
-  sensitive   = true
-}
-
-output "rendered_cloud_init_additional" {
-  description = "Map of rendered cloud-config for additional control-plane nodes, keyed by index (1..N). Sensitive — contains the cluster/agent tokens. Exposed for tests and debugging only."
-  value = {
-    for idx, m in module.bootstrap_additional :
-    idx => m.cloud_init
-  }
-  sensitive = true
-}
-
 output "connectivity_user_data_base64" {
-  description = "base64gzip of the minimal, RKE2-agnostic connectivity-only user-data (defensively enables/starts the SSM Agent) for the upcoming node-bootstrap (Ansible) cutover. Not yet attached to any instance's user_data_base64 — exposed so a follow-up change can wire it in without re-deriving it."
+  description = "base64gzip of the minimal, RKE2-agnostic connectivity-only user-data (defensively enables/starts the SSM Agent) attached to every node's actual user_data_base64. Exposed for tests and debugging."
   value       = base64gzip(local.connectivity_user_data)
+}
+
+output "ansible_ssm_bucket_name" {
+  description = "S3 bucket used by amazon.aws.aws_ssm's Ansible connection plugin to stage file transfers during node-bootstrap. New infrastructure this project didn't need before the Ansible-bootstrap swap — see the ansible_ssm_bucket_name local for why it's mandatory, not optional."
+  value       = aws_s3_bucket.ansible_ssm.id
 }
