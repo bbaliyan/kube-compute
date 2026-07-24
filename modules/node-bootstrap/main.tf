@@ -2,6 +2,13 @@
 locals {
   playbook_path = coalesce(var.ansible_playbook_path, "${path.module}/ansible/playbook.yml")
 
+  # Bundled alongside this module's own playbook/roles, not the (possibly
+  # overridden) playbook_path — these pin the connection-plugin dependencies
+  # this module's supported transports need (amazon.aws + boto3 for AWS SSM),
+  # independent of which playbook content a caller substitutes.
+  ansible_requirements_yml = "${path.module}/ansible/requirements.yml"
+  ansible_requirements_txt = "${path.module}/ansible/requirements.txt"
+
   # Non-secret extra-vars only. Secrets (cluster_token, cluster_agent_token,
   # agent_token_fetch_command) are deliberately excluded here — see Ticket 03's
   # decision — and instead flow through the local-exec `environment` block below.
@@ -72,6 +79,13 @@ resource "null_resource" "ansible_bootstrap" {
 
     command = <<-EOT
       set -euo pipefail
+      # Collections/Python deps are playbook-specific, not baked into the
+      # devenv image (kube-devenv ships ansible-core only) — installed here so
+      # a version bump is a kube-compute-only change. Both are no-ops (no
+      # network call beyond a version check) once the pinned version is
+      # already present, so this doesn't meaningfully slow down repeat applies.
+      ansible-galaxy collection install -r "${local.ansible_requirements_yml}"
+      pip3 install --quiet --break-system-packages -r "${local.ansible_requirements_txt}"
       EXTRA_VARS_FILE="$(mktemp)"
       trap 'rm -f "$EXTRA_VARS_FILE"' EXIT
       cat >"$EXTRA_VARS_FILE" <<'KUBE_COMPUTE_EXTRA_VARS_EOF'

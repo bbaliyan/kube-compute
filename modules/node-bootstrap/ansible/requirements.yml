@@ -1,0 +1,7 @@
+---
+# Ansible collections this module's connection plugins need. Installed by
+# node-bootstrap's own local-exec command before ansible-playbook runs —
+# not baked into kube-devenv, which ships ansible-core only.
+collections:
+  - name: amazon.aws
+    version: "11.4.0"

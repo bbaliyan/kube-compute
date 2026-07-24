@@ -6,7 +6,7 @@
     ":dependencyDashboard"
   ],
   "labels": ["renovate"],
-  "enabledManagers": ["terraform", "github-actions", "custom.regex"],
+  "enabledManagers": ["terraform", "github-actions", "custom.regex", "ansible-galaxy", "pip_requirements"],
   "customManagers": [
     {
       "customType": "regex",
