@@ -180,6 +180,23 @@ write_files:
       status "stage-0:os-prep"
       dnf makecache
       dnf install -y ca-certificates curl
+      # kernel-modules-extra: AlmaLinux 10's minimal cloud image ships only
+      # kernel-modules-core, which excludes nft_compat (the iptables-nft
+      # legacy translation shim, CONFIG_NFT_COMPAT=m upstream but not part of
+      # the minimal set — reasonable for a minimal image, since most modern
+      # tooling talks to nft directly). Cilium's default VXLAN tunnel mode
+      # still installs its tunnel-accept rule via classic iptables syntax
+      # (`-p udp --dport 8472 ... -j ACCEPT`), which needs nft_compat to
+      # translate. Without it, Cilium's iptables reconciliation fails
+      # continuously and any pod needing fresh routing state (freshly
+      # created/recreated) becomes unreachable via routed host/pod traffic —
+      # confirmed on cluster-1. Installing it here keeps Cilium on its
+      # portable tunnel-mode default (needed for multi-node topologies where
+      # nodes aren't on a routable L2/L3, e.g. AWS across subnets/AZs) rather
+      # than switching to native routing, which isn't a uniform fit across
+      # this project's providers.
+      dnf install -y kernel-modules-extra-"$(uname -r)"
+      modprobe nft_compat
       # br_netfilter and overlay are RHEL-family prerequisites for any CNI (every
       # RKE2/kubeadm RHEL install guide calls for this explicitly) — carried over
       # from the previous Ubuntu template rather than the previous AL2023 template,
