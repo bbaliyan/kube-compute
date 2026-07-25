@@ -39,12 +39,13 @@ locals {
   EOT
 
   # repoServer/controller resources + probe timeouts: upstream defaults are
-  # zero resource requests (BestEffort QoS) and a 1s probe timeoutSeconds. A
-  # BestEffort pod with a 1s probe deadline has no guaranteed CPU share on a
-  # small single-node box, so it's one contention scenario away from a
-  # kubelet-driven restart loop — not observed directly, but cheap insurance
-  # for genesis's first-boot install before Argo CD can even self-heal from
-  # kube-platform's matching override. Kept in sync with
+  # zero resource requests (BestEffort QoS) and a 1s probe timeoutSeconds.
+  # Sizing matches the small-cluster figures generally quoted in the Argo CD
+  # community (there is no single official Argo CD sizing table — checked the
+  # HA doc, the argocd-operator docs, and third-party performance guides
+  # directly; none prescribe defaults), cross-checked against a real
+  # measurement on cluster-1 where application-controller sat around 500Mi
+  # reconciling the full ~17-app platform tree. Kept in sync with
   # bootstrap/templates/argocd-app.yaml in kube-platform.
   argocd_values_yaml = <<-EOT
     configs:
@@ -53,10 +54,10 @@ locals {
     repoServer:
       resources:
         requests:
-          cpu: 200m
-          memory: 256Mi
+          cpu: 100m
+          memory: 128Mi
         limits:
-          cpu: 1000m
+          cpu: 500m
           memory: 512Mi
       readinessProbe:
         timeoutSeconds: 5
@@ -65,17 +66,13 @@ locals {
         timeoutSeconds: 5
         failureThreshold: 5
     controller:
-      # 512Mi OOM-killed the controller in practice once it was reconciling
-      # the full platform app-of-apps tree (~17 child Applications) —
-      # confirmed on cluster-1, kept in sync with kube-platform's
-      # argocd-app.yaml.
       resources:
         requests:
           cpu: 250m
-          memory: 512Mi
+          memory: 256Mi
         limits:
           cpu: 1000m
-          memory: 2Gi
+          memory: 1Gi
       readinessProbe:
         timeoutSeconds: 5
         failureThreshold: 5
