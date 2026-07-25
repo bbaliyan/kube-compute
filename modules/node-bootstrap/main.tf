@@ -83,6 +83,19 @@ resource "null_resource" "ansible_bootstrap" {
 
     command = <<-EOT
       set -euo pipefail
+      # This provisioner's own live console output is unconditionally
+      # suppressed by Terraform/OpenTofu the moment ANY value in this
+      # resource's config touches something sensitive (CLUSTER_TOKEN etc.
+      # below) — a static, config-level decision, not based on what the
+      # command actually prints. Ansible's own console output is already
+      # secret-safe (every secret-touching task in the role sets
+      # no_log: true), so mirror everything to a local logfile the operator
+      # can `tail -f` from a second terminal for live progress during a long
+      # apply — no change to how secrets flow, nothing new written that
+      # wasn't already safe to print.
+      BOOTSTRAP_LOG="/tmp/kube-compute-bootstrap-${var.node_name}.log"
+      exec > >(tee "$BOOTSTRAP_LOG") 2>&1
+      echo "kube-compute: bootstrap log for ${var.node_name} -> $BOOTSTRAP_LOG"
       # Force a locale Ansible/Python can always initialize, regardless of
       # what the calling shell forwards in (e.g. a host terminal's
       # en_US.UTF-8 that isn't installed in this container) — kube-devenv

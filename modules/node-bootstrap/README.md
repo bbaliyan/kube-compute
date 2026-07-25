@@ -40,6 +40,22 @@ functionality-regression window on `kube-compute` main's working baseline.
 Until that lands, `cloud-init` remains the module actually wired into every
 provider module; this module is a new, independently validated build.
 
+## Watching progress during a real apply
+
+Terraform/OpenTofu unconditionally suppresses this provisioner's own live
+console output ("output suppressed due to sensitive value in config") the
+moment any value in this resource's config touches something sensitive
+(`CLUSTER_TOKEN` etc.) — a static, config-level decision, not based on what
+the command actually prints. The full output still surfaces if the command
+*fails* (it's part of the error diagnostic), just not while it's running.
+
+For live progress during a long apply, `tail -f` the `bootstrap_log_path`
+output (`/tmp/kube-compute-bootstrap-<node_name>.log` on whatever machine
+runs `terragrunt apply`) from a second terminal. It's a plain mirror of the
+same output Ansible would print anyway — every secret-touching task in the
+role already sets `no_log: true`, so nothing new or sensitive lands there
+that wasn't already safe to display.
+
 ## Interface notes
 
 - `ansible_playbook_path` mirrors `cloud-init`'s `cloud_init_template`
