@@ -37,10 +37,23 @@
     set -euo pipefail
     dnf makecache
     dnf install -y ca-certificates curl
-    printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
-    printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\nnet.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-rke2-bridge.conf
-    modprobe br_netfilter
+    # RHEL10-family kernels (6.12+, confirmed on AlmaLinux 10) dropped the
+    # legacy br_netfilter module entirely — bridged traffic is filtered
+    # natively via nftables' bridge-family hooks (nf_conntrack_bridge et al,
+    # auto-loaded with the bridge module), so there's no module to load and
+    # no bridge-nf-call-iptables/-ip6tables knob to set on those kernels.
+    # RHEL9-family kernels still ship br_netfilter and need both.
+    if modinfo br_netfilter >/dev/null 2>&1; then
+      printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
+      modprobe br_netfilter
+    else
+      printf 'overlay\n' >/etc/modules-load.d/rke2.conf
+    fi
     modprobe overlay
+    printf 'net.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-rke2-bridge.conf
+    if [ -d /proc/sys/net/bridge ]; then
+      printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\n' >>/etc/sysctl.d/98-rke2-bridge.conf
+    fi
     sysctl --system
   args:
     creates: /etc/modules-load.d/rke2.conf
@@ -167,12 +180,34 @@
     mode: "0700"
   when: node_role in ["server-init", "server-join"]
 
-- name: server-init/server-join | render the Cilium HelmChart manifest
-  ansible.builtin.template:
-    src: cilium-helmchart.yaml.j2
+# Genesis-only (Ticket 04): Cilium is a cluster-wide DaemonSet/Deployment,
+# not per-node state — a joining server doesn't need it re-applied, it just
+# needs the cluster to already have it. Rendered via `helm template` — never
+# RKE2's HelmChart CRD (Ticket 01): a HelmChart CR's finalizer runs
+# `helm uninstall` on deletion with no supported way to avoid it, which would
+# fight (and later block handing off to) Argo CD-native management.
+#
+# The actual `helm template` render happens in node-bootstrap's own main.tf,
+# in the shell script that invokes ansible-playbook — not here as a
+# `delegate_to: localhost` task. That was tried first and failed: this
+# module's own extra-vars set ansible_connection/ansible_host as plain
+# (non-host-scoped) vars, and Ansible's extra-vars ALWAYS win over even
+# task-level `vars:` overrides (documented precedence), so `delegate_to:
+# localhost` silently resolved back to the target node instead of the
+# control machine and failed with "helm: not found" there — confirmed via a
+# real cluster-1 apply. `helm template` needs no cluster/network access at
+# all (pure local rendering from chart + values), so rendering it in the
+# wrapping shell script — unambiguously the operator machine — sidesteps
+# Ansible's connection model entirely; this task's only job is a plain copy
+# of the already-rendered file, which `copy` always reads from the control
+# machine regardless of connection settings. See Tickets 01/05/06 of
+# .scratch/cilium-argocd-gitops-handoff/map.md in the kube-claude repo.
+- name: server-init | write the rendered Cilium manifest
+  ansible.builtin.copy:
+    src: "/tmp/kube-compute-cilium-manifest-{{ node_name }}.yaml"
     dest: /var/lib/rancher/rke2/server/manifests/cilium.yaml
     mode: "0600"
-  when: node_role in ["server-init", "server-join"] and cni == "cilium"
+  when: node_role == "server-init" and cni == "cilium"
 
 - name: server-init/server-join | write extra server manifests
   ansible.builtin.copy:
@@ -297,10 +332,20 @@
     mode: "0755"
   when: node_role == "server-init" and gitops_platform_repo_url | length > 0
 
-- name: gitops | render the Argo CD HelmChart manifest
-  ansible.builtin.template:
-    src: argocd-helmchart.yaml.j2
-    dest: /etc/kube-compute/manifests/00-argocd-helmchart.yaml
+# Rendered via `helm template` in node-bootstrap's own main.tf (the shell
+# script that invokes ansible-playbook), not a `delegate_to: localhost` task
+# here — same reasoning and the same real bug found via a `cluster-1` apply
+# as Cilium's genesis install above. Genesis only needs *a* working pinned
+# Argo CD version, not the consumer's target version (Ticket 02): Argo CD
+# upgrading itself in place is ordinary, low-risk operation, unlike a CNI
+# swap — so kube-platform's own self-managing Application is what carries
+# the consumer's chosen version going forward, not this genesis step. See
+# Tickets 01/02/05/06 of .scratch/cilium-argocd-gitops-handoff/map.md in the
+# kube-claude repo.
+- name: gitops | write the rendered Argo CD manifest (Namespace + chart)
+  ansible.builtin.copy:
+    src: "/tmp/kube-compute-argocd-manifest-{{ node_name }}.yaml"
+    dest: /etc/kube-compute/manifests/00-argocd.yaml
     mode: "0644"
   when: node_role == "server-init" and gitops_platform_repo_url | length > 0
 
@@ -312,10 +357,19 @@
   when: node_role == "server-init" and gitops_platform_repo_url | length > 0
   no_log: true
 
-- name: gitops | apply the Argo CD HelmChart manifest
+- name: gitops | apply the Argo CD manifest
+  # --server-side is required, not stylistic: a plain (client-side) apply
+  # stores the whole previous config in a last-applied-configuration
+  # annotation for 3-way merging, and Argo CD's own applicationsets.argoproj.io
+  # CRD is large enough to exceed Kubernetes' 262144-byte annotation-size
+  # limit — confirmed via a real cluster-1 apply ("metadata.annotations: Too
+  # long"). Server-side apply uses field-manager metadata instead of that
+  # annotation, sidestepping the limit entirely — the same mechanism this
+  # project already relies on for kube-platform's own Applications
+  # (ServerSideApply=true), just invoked via kubectl's own flag here.
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
-    apply -f /etc/kube-compute/manifests/00-argocd-helmchart.yaml
+    apply --server-side -f /etc/kube-compute/manifests/00-argocd.yaml
   when: node_role == "server-init" and gitops_platform_repo_url | length > 0
 
 - name: gitops | wait for argocd-server to be ready

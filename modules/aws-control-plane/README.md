@@ -94,9 +94,14 @@ platform bootstrap manifests are never applied — and never race — on more th
 
 ## Container Network Interface (CNI)
 
-`cni` is `null` by default, which auto-resolves to `"cilium"` for `control_plane_count > 1`
-(HA clusters, for better network policy capabilities) and `"flannel"` for `control_plane_count = 1`
-(single-node clusters, for simplicity). You can override with an explicit value. The cluster
+`cni` is `null` by default, which resolves to `"cilium"` regardless of topology. `"default"`
+(Canal/flannel+Calico) remains selectable but is not viable on AlmaLinux 10, this project's
+only supported OS: its kernel dropped the legacy `br_netfilter`/`xt_conntrack`/`xt_comment`
+modules that flannel and Felix's iptables dataplane both hard-require — confirmed via a real
+apply, not a theoretical concern. It's kept as an escape hatch for a consumer-supplied
+playbook targeting a different OS. On a single-node cluster (`control_plane_count = 1`), the
+Cilium operator's replica count is set to `1` (rather than the chart default of `2`) so the
+second replica doesn't sit permanently `Pending` with nowhere to schedule. The cluster
 security group's self-referencing all-protocol rule already covers every CNI's control-plane and
 pod-to-pod traffic; switching `cni` never requires a security-group change, and no per-CNI ingress
 rules are created by this module.
@@ -136,7 +141,7 @@ IMDSv2 is enforced. Operator access to the node is via AWS SSM (the IAM role att
 
 See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing
 is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `root_volume_type`.
-`os_image_ami_id` defaults to the latest AlmaLinux 9 for the derived architecture.
+`os_image_ami_id` defaults to the latest AlmaLinux 10 for the derived architecture.
 
 ## Outputs
 

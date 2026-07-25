@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 variables {
-  cloud_init_template = "templates/cloud-init-almalinux-9.yaml.tpl"
+  cloud_init_template = "templates/cloud-init-almalinux-10.yaml.tpl"
 }
 
 run "server_init_default_uses_etcd" {
@@ -77,7 +77,7 @@ run "worker_role_renders_agent_join" {
     node_role                 = "worker"
     registration_address      = "10.0.1.5"
     agent_token_fetch_command = "aws ssm get-parameter --name /kube-compute/test1/agent-token --with-decryption --query Parameter.Value --output text --region eu-west-1"
-    node_labels                = { "topology.kubernetes.io/zone" = "eu-west-1a" }
+    node_labels               = { "topology.kubernetes.io/zone" = "eu-west-1a" }
   }
 
   assert {
@@ -202,10 +202,14 @@ run "argo_manifests_only_on_server_init" {
     registration_address     = "10.0.1.10"
     cluster_token            = "cluster-secret-argo"
     gitops_platform_repo_url = "https://github.com/example/kube-platform.git"
+    # Isolate this assertion from Cilium's own (legitimately server-join-rendered)
+    # HelmChart manifest — both features emit "kind: HelmChart", so this test
+    # scopes to Argo's own unique chart identifier instead of the generic kind.
+    cni = "default"
   }
 
   assert {
-    condition     = !strcontains(nonsensitive(output.cloud_init), "kind: HelmChart")
+    condition     = !strcontains(nonsensitive(output.cloud_init), "chart: argo-cd")
     error_message = "Argo/platform bootstrap manifests must never render for server-join, even if gitops_platform_repo_url is set — they belong on the first server only"
   }
 }

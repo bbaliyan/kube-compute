@@ -12,9 +12,12 @@ locals {
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
 
-  control_plane_taint              = var.cluster_type == "dedicated_control_plane"
-  effective_cni                    = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "default")
-  effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
+  control_plane_taint = var.cluster_type == "dedicated_control_plane"
+  effective_cni       = coalesce(var.cni, "cilium")
+  # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one
+  # replica permanently Pending on a genuinely single-node cluster.
+  effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
+  effective_etcd_snapshots_enabled   = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   # Null for control_plane_count = 1 (no registration endpoint), the VIP otherwise.
   registration_address = var.control_plane_count == 1 ? null : var.control_plane_vip_address
@@ -49,6 +52,17 @@ locals {
   # "primary" key produced an unbindable ifcfg-primary (DEVICE=primary,
   # no real interface has that name) that NetworkManager silently left
   # inactive, never erroring, while its own auto-DHCP profile stayed up.
+  #
+  # NOT independently re-verified against AlmaLinux 10 (the template this
+  # module now points at) — both bugs live in cloud-init/NetworkManager
+  # internals and the GenericCloud kernel cmdline convention, not RKE2, so
+  # they're likely unchanged, but that's an assumption. Both workarounds are
+  # a superset of what stock config would need (explicit CIDR strictly
+  # generalizes "default"; keying "eth0" directly only breaks if AlmaLinux 10
+  # switched to predictable ens*/enp* naming) — confirm on a real Proxmox
+  # apply against AlmaLinux 10 before relying on this in production, and
+  # revert to a "match: {name: en*}" primary key if it turns out AlmaLinux 10
+  # NIC naming did change.
   network_data_static = { for i, cidr in local.cp_ip_cidrs : i => <<-EOT
     version: 2
     ethernets:
@@ -277,6 +291,7 @@ module "node_bootstrap" {
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
+  cilium_operator_replicas       = local.effective_cilium_operator_replicas
   cluster_token                  = random_password.server_token.result
   cluster_agent_token            = random_password.agent_token.result
   registration_address           = local.registration_address
@@ -302,7 +317,32 @@ module "node_bootstrap" {
     ansible_host                 = local.cp_ips["0"]
     ansible_user                 = var.ansible_ssh_user
     ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
-    ansible_ssh_common_args      = "-o StrictHostKeyChecking=accept-new"
+    # UserKnownHostsFile=/dev/null makes every connection start from a blank
+    # known_hosts, so accept-new always succeeds regardless of what a prior
+    # incarnation of this node presented at the same IP — this project's
+    # clusters are deliberately disposable (destroy/recreate at a stable
+    # static IP is the normal operating model, not an edge case), so a
+    # rotated host key on every recreate is expected, not suspicious. Without
+    # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
+    # the operator's real known_hosts and requires a manual `ssh-keygen -R`
+    # before every apply — confirmed hitting this repeatedly against a real
+    # cluster-1 destroy/recreate cycle. Deliberate trade-off, confirmed with
+    # the user: still verifies the key isn't swapped mid-apply, but gives up
+    # host-key continuity *across* destroy/recreate cycles — acceptable here
+    # since the disposable-cluster model already discards that continuity by
+    # design once a node is destroyed. Nothing is written to the operator's
+    # real ~/.ssh/known_hosts either way.
+    ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
+    # Pinned rather than left to Ansible's auto-discovery: every node this
+    # project targets is always AlmaLinux 10 (this project's only supported
+    # OS, no compatibility claim for others), so there's nothing to actually
+    # discover, and pinning avoids the "future installation of another Python
+    # interpreter could cause a different interpreter to be discovered"
+    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
+    # symlink to whatever the current default Python actually is (3.12 as of
+    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
+    # OS bump doesn't silently break this.
+    ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 
@@ -326,6 +366,7 @@ module "node_bootstrap_additional" {
   node_role                   = "server-join"
   control_plane_taint         = local.control_plane_taint
   cni                         = local.effective_cni
+  cilium_operator_replicas    = local.effective_cilium_operator_replicas
   registration_address        = local.registration_address
   extra_tls_sans              = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   etcd_snapshot_enabled       = local.effective_etcd_snapshots_enabled
@@ -344,7 +385,32 @@ module "node_bootstrap_additional" {
     ansible_host                 = local.cp_ips[each.key]
     ansible_user                 = var.ansible_ssh_user
     ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
-    ansible_ssh_common_args      = "-o StrictHostKeyChecking=accept-new"
+    # UserKnownHostsFile=/dev/null makes every connection start from a blank
+    # known_hosts, so accept-new always succeeds regardless of what a prior
+    # incarnation of this node presented at the same IP — this project's
+    # clusters are deliberately disposable (destroy/recreate at a stable
+    # static IP is the normal operating model, not an edge case), so a
+    # rotated host key on every recreate is expected, not suspicious. Without
+    # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
+    # the operator's real known_hosts and requires a manual `ssh-keygen -R`
+    # before every apply — confirmed hitting this repeatedly against a real
+    # cluster-1 destroy/recreate cycle. Deliberate trade-off, confirmed with
+    # the user: still verifies the key isn't swapped mid-apply, but gives up
+    # host-key continuity *across* destroy/recreate cycles — acceptable here
+    # since the disposable-cluster model already discards that continuity by
+    # design once a node is destroyed. Nothing is written to the operator's
+    # real ~/.ssh/known_hosts either way.
+    ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
+    # Pinned rather than left to Ansible's auto-discovery: every node this
+    # project targets is always AlmaLinux 10 (this project's only supported
+    # OS, no compatibility claim for others), so there's nothing to actually
+    # discover, and pinning avoids the "future installation of another Python
+    # interpreter could cause a different interpreter to be discovered"
+    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
+    # symlink to whatever the current default Python actually is (3.12 as of
+    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
+    # OS bump doesn't silently break this.
+    ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 variables {
-  cloud_init_template = "templates/cloud-init-almalinux-9.yaml.tpl"
+  cloud_init_template = "templates/cloud-init-almalinux-10.yaml.tpl"
 }
 
 run "with_ca_and_mirror" {

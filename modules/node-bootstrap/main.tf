@@ -1,6 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
+module "component_versions" {
+  source = "../component-versions"
+}
+
 locals {
   playbook_path = coalesce(var.ansible_playbook_path, "${path.module}/ansible/playbook.yml")
+
+  # Callers (aws-control-plane, proxmox-control-plane, ...) don't pass these
+  # through today, unlike k8s_version — falling back to "" (empty string)
+  # rendered a real, live "version: """ into the Cilium HelmChart CR on a
+  # cluster-1 apply (Helm/RKE2 silently treats that as "latest" rather than
+  # erroring). Resolve here instead, matching cloud-init's existing pattern.
+  cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
+  argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
+
+  # Cilium/Argo CD genesis values, computed as plain Terraform strings (never
+  # embedded as a literal bash heredoc — see the long comment on the
+  # local-exec command below for why: a heredoc nested inside this
+  # provisioner's own outer heredoc, itself invoked via `bash -c` after an
+  # `exec > >(tee ...)` redirect, could not be reliably reproduced as safe
+  # across environments during testing, so the whole class of risk is
+  # avoided by base64-encoding these instead of writing them as heredocs at
+  # all). `%{ if ~}` here is evaluated by Terraform itself, not by bash, so
+  # none of the heredoc/quoting concerns apply to these locals themselves.
+  cilium_values_yaml = <<-EOT
+    kubeProxyReplacement: true
+    k8sServiceHost: "127.0.0.1"
+    k8sServicePort: 6443
+    operator:
+    %{~if var.cilium_operator_replicas != null~}
+      replicas: ${var.cilium_operator_replicas}
+    %{~endif~}
+      tolerations:
+        - operator: Exists
+    ipam:
+      operator:
+        clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
+  EOT
+
+  argocd_values_yaml = <<-EOT
+    configs:
+      params:
+        server.insecure: "true"
+  EOT
 
   # Bundled alongside this module's own playbook/roles, not the (possibly
   # overridden) playbook_path — these pin the connection-plugin dependencies
@@ -22,7 +64,8 @@ locals {
     registration_address                = var.registration_address != null ? var.registration_address : ""
     extra_tls_sans                      = var.extra_tls_sans
     cni                                 = var.cni
-    cilium_version                      = var.cilium_version != null ? var.cilium_version : ""
+    cilium_version                      = local.cilium_version
+    cilium_operator_replicas            = var.cilium_operator_replicas != null ? var.cilium_operator_replicas : 0
     registry_mirror_url                 = var.registry_mirror_url != null ? var.registry_mirror_url : ""
     etcd_snapshot_enabled               = var.etcd_snapshot_enabled
     etcd_snapshot_schedule_cron         = var.etcd_snapshot_schedule_cron
@@ -34,7 +77,7 @@ locals {
     node_labels                         = var.node_labels
     extra_server_manifests              = var.extra_server_manifests
     gitops_platform_repo_url            = var.gitops_platform_repo_url != null ? var.gitops_platform_repo_url : ""
-    argocd_version                      = var.argocd_version != null ? var.argocd_version : ""
+    argocd_version                      = local.argocd_version
     gitops_platform_revision            = var.gitops_platform_revision
     gitops_workloads_repo_url           = var.gitops_workloads_repo_url != null ? var.gitops_workloads_repo_url : ""
     gitops_workloads_revision           = var.gitops_workloads_revision
@@ -110,6 +153,41 @@ resource "null_resource" "ansible_bootstrap" {
       # already present, so this doesn't meaningfully slow down repeat applies.
       ansible-galaxy collection install -r "${local.ansible_requirements_yml}"
       pip3 install --quiet --break-system-packages -r "${local.ansible_requirements_txt}"
+      # Cilium/Argo CD are rendered HERE — in this script, unambiguously the
+      # operator machine — rather than via an Ansible `delegate_to: localhost`
+      # task. That was tried first and failed: this module's own extra-vars
+      # set ansible_connection/ansible_host as plain (non-host-scoped) vars,
+      # and Ansible's extra-vars ALWAYS win over even task-level `vars:`
+      # overrides (documented precedence — extra-vars beat everything), so
+      # `delegate_to: localhost` silently resolved back to the target node
+      # instead of the control machine, and failed with "helm: not found"
+      # there. `helm template` needs no cluster/network access at all — pure
+      # local rendering from chart + values — so rendering here, before
+      # ansible-playbook even runs, sidesteps Ansible's connection model
+      # entirely. Ansible's own job becomes a plain `copy` of the
+      # already-rendered file (copy's src is always read from the control
+      # machine, no delegation involved). See Tickets 01/05 of
+      # .scratch/cilium-argocd-gitops-handoff/map.md in the kube-claude repo
+      # for why RKE2's own HelmChart CRD isn't used instead.
+      %{if var.cni == "cilium" && var.node_role == "server-init"~}
+      CILIUM_VALUES="$(mktemp)"
+      echo "${base64encode(local.cilium_values_yaml)}" | base64 -d >"$CILIUM_VALUES"
+      helm template cilium cilium --repo https://helm.cilium.io/ --version "${local.cilium_version}" --namespace kube-system --include-crds -f "$CILIUM_VALUES" >"/tmp/kube-compute-cilium-manifest-${var.node_name}.yaml"
+      rm -f "$CILIUM_VALUES"
+      %{endif~}
+      %{if var.gitops_platform_repo_url != null && var.node_role == "server-init"~}
+      ARGOCD_VALUES="$(mktemp)"
+      echo "${base64encode(local.argocd_values_yaml)}" | base64 -d >"$ARGOCD_VALUES"
+      {
+        echo "apiVersion: v1"
+        echo "kind: Namespace"
+        echo "metadata:"
+        echo "  name: argocd"
+        echo "---"
+        helm template argocd argo-cd --repo https://argoproj.github.io/argo-helm --version "${local.argocd_version}" --namespace argocd --include-crds -f "$ARGOCD_VALUES"
+      } >"/tmp/kube-compute-argocd-manifest-${var.node_name}.yaml"
+      rm -f "$ARGOCD_VALUES"
+      %{endif~}
       EXTRA_VARS_FILE="$(mktemp)"
       trap 'rm -f "$EXTRA_VARS_FILE"' EXIT
       cat >"$EXTRA_VARS_FILE" <<'KUBE_COMPUTE_EXTRA_VARS_EOF'

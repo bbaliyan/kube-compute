@@ -4,8 +4,9 @@ cluster_fqdn: ""
 registration_address: ""
 extra_tls_sans: []
 control_plane_taint: false
-cni: "default"
+cni: "cilium"
 cilium_version: ""
+cilium_operator_replicas: 0
 registry_mirror_url: ""
 etcd_snapshot_enabled: false
 etcd_snapshot_schedule_cron: "0 */12 * * *"

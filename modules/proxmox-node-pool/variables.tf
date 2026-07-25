@@ -2,7 +2,7 @@
 
 # ---- Common inputs (pass through to node-bootstrap) ----
 variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 9 playbook."
+  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 10 playbook."
   type        = string
   default     = null
 }
@@ -14,7 +14,7 @@ variable "ansible_ssh_private_key_file" {
 }
 
 variable "ansible_ssh_user" {
-  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 9 image."
+  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 10 image."
   type        = string
   default     = "almalinux"
 }

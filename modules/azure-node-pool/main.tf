@@ -4,10 +4,10 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-10.yaml.tpl")
 
   # Azure-native delivery: raw IMDS + Key Vault REST calls, no az CLI dependency (see
-  # azure-control-plane's design note 6 — AlmaLinux 9 is not guaranteed to ship the Azure CLI, but
+  # azure-control-plane's design note 6 — AlmaLinux 10 is not guaranteed to ship the Azure CLI, but
   # curl + python3 are always present). cloud-init only ever sees an opaque command it
   # executes at boot, never the Key Vault API itself.
   agent_token_fetch_command = "TOKEN=$(curl -s -H Metadata:true \"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access_token\"])') && curl -s -H \"Authorization: Bearer $TOKEN\" \"https://${var.key_vault_name}.vault.azure.net/secrets/${var.agent_token_secret_name}?api-version=7.4\" | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"value\"])'"
@@ -27,7 +27,7 @@ locals {
   image_parts     = var.os_image_urn != null ? split(":", var.os_image_urn) : []
   image_publisher = var.os_image_urn != null ? local.image_parts[0] : "almalinux"
   image_offer     = var.os_image_urn != null ? local.image_parts[1] : "almalinux-x86_64"
-  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "9-gen2"
+  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "10-gen2"
   image_version   = var.os_image_urn != null ? local.image_parts[3] : "latest"
 
   common_tags = merge(var.extra_tags, {

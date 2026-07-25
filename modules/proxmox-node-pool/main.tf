@@ -33,7 +33,9 @@ locals {
   # NetworkManager renderer doesn't honor `match` at all — it writes the
   # config's key verbatim as DEVICE=, so "primary" produced an unbindable
   # connection NetworkManager silently left inactive. See
-  # proxmox-control-plane's matching local for the full explanation.
+  # proxmox-control-plane's matching local for the full explanation, including
+  # the caveat that this hasn't been independently re-verified against
+  # AlmaLinux 10 (the template this module now points at).
   network_data_static = { for i in range(var.desired_count) : tostring(i) => local.static_ips ? <<-EOT
     version: 2
     ethernets:
@@ -235,7 +237,32 @@ module "node_bootstrap" {
     ansible_host                 = local.worker_ips[each.key]
     ansible_user                 = var.ansible_ssh_user
     ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
-    ansible_ssh_common_args      = "-o StrictHostKeyChecking=accept-new"
+    # UserKnownHostsFile=/dev/null makes every connection start from a blank
+    # known_hosts, so accept-new always succeeds regardless of what a prior
+    # incarnation of this node presented at the same IP — this project's
+    # clusters are deliberately disposable (destroy/recreate at a stable
+    # static IP is the normal operating model, not an edge case), so a
+    # rotated host key on every recreate is expected, not suspicious. Without
+    # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
+    # the operator's real known_hosts and requires a manual `ssh-keygen -R`
+    # before every apply — confirmed hitting this repeatedly against a real
+    # cluster-1 destroy/recreate cycle. Deliberate trade-off, confirmed with
+    # the user: still verifies the key isn't swapped mid-apply, but gives up
+    # host-key continuity *across* destroy/recreate cycles — acceptable here
+    # since the disposable-cluster model already discards that continuity by
+    # design once a node is destroyed. Nothing is written to the operator's
+    # real ~/.ssh/known_hosts either way.
+    ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
+    # Pinned rather than left to Ansible's auto-discovery: every node this
+    # project targets is always AlmaLinux 10 (this project's only supported
+    # OS, no compatibility claim for others), so there's nothing to actually
+    # discover, and pinning avoids the "future installation of another Python
+    # interpreter could cause a different interpreter to be discovered"
+    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
+    # symlink to whatever the current default Python actually is (3.12 as of
+    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
+    # OS bump doesn't silently break this.
+    ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 

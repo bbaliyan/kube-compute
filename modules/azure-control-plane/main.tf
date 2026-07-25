@@ -4,7 +4,7 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-9.yaml.tpl")
+  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-10.yaml.tpl")
 
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
@@ -17,9 +17,12 @@ locals {
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
   create_record = local.has_domain && var.dns_zone_resource_group != null
 
-  control_plane_taint              = var.cluster_type == "dedicated_control_plane"
-  effective_cni                    = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "default")
-  effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
+  control_plane_taint = var.cluster_type == "dedicated_control_plane"
+  effective_cni       = coalesce(var.cni, "cilium")
+  # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one
+  # replica permanently Pending on a genuinely single-node cluster.
+  effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
+  effective_etcd_snapshots_enabled   = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   # Kv name: 24-char Azure limit, globally unique — 18 chars of cluster_name (hyphens
   # stripped; Key Vault names are alphanumeric-and-hyphen but a plain alnum body keeps this
@@ -27,11 +30,11 @@ locals {
   kv_name = "${substr("kv${replace(var.cluster_name, "-", "")}", 0, 18)}${random_string.kv_suffix.result}"
 
   # OS image: split a user-provided URN (Publisher:Offer:SKU:Version) or default to
-  # AlmaLinux 9 gen2, same convention as node-azure.
+  # AlmaLinux 10 gen2, same convention as node-azure.
   image_parts     = var.os_image_urn != null ? split(":", var.os_image_urn) : []
   image_publisher = var.os_image_urn != null ? local.image_parts[0] : "almalinux"
   image_offer     = var.os_image_urn != null ? local.image_parts[1] : "almalinux-x86_64"
-  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "9-gen2"
+  image_sku       = var.os_image_urn != null ? local.image_parts[2] : "10-gen2"
   image_version   = var.os_image_urn != null ? local.image_parts[3] : "latest"
 
   # Null for control_plane_count = 1 (no registration endpoint); the internal
@@ -241,6 +244,7 @@ module "bootstrap" {
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
+  cilium_operator_replicas       = local.effective_cilium_operator_replicas
   cluster_token                  = random_password.server_token.result
   cluster_agent_token            = random_password.agent_token.result
   registration_address           = local.registration_address
@@ -314,6 +318,7 @@ module "bootstrap_additional" {
   node_role                   = "server-join"
   control_plane_taint         = local.control_plane_taint
   cni                         = local.effective_cni
+  cilium_operator_replicas    = local.effective_cilium_operator_replicas
   registration_address        = local.registration_address
   extra_tls_sans              = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   etcd_snapshot_enabled       = local.effective_etcd_snapshots_enabled

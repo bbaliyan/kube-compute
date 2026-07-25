@@ -2,7 +2,7 @@
 
 # ---- Common inputs (pass through to cloud-init) ----
 variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 9 template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 10 template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
   type        = string
   default     = null
 }
@@ -76,7 +76,7 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 and 'default' for control_plane_count = 1. Set explicitly to override."
+  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (confirmed via a real apply: flannel and Felix both hard-require kernel modules AlmaLinux 10 dropped). 'default' remains selectable as an escape hatch for a consumer-supplied playbook targeting a different OS. Set explicitly to override."
   type        = string
   default     = null
   validation {
@@ -176,7 +176,7 @@ variable "os_disk_type" {
 }
 
 variable "os_image_urn" {
-  description = "Azure Marketplace image URN in Publisher:Offer:SKU:Version format. The tested OS is AlmaLinux 9. Null = almalinux:almalinux-x86_64:9-gen2:latest. For arm64, pass almalinux:almalinux-arm:9-arm-gen2:latest (or another arm64-compatible SKU) explicitly. AlmaLinux's Marketplace listing requires one-time-per-subscription terms acceptance (`az vm image terms accept`) before first deploy — not automated by this module."
+  description = "Azure Marketplace image URN in Publisher:Offer:SKU:Version format. The tested OS is AlmaLinux 10. Null = almalinux:almalinux-x86_64:10-gen2:latest. For arm64, pass almalinux:almalinux-arm:10-arm-gen2:latest (or another arm64-compatible SKU) explicitly. AlmaLinux's Marketplace listing requires one-time-per-subscription terms acceptance (`az vm image terms accept`) before first deploy — not automated by this module."
   type        = string
   default     = null
 }

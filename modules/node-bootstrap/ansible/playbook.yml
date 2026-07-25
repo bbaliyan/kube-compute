@@ -1,8 +1,21 @@
 ---
 # SPDX-License-Identifier: Apache-2.0
-- name: RKE2 node bootstrap (AlmaLinux 9)
+- name: RKE2 node bootstrap (AlmaLinux 10)
   hosts: all
   gather_facts: true
   become: true
+  pre_tasks:
+    # Terraform triggers this play the moment the VM resource is created —
+    # that's the provider API call returning, not the guest OS having
+    # finished booting far enough for sshd to accept connections. Without
+    # this, the very first connection attempt (gather_facts's implicit
+    # "Gathering Facts" task) can race a still-booting VM and fail hard with
+    # "Connection refused", no retry. pre_tasks run before gather_facts,
+    # which is what makes this the standard Ansible fix for exactly this
+    # race — not a project-specific workaround.
+    - name: wait for SSH to become available
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: 300
   roles:
     - rke2_bootstrap

@@ -29,7 +29,7 @@ locals {
   # Arch from AWS's own metadata — covers all present and future instance types.
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
 
-  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.almalinux9[*].id)
+  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.almalinux10[*].id)
 
   # VPC ID resolved from vpc_name, or null when vpc_name is not provided.
   named_vpc_id = try(data.aws_vpc.named[0].id, null)
@@ -87,11 +87,17 @@ locals {
   # Durability default-on for HA, optional for single-node — null means "auto".
   effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
-  # CNI default is topology-aware — null means "auto": cilium for multi-node
-  # (control_plane_count > 1), flannel for single-node. Same "node pools are invisible to this
-  # module" caveat as control_plane_taint above: a 1-CP-plus-workers topology still resolves via
-  # control_plane_count alone, matching the existing etcd_snapshots_enabled precedent.
-  effective_cni = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "default")
+  # Cilium is the standard CNI regardless of topology (Canal/flannel's iptables/ipset
+  # dataplane is broken on AlmaLinux 10, this project's only supported OS — see
+  # node-bootstrap's cni variable). null means "use the default".
+  effective_cni = coalesce(var.cni, "cilium")
+
+  # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one replica
+  # permanently Pending on a genuinely single-node cluster. Same "node pools are
+  # invisible to this module" caveat as control_plane_taint above: a 1-CP-plus-workers
+  # topology still resolves via control_plane_count alone, matching the existing
+  # etcd_snapshots_enabled precedent.
+  effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
 
   # A bucket implies a region; default to aws_region so a caller doesn't have to repeat it.
   effective_etcd_snapshot_s3_region = var.etcd_snapshot_s3_bucket != null ? coalesce(var.etcd_snapshot_s3_region, var.aws_region) : null
@@ -265,6 +271,7 @@ module "node_bootstrap" {
   node_role                           = "server-init"
   control_plane_taint                 = local.control_plane_taint
   cni                                 = local.effective_cni
+  cilium_operator_replicas            = local.effective_cilium_operator_replicas
   cluster_token                       = random_password.server_token.result
   cluster_agent_token                 = random_password.agent_token.result
   registration_address                = local.registration_address
@@ -293,6 +300,16 @@ module "node_bootstrap" {
     ansible_aws_ssm_instance_id = aws_instance.control_plane.id
     ansible_aws_ssm_region      = var.aws_region
     ansible_aws_ssm_bucket_name = aws_s3_bucket.ansible_ssm.id
+    # Pinned rather than left to Ansible's auto-discovery: every node this
+    # project targets is always AlmaLinux 10 (this project's only supported
+    # OS, no compatibility claim for others), so there's nothing to actually
+    # discover, and pinning avoids the "future installation of another Python
+    # interpreter could cause a different interpreter to be discovered"
+    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
+    # symlink to whatever the current default Python actually is (3.12 as of
+    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
+    # OS bump doesn't silently break this.
+    ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 
@@ -323,6 +340,7 @@ module "node_bootstrap_additional" {
   node_role                           = "server-join"
   control_plane_taint                 = local.control_plane_taint
   cni                                 = local.effective_cni
+  cilium_operator_replicas            = local.effective_cilium_operator_replicas
   registration_address                = local.registration_address
   extra_tls_sans                      = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   etcd_snapshot_enabled               = local.effective_etcd_snapshots_enabled
@@ -345,6 +363,16 @@ module "node_bootstrap_additional" {
     ansible_aws_ssm_instance_id = aws_instance.control_plane_additional[each.key].id
     ansible_aws_ssm_region      = var.aws_region
     ansible_aws_ssm_bucket_name = aws_s3_bucket.ansible_ssm.id
+    # Pinned rather than left to Ansible's auto-discovery: every node this
+    # project targets is always AlmaLinux 10 (this project's only supported
+    # OS, no compatibility claim for others), so there's nothing to actually
+    # discover, and pinning avoids the "future installation of another Python
+    # interpreter could cause a different interpreter to be discovered"
+    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
+    # symlink to whatever the current default Python actually is (3.12 as of
+    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
+    # OS bump doesn't silently break this.
+    ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 
@@ -645,7 +673,7 @@ resource "aws_instance" "control_plane" {
   }
 
   lifecycle {
-    # Don't replace on AlmaLinux 9 AMI patch drift; remove to deliberately upgrade.
+    # Don't replace on AlmaLinux 10 AMI patch drift; remove to deliberately upgrade.
     ignore_changes = [ami]
 
     precondition {

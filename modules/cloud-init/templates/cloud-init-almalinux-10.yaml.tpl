@@ -1,5 +1,5 @@
 #cloud-config
-# RKE2 node bootstrap — AlmaLinux 9.
+# RKE2 node bootstrap — AlmaLinux 10.
 # Status is written to a local file and read out-of-band by the control-plane
 # verb-scripts (no inbound port). Stage sequence is fixed; optional stages emit
 # their status line even when their body is skipped.
@@ -72,31 +72,6 @@ write_files:
 %{ endif ~}
 %{ endif ~}
 %{ if gitops_platform_repo_url != null && node_role == "server-init" ~}
-  - path: /etc/kube-compute/manifests/00-argocd-helmchart.yaml
-    permissions: "0644"
-    owner: root:root
-    content: |
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: argocd
-      ---
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: argocd
-        namespace: kube-system
-      spec:
-        repo: https://argoproj.github.io/argo-helm
-        chart: argo-cd
-        version: "${argocd_version}"
-        targetNamespace: argocd
-        createNamespace: false
-        valuesContent: |-
-          configs:
-            params:
-              # Deliberate: TLS terminates upstream (ingress / load balancer); Argo CD serves plain HTTP behind it.
-              server.insecure: "true"
   - path: /etc/kube-compute/manifests/10-platform-app.yaml
     permissions: "0644"
     owner: root:root
@@ -144,44 +119,6 @@ write_files:
           automated: { prune: true, selfHeal: true }
           syncOptions: ["CreateNamespace=true"]
 %{ endif ~}
-%{ if cni == "cilium" && (node_role == "server-init" || node_role == "server-join") ~}
-  - path: /var/lib/rancher/rke2/server/manifests/cilium.yaml
-    permissions: "0600"
-    owner: root:root
-    content: |
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: cilium
-        namespace: kube-system
-      spec:
-        repo: https://helm.cilium.io/
-        chart: cilium
-        version: "${cilium_version}"
-        targetNamespace: kube-system
-        bootstrap: true
-        valuesContent: |-
-          kubeProxyReplacement: true
-          k8sServiceHost: "127.0.0.1"
-          k8sServicePort: 6443
-          # cilium-operator registers the CRDs cilium-agent waits on before it can
-          # start. cilium-agent's chart-default toleration is a genuine blanket
-          # one (key-less "Exists", matches every taint) — cilium-operator's
-          # defaults to empty. During bootstrap the node can carry more than one
-          # blocking taint at once: this project's own CriticalAddonsOnly (see
-          # control_plane_taint above) AND Kubernetes' own automatic
-          # node.kubernetes.io/not-ready, since the node can't report Ready until
-          # Cilium is actually running — a chicken-and-egg trap if the operator
-          # only tolerates one of them. Match cilium-agent's own blanket
-          # toleration exactly rather than enumerating individual taints one
-          # discovery at a time.
-          operator:
-            tolerations:
-              - operator: Exists
-          ipam:
-            operator:
-              clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
-%{ endif ~}
 %{ if node_role == "server-init" || node_role == "server-join" ~}
 %{ for name, content in extra_server_manifests ~}
   - path: /var/lib/rancher/rke2/server/manifests/${name}
@@ -204,6 +141,29 @@ write_files:
       mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$KUBECONFIG_OUT")"
       status() { echo "$1" >"$STATUS_FILE"; echo "[bootstrap] $1"; }
 
+      # Renders a Helm chart to plain Kubernetes YAML on stdout using a helm
+      # binary downloaded transiently for this one call and deleted
+      # immediately after — no persistent footprint on the node (unlike
+      # installing helm as an OS package, which this project deliberately
+      # avoids). Never wraps output in RKE2's own HelmChart CRD: that CR's
+      # finalizer runs `helm uninstall` on deletion with no supported way to
+      # avoid it, which would fight (and later block handing off to) Argo
+      # CD-native management. See
+      # .scratch/cilium-argocd-gitops-handoff/map.md in the kube-claude repo.
+      render_via_helm() {
+        local release="$1" chart="$2" repo="$3" version="$4" namespace="$5" values_file="$6"
+        local arch tmp
+        arch="$(uname -m)"
+        case "$arch" in
+          x86_64) arch="amd64" ;;
+          aarch64) arch="arm64" ;;
+        esac
+        tmp="$(mktemp -d)"
+        curl -sfL "https://get.helm.sh/helm-v4.2.2-linux-$arch.tar.gz" | tar -xz -C "$tmp"
+        "$tmp/linux-$arch/helm" template "$release" "$chart" --repo "$repo" --version "$version" --namespace "$namespace" --include-crds -f "$values_file"
+        rm -rf "$tmp"
+      }
+
       # RKE2 does not put its bundled kubectl on PATH by default (unlike K3s).
       export PATH="/var/lib/rancher/rke2/bin:$PATH"
 
@@ -220,15 +180,29 @@ write_files:
       status "stage-0:os-prep"
       dnf makecache
       dnf install -y ca-certificates curl
-      # br_netfilter and overlay are RHEL9-family prerequisites for any CNI (every
-      # RKE2/kubeadm RHEL9 install guide calls for this explicitly) — carried over
+      # br_netfilter and overlay are RHEL-family prerequisites for any CNI (every
+      # RKE2/kubeadm RHEL install guide calls for this explicitly) — carried over
       # from the previous Ubuntu template rather than the previous AL2023 template,
       # which omitted this step for reasons that were never verified. Cheap and
       # idempotent even if the modules turn out to already be loaded/built-in.
-      printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
-      printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\nnet.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-rke2-bridge.conf
-      modprobe br_netfilter
+      #
+      # RHEL10-family kernels (6.12+, confirmed on AlmaLinux 10) dropped the
+      # legacy br_netfilter module entirely — bridged traffic is filtered
+      # natively via nftables' bridge-family hooks (nf_conntrack_bridge et al,
+      # auto-loaded with the bridge module), so there's no module to load and
+      # no bridge-nf-call-iptables/-ip6tables knob to set on those kernels.
+      # RHEL9-family kernels still ship br_netfilter and need both.
+      if modinfo br_netfilter >/dev/null 2>&1; then
+        printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
+        modprobe br_netfilter
+      else
+        printf 'overlay\n' >/etc/modules-load.d/rke2.conf
+      fi
       modprobe overlay
+      printf 'net.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-rke2-bridge.conf
+      if [ -d /proc/sys/net/bridge ]; then
+        printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\n' >>/etc/sysctl.d/98-rke2-bridge.conf
+      fi
       sysctl --system
 
       status "stage-1:os-trust"
@@ -264,7 +238,7 @@ write_files:
         {
           echo '[rancher-rke2-common-stable]'
           echo 'name=Rancher RKE2 Common (stable)'
-          echo 'baseurl=https://rpm.rancher.io/rke2/stable/common/centos/9/noarch'
+          echo 'baseurl=https://rpm.rancher.io/rke2/stable/common/centos/10/noarch'
           echo 'enabled=1'
           echo 'gpgcheck=1'
           echo 'gpgkey=https://rpm.rancher.io/public.key'
@@ -342,6 +316,13 @@ write_files:
       %{~ if cni == "cilium" ~}
       cni: cilium
       disable-kube-proxy: true
+      # Without this, RKE2 installs its own bundled rke2-cilium addon (a
+      # separate HelmChart CR) alongside the genesis-rendered Cilium manifest
+      # below — both fighting over the same cilium-operator/cilium objects in
+      # kube-system. Confirmed via a real cluster-1 apply; see
+      # .scratch/cilium-argocd-gitops-handoff/map.md in the kube-claude repo.
+      disable:
+        - rke2-cilium
       %{~ endif ~}
       %{~ if etcd_snapshot_enabled ~}
       etcd-snapshot-schedule-cron: '${etcd_snapshot_schedule_cron}'
@@ -361,6 +342,18 @@ write_files:
       %{~ endif ~}
       %{~ endif ~}
       EOF
+      %{ if cni == "cilium" ~}
+      # Genesis-only (this project's server-join nodes never re-render this —
+      # Cilium is a cluster-wide DaemonSet/Deployment, not per-node state).
+      # Rendered via a transient helm binary (render_via_helm, defined above)
+      # rather than RKE2's own HelmChart CRD — see the comment on that
+      # function for why.
+      mkdir -p /var/lib/rancher/rke2/server/manifests
+      CILIUM_VALUES="$(mktemp)"
+      echo "${cilium_values_b64}" | base64 -d >"$CILIUM_VALUES"
+      render_via_helm cilium cilium https://helm.cilium.io/ "${cilium_version}" kube-system "$CILIUM_VALUES" >/var/lib/rancher/rke2/server/manifests/cilium.yaml
+      rm -f "$CILIUM_VALUES"
+      %{ endif ~}
       export INSTALL_RKE2_VERSION="${k8s_version}"
       curl -sfL https://get.rke2.io | sh -
       systemctl enable rke2-server.service
@@ -396,6 +389,12 @@ write_files:
       %{~ if cni == "cilium" ~}
       cni: cilium
       disable-kube-proxy: true
+      # Every server needs this, not just the one rendering the manifest
+      # (Ticket 04 of .scratch/cilium-argocd-gitops-handoff/map.md): it stops
+      # *this node's own* RKE2 supervisor from installing its bundled
+      # rke2-cilium addon, independent of who wrote the actual manifest.
+      disable:
+        - rke2-cilium
       %{~ endif ~}
       %{~ if etcd_snapshot_enabled ~}
       etcd-snapshot-schedule-cron: '${etcd_snapshot_schedule_cron}'
@@ -478,7 +477,31 @@ write_files:
       status "stage-6:argo-bootstrap"
       %{ if gitops_platform_repo_url != null && node_role == "server-init" ~}
       KC=/etc/rancher/rke2/rke2.yaml
-      kubectl --kubeconfig "$KC" apply -f /etc/kube-compute/manifests/00-argocd-helmchart.yaml
+      # Genesis only needs *a* working pinned Argo CD version, not the
+      # consumer's target version — kube-platform's own self-managing
+      # Application is what carries the consumer's chosen version going
+      # forward (an ordinary in-place Helm upgrade, not a risky swap). See
+      # .scratch/cilium-argocd-gitops-handoff/map.md in the kube-claude repo.
+      ARGOCD_VALUES="$(mktemp)"
+      echo "${argocd_values_b64}" | base64 -d >"$ARGOCD_VALUES"
+      {
+        echo "apiVersion: v1"
+        echo "kind: Namespace"
+        echo "metadata:"
+        echo "  name: argocd"
+        echo "---"
+        render_via_helm argocd argo-cd https://argoproj.github.io/argo-helm "${argocd_version}" argocd "$ARGOCD_VALUES"
+      # --server-side is required, not stylistic: a plain (client-side) apply
+      # stores the whole previous config in a last-applied-configuration
+      # annotation for 3-way merging, and Argo CD's own
+      # applicationsets.argoproj.io CRD is large enough to exceed
+      # Kubernetes' 262144-byte annotation-size limit — confirmed via a real
+      # cluster-1 apply against node-bootstrap's equivalent step
+      # ("metadata.annotations: Too long"). Server-side apply uses
+      # field-manager metadata instead of that annotation, sidestepping the
+      # limit entirely.
+      } | kubectl --kubeconfig "$KC" apply --server-side -f -
+      rm -f "$ARGOCD_VALUES"
       echo "[bootstrap] waiting for argocd-server to be ready..."
       timeout 600 bash -c 'until kubectl --kubeconfig '"$KC"' -n argocd rollout status deployment/argocd-server --timeout=30s 2>/dev/null; do sleep 15; done' || { status "FAILED:argo-bootstrap"; exit 1; }
       kubectl --kubeconfig "$KC" apply -f /etc/kube-compute/manifests/10-platform-app.yaml

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 variables {
-  cloud_init_template = "templates/cloud-init-almalinux-9.yaml.tpl"
+  cloud_init_template = "templates/cloud-init-almalinux-10.yaml.tpl"
 }
 
 run "platform_only" {
@@ -12,8 +12,11 @@ run "platform_only" {
     gitops_platform_revision = "v1.0.0"
   }
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "kind: HelmChart")
-    error_message = "Argo CD HelmChart must be present when a platform repo is set"
+    # Rendered at boot via a transient helm binary (render_via_helm), not a
+    # static HelmChart CR — see .scratch/cilium-argocd-gitops-handoff/map.md
+    # in the kube-claude repo.
+    condition     = strcontains(nonsensitive(output.cloud_init), "render_via_helm argocd argo-cd https://argoproj.github.io/argo-helm")
+    error_message = "Argo CD genesis render must run when a platform repo is set"
   }
   assert {
     condition     = strcontains(nonsensitive(output.cloud_init), "https://github.com/example/kube-platform.git")
@@ -53,9 +56,10 @@ run "no_gitops" {
   variables {
     cluster_name = "test1"
     k8s_version  = "v1.36.1+rke2r1"
+    cni          = "default"
   }
   assert {
-    condition     = !strcontains(nonsensitive(output.cloud_init), "kind: HelmChart")
+    condition     = !strcontains(nonsensitive(output.cloud_init), "render_via_helm argocd argo-cd https://argoproj.github.io/argo-helm")
     error_message = "no Argo CD wiring when no platform repo is set"
   }
 }

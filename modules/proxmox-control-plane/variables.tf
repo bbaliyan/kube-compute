@@ -2,7 +2,7 @@
 
 # ---- Common inputs (pass through to node-bootstrap) ----
 variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 9 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 10 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
   type        = string
   default     = null
 }
@@ -14,7 +14,7 @@ variable "ansible_ssh_private_key_file" {
 }
 
 variable "ansible_ssh_user" {
-  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 9 image."
+  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 10 image."
   type        = string
   default     = "almalinux"
 }
@@ -88,7 +88,7 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 and 'default' for control_plane_count = 1. Set explicitly to override."
+  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (confirmed via a real apply: flannel and Felix both hard-require kernel modules AlmaLinux 10 dropped). 'default' remains selectable as an escape hatch for a consumer-supplied playbook targeting a different OS. Set explicitly to override."
   type        = string
   default     = null
   validation {

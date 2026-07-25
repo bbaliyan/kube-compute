@@ -4,7 +4,7 @@
 # `cloud-init`, deleting it) is still pending.
 
 variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook to run. Use the bundled AlmaLinux 9 playbook (the default), or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
+  description = "Absolute path to the Ansible playbook to run. Use the bundled AlmaLinux 10 playbook (the default), or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
   type        = string
   default     = null
 }
@@ -84,9 +84,9 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' (whatever this distro's template installs out of the box) or 'cilium'. Sets the config.yaml cni:/disable-kube-proxy: flags and, when 'cilium', deploys the Cilium HelmChart manifest (server-init/server-join only)."
+  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not currently viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules that flannel and Felix's iptables dataplane both hard-require, confirmed via a real cluster-1 apply. Kept as an escape hatch for a consumer-supplied playbook targeting a different OS. Sets the config.yaml cni:/disable-kube-proxy: flags and, when 'cilium', deploys the Cilium HelmChart manifest (server-init/server-join only)."
   type        = string
-  default     = "default"
+  default     = "cilium"
   validation {
     condition     = contains(["default", "cilium"], var.cni)
     error_message = "cni must be 'default' or 'cilium'."
@@ -96,6 +96,12 @@ variable "cni" {
 variable "cilium_version" {
   description = "Cilium Helm chart version. Only meaningful when cni = \"cilium\"."
   type        = string
+  default     = null
+}
+
+variable "cilium_operator_replicas" {
+  description = "Cilium operator replica count. Only meaningful when cni = \"cilium\". Null uses the Cilium chart's own default (2, with pod anti-affinity) — on a genuinely single-node cluster this leaves one replica permanently Pending, so control-plane modules pass 1 explicitly when control_plane_count = 1."
+  type        = number
   default     = null
 }
 

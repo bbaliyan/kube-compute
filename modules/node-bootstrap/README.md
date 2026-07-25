@@ -17,13 +17,15 @@ SSH) — never a new inbound port.
 This module reproduces `cloud-init`'s RKE2 install/join mechanics: config.yaml
 generation for all three roles, the etcd-learner join-race staggering,
 systemd unit management, secrets flow, AWS+Proxmox connectivity, OS prep
-(RHEL9 `br_netfilter`/`overlay`, sysctls, SELinux package install), CA trust
-(`trusted_ca_pem`), registry mirror (`registry_mirror_url`), the Cilium CNI
-HelmChart manifest, etcd snapshot configuration (`etcd_snapshot_*`), node
-labels (`node_labels`), extra server manifests (`extra_server_manifests`),
-and GitOps/Argo CD bootstrap (`gitops_*`, `cert_mode`, `platform_*`,
-`extra_tags` — a distinct post-install step, applied via `kubectl` once the
-cluster reports Ready, server-init only).
+(`br_netfilter`/`overlay`, sysctls, SELinux package install — `br_netfilter`
+and its `bridge-nf-call-*` sysctls are skipped on AlmaLinux 10, whose kernel
+dropped that legacy module; see `cni` below for the deeper consequence of
+that same kernel change), CA trust (`trusted_ca_pem`), registry mirror
+(`registry_mirror_url`), the Cilium CNI HelmChart manifest, etcd snapshot
+configuration (`etcd_snapshot_*`), node labels (`node_labels`), extra server
+manifests (`extra_server_manifests`), and GitOps/Argo CD bootstrap
+(`gitops_*`, `cert_mode`, `platform_*`, `extra_tags` — a distinct post-install
+step, applied via `kubectl` once the cluster reports Ready, server-init only).
 
 **Deliberately deferred** — present in `cloud-init`'s template but not yet
 ported here:
@@ -68,11 +70,26 @@ existing log file from a separate process instead.)
 ## Interface notes
 
 - `ansible_playbook_path` mirrors `cloud-init`'s `cloud_init_template`
-  escape hatch: overridable, defaults to the bundled AlmaLinux-9-only
+  escape hatch: overridable, defaults to the bundled AlmaLinux-10-only
   playbook (`ansible/playbook.yml`). No compatibility guarantee for other
   distributions.
 - `ansible_connection_vars` is a non-secret map the caller assembles for its
   own provider's transport — this module never branches on provider.
+- `cni` defaults to `"cilium"`, standard regardless of topology (single-node
+  or HA). Confirmed via a real `cluster-1` apply that `"default"`
+  (Canal/flannel+Calico) is broken on AlmaLinux 10: flannel's own code stats
+  `/proc/sys/net/bridge/bridge-nf-call-iptables` and crashes when it's absent,
+  and Felix's `ipset`-based dataplane fails outright (`ipset v7.21: Kernel
+  error received: Invalid argument`) — both are downstream of the same
+  kernel change that dropped `br_netfilter`. Cilium's eBPF dataplane
+  (`kubeProxyReplacement: true`) has no iptables/ipset/xtables dependency, so
+  it doesn't hit any of these. `"default"` remains selectable only as an
+  escape hatch for a consumer-supplied playbook targeting a different OS.
+- `cilium_operator_replicas` defaults to `null` (the Cilium chart's own
+  default of `2`, with pod anti-affinity). The calling control-plane module
+  passes `1` when `control_plane_count = 1` — otherwise the second replica
+  has nowhere to schedule and sits permanently `Pending` on a genuinely
+  single-node cluster.
 - `cluster_token`/`cluster_agent_token`/`agent_token_fetch_command` are all
   `sensitive = true` and flow to the Ansible run via the `local-exec`
   `environment` block only — never as an extra-var, never in the generated

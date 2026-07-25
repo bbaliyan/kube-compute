@@ -38,6 +38,13 @@ node-taint:
 {% if cni == 'cilium' %}
 cni: cilium
 disable-kube-proxy: true
+{# Without this, RKE2 installs its own bundled rke2-cilium addon (a separate
+   HelmChart CR) alongside our own genesis-rendered Cilium manifest — both
+   fighting over the same cilium-operator/cilium objects in kube-system.
+   Confirmed via a real cluster-1 apply; see
+   .scratch/cilium-argocd-gitops-handoff/map.md. #}
+disable:
+  - rke2-cilium
 {% endif %}
 {% if etcd_snapshot_enabled %}
 etcd-snapshot-schedule-cron: '{{ etcd_snapshot_schedule_cron }}'

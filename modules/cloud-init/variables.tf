@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Use the bundled AlmaLinux 9 template, or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
+  description = "Absolute path to the cloud-init template to render. Use the bundled AlmaLinux 10 template, or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
   type        = string
 }
 
@@ -24,6 +24,12 @@ variable "k8s_version" {
 variable "cilium_version" {
   description = "Cilium Helm chart version, only meaningful when cni = \"cilium\". Null uses the platform default (module.component_versions.cilium_version)."
   type        = string
+  default     = null
+}
+
+variable "cilium_operator_replicas" {
+  description = "Cilium operator replica count. Only meaningful when cni = \"cilium\". Null uses the Cilium chart's own default (2, with pod anti-affinity) — on a genuinely single-node cluster this leaves one replica permanently Pending, so control-plane modules pass 1 explicitly when control_plane_count = 1."
+  type        = number
   default     = null
 }
 
@@ -88,9 +94,9 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' (whatever this distro's template installs out of the box — Canal, under RKE2 today) or 'cilium'. Only meaningful for node_role server-init/server-join — a worker never renders CNI flags or manifests of its own. The caller (a control-plane module) resolves any topology-aware default; cloud-init always renders whichever value it is given."
+  description = "CNI to install: 'cilium' (the default) or 'default' (whatever this distro's template installs out of the box — Canal, under RKE2 today; not viable on AlmaLinux 10, see node-bootstrap's cni variable). Only meaningful for node_role server-init/server-join — a worker never renders CNI flags or manifests of its own. The caller (a control-plane module) resolves any topology-aware default; cloud-init always renders whichever value it is given."
   type        = string
-  default     = "default"
+  default     = "cilium"
   validation {
     condition     = contains(["default", "cilium"], var.cni)
     error_message = "cni must be 'default' or 'cilium'."

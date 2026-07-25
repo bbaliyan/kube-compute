@@ -2,7 +2,7 @@
 
 # ---- Common inputs (pass through to node-bootstrap) ----
 variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 9 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 10 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
   type        = string
   default     = null
 }
@@ -82,7 +82,7 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 (multi-node — NetworkPolicy, a kube-proxy-free dataplane, and Hubble justify the extra footprint) and 'default' for control_plane_count = 1 (whatever this distro's template installs out of the box, zero-config, smallest footprint). Set explicitly to override either default."
+  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (confirmed via a real apply: flannel and Felix both hard-require kernel modules AlmaLinux 10 dropped). 'default' remains selectable as an escape hatch for a consumer-supplied playbook targeting a different OS. Set explicitly to override."
   type        = string
   default     = null
   validation {
@@ -227,9 +227,9 @@ variable "instance_type" {
 
 variable "os_image_ami_id" {
   description = <<-EOT
-    AMI ID for the node. Tested with AlmaLinux 9 (RHEL-family — cloud-init uses dnf and
+    AMI ID for the node. Tested with AlmaLinux 10 (RHEL-family — cloud-init uses dnf and
     update-ca-trust). Other RHEL-family images (Rocky, AL2023) may work but are untested —
-    no compatibility guarantee. Null = latest AlmaLinux 9 for the derived architecture via
+    no compatibility guarantee. Null = latest AlmaLinux 10 for the derived architecture via
     data lookup.
   EOT
   type        = string

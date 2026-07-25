@@ -50,7 +50,7 @@ output "node_arch" {
 }
 
 output "effective_ami_id" {
-  description = "AMI ID used (explicit override or AlmaLinux 9 lookup)."
+  description = "AMI ID used (explicit override or AlmaLinux 10 lookup)."
   value       = local.effective_ami_id
 }
 
