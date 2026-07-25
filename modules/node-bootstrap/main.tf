@@ -38,10 +38,43 @@ locals {
         clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
   EOT
 
+  # repoServer/controller resources + probe timeouts: upstream defaults are
+  # zero resource requests (BestEffort QoS) and a 1s probe timeoutSeconds. A
+  # BestEffort pod with a 1s probe deadline has no guaranteed CPU share on a
+  # small single-node box, so it's one contention scenario away from a
+  # kubelet-driven restart loop — not observed directly, but cheap insurance
+  # for genesis's first-boot install before Argo CD can even self-heal from
+  # kube-platform's matching override. Kept in sync with
+  # bootstrap/templates/argocd-app.yaml in kube-platform.
   argocd_values_yaml = <<-EOT
     configs:
       params:
         server.insecure: "true"
+    repoServer:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 512Mi
+      readinessProbe:
+        timeoutSeconds: 5
+        failureThreshold: 5
+      livenessProbe:
+        timeoutSeconds: 5
+        failureThreshold: 5
+    controller:
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 512Mi
+      readinessProbe:
+        timeoutSeconds: 5
+        failureThreshold: 5
   EOT
 
   # Bundled alongside this module's own playbook/roles, not the (possibly
