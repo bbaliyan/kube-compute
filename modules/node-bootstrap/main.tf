@@ -65,13 +65,17 @@ locals {
         timeoutSeconds: 5
         failureThreshold: 5
     controller:
+      # 512Mi OOM-killed the controller in practice once it was reconciling
+      # the full platform app-of-apps tree (~17 child Applications) —
+      # confirmed on cluster-1, kept in sync with kube-platform's
+      # argocd-app.yaml.
       resources:
         requests:
           cpu: 250m
-          memory: 256Mi
+          memory: 512Mi
         limits:
           cpu: 1000m
-          memory: 512Mi
+          memory: 2Gi
       readinessProbe:
         timeoutSeconds: 5
         failureThreshold: 5
