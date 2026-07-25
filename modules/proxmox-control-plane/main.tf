@@ -31,6 +31,13 @@ locals {
 
   # Netplan v2 network-config, one per control-plane index. OpenTofu forbids heredocs inside
   # ternaries, so both branches are precomputed and selected per-index below.
+  # "to: 0.0.0.0/0" (not Netplan's own "to: default" shorthand): AlmaLinux 9's
+  # stock cloud-init package doesn't parse the "default" keyword in a route's
+  # `to:` field (network_state.py's route normalizer expects a real
+  # address/CIDR there) — fails the whole init-local stage with "Address
+  # default is not a valid ip address", silently falling back to
+  # NetworkManager's own DHCP profile instead of ever raising an apply-time
+  # error. The explicit CIDR form is understood by every cloud-init version.
   network_data_static = { for i, cidr in local.cp_ip_cidrs : i => <<-EOT
     version: 2
     ethernets:
@@ -40,7 +47,7 @@ locals {
         addresses:
           - ${cidr}
         routes:
-          - to: default
+          - to: 0.0.0.0/0
             via: ${var.vm_gateway}
         nameservers:
           addresses: [${local._dns_list}]

@@ -20,6 +20,11 @@ locals {
   control_plane_version_num   = tonumber(local.control_plane_version_parts[0]) * 1000000 + tonumber(local.control_plane_version_parts[1]) * 1000 + tonumber(local.control_plane_version_parts[2])
 
   _dns_list = join(", ", var.dns_servers)
+  # "to: 0.0.0.0/0" (not Netplan's own "to: default" shorthand): AlmaLinux 9's
+  # stock cloud-init package doesn't parse the "default" keyword in a route's
+  # `to:` field — fails the whole init-local stage and silently falls back to
+  # NetworkManager's own DHCP profile instead of the static IP. See
+  # proxmox-control-plane's matching local for the full explanation.
   network_data_static = { for i in range(var.desired_count) : tostring(i) => local.static_ips ? <<-EOT
     version: 2
     ethernets:
@@ -29,7 +34,7 @@ locals {
         addresses:
           - ${var.worker_ip_addresses[i]}
         routes:
-          - to: default
+          - to: 0.0.0.0/0
             via: ${var.vm_gateway}
         nameservers:
           addresses: [${local._dns_list}]
