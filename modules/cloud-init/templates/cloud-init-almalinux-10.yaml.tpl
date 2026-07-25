@@ -195,7 +195,19 @@ write_files:
       # nodes aren't on a routable L2/L3, e.g. AWS across subnets/AZs) rather
       # than switching to native routing, which isn't a uniform fit across
       # this project's providers.
-      dnf install -y kernel-modules-extra-"$(uname -r)"
+      #
+      # Package name deliberately NOT pinned to "kernel-modules-extra-$(uname -r)":
+      # AlmaLinux's BaseOS repo only retains the exact-NVR subpackage for the
+      # latest kernel build, not the one baked into the base image, so an
+      # exact-version request silently has nothing to match once a newer
+      # point release supersedes it in the repo (confirmed on cluster-1 — the
+      # base image's kernel was 211.7.3 but the repo only had 211.38.1's
+      # packages, and the pinned install found nothing for the running
+      # kernel). "kernel-modules-extra-matched" is the unversioned meta-package
+      # dnf resolves correctly regardless of repo/running-kernel skew — it
+      # pulls in the right versioned kernel-modules-extra as a dependency for
+      # whichever kernel is actually running.
+      dnf install -y kernel-modules-extra-matched
       modprobe nft_compat
       # br_netfilter and overlay are RHEL-family prerequisites for any CNI (every
       # RKE2/kubeadm RHEL install guide calls for this explicitly) — carried over
