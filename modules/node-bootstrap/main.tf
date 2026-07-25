@@ -83,6 +83,13 @@ resource "null_resource" "ansible_bootstrap" {
 
     command = <<-EOT
       set -euo pipefail
+      # Force a locale Ansible/Python can always initialize, regardless of
+      # what the calling shell forwards in (e.g. a host terminal's
+      # en_US.UTF-8 that isn't installed in this container) — kube-devenv
+      # defaults LANG/LC_ALL the same way, but a container/session can
+      # override that default, and this command can't rely on it.
+      export LANG=C.UTF-8
+      export LC_ALL=C.UTF-8
       # Collections/Python deps are playbook-specific, not baked into the
       # devenv image (kube-devenv ships ansible-core only) — installed here so
       # a version bump is a kube-compute-only change. Both are no-ops (no
