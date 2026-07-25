@@ -25,12 +25,19 @@ locals {
   # `to:` field — fails the whole init-local stage and silently falls back to
   # NetworkManager's own DHCP profile instead of the static IP. See
   # proxmox-control-plane's matching local for the full explanation.
+  #
+  # "eth0" as the ethernets key directly (not a "primary" alias + match:
+  # {name: "en*"}): AlmaLinux 9's kernel cmdline sets net.ifnames=0
+  # biosdevname=0, so its NIC is always legacy-named eth0/eth1, never
+  # systemd-predictable ens*/enp*. Separately, cloud-init's RHEL/
+  # NetworkManager renderer doesn't honor `match` at all — it writes the
+  # config's key verbatim as DEVICE=, so "primary" produced an unbindable
+  # connection NetworkManager silently left inactive. See
+  # proxmox-control-plane's matching local for the full explanation.
   network_data_static = { for i in range(var.desired_count) : tostring(i) => local.static_ips ? <<-EOT
     version: 2
     ethernets:
-      primary:
-        match:
-          name: "en*"
+      eth0:
         addresses:
           - ${var.worker_ip_addresses[i]}
         routes:
@@ -43,9 +50,7 @@ locals {
     : <<-EOT
     version: 2
     ethernets:
-      primary:
-        match:
-          name: "en*"
+      eth0:
         dhcp4: true
     EOT
   }

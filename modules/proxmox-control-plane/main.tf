@@ -38,12 +38,21 @@ locals {
   # default is not a valid ip address", silently falling back to
   # NetworkManager's own DHCP profile instead of ever raising an apply-time
   # error. The explicit CIDR form is understood by every cloud-init version.
+  #
+  # "eth0" as the ethernets key directly (not a "primary" alias + match:
+  # {name: "en*"}): confirmed against a real cluster-1 apply that this
+  # doesn't work on AlmaLinux 9 — the image's kernel cmdline sets
+  # net.ifnames=0 biosdevname=0, so its NIC is always legacy-named eth0/eth1,
+  # never systemd-predictable ens*/enp* (the pattern "en*" was written for).
+  # Separately, cloud-init's RHEL/NetworkManager renderer doesn't honor
+  # `match` at all — it writes the config's key verbatim as DEVICE=, so a
+  # "primary" key produced an unbindable ifcfg-primary (DEVICE=primary,
+  # no real interface has that name) that NetworkManager silently left
+  # inactive, never erroring, while its own auto-DHCP profile stayed up.
   network_data_static = { for i, cidr in local.cp_ip_cidrs : i => <<-EOT
     version: 2
     ethernets:
-      primary:
-        match:
-          name: "en*"
+      eth0:
         addresses:
           - ${cidr}
         routes:
@@ -57,9 +66,7 @@ locals {
   network_data_dhcp = <<-EOT
     version: 2
     ethernets:
-      primary:
-        match:
-          name: "en*"
+      eth0:
         dhcp4: true
     EOT
 }
