@@ -1,6 +1,6 @@
 # aws-node-pool
 
-Provisions a fixed-size pool of K3s worker nodes on AWS (ASG + launch template) that joins an
+Provisions a fixed-size pool of RKE2 worker nodes on AWS (ASG + launch template) that joins an
 existing `aws-control-plane` cluster via its join-token flow. One pool = one subnet = one availability
 zone; AZ-locality workloads (e.g. a SQL client local to its AZ) use one pool per AZ.
 

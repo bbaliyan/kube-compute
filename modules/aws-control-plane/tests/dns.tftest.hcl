@@ -5,7 +5,7 @@ run "record_when_zone_and_domain_set" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
@@ -35,7 +35,7 @@ run "no_record_without_zone_but_name_still_output" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]
@@ -57,7 +57,7 @@ run "no_domain_is_ip_only" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     aws_region            = "eu-west-1"
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8"]

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 output "k8s_version" {
-  description = "Default K3s release string used when a caller doesn't override k8s_version."
+  description = "Default RKE2 release string used when a caller doesn't override k8s_version."
   value       = local.k8s_version
 }
 

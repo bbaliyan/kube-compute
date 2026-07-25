@@ -18,7 +18,7 @@ locals {
   create_record = local.has_domain && var.dns_zone_resource_group != null
 
   control_plane_taint              = var.cluster_type == "dedicated_control_plane"
-  effective_cni                    = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "flannel")
+  effective_cni                    = var.cni != null ? var.cni : (var.control_plane_count > 1 ? "cilium" : "default")
   effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   # Kv name: 24-char Azure limit, globally unique — 18 chars of cluster_name (hyphens

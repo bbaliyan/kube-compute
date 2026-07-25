@@ -17,7 +17,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version this pool's workers install (a K3s release string, e.g. v1.36.1+k3s1). Must not be newer than control_plane_k8s_version — a kubelet may trail the API server by up to 3 minors, never lead it. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version this pool's workers install (an RKE2 release string, e.g. v1.36.1+rke2r1). Must not be newer than control_plane_k8s_version — a kubelet may trail the API server by up to 3 minors, never lead it. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
   default     = null
 }
@@ -47,7 +47,7 @@ variable "control_plane_k8s_version" {
 }
 
 variable "registration_address" {
-  description = "The control plane's registration_address output. Workers join via --server https://<this>:6443."
+  description = "The control plane's registration_address output. Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
   type        = string
 }
 
@@ -101,7 +101,7 @@ variable "root_volume_type" {
 }
 
 variable "extra_node_labels" {
-  description = "Additional --node-label flags beyond the automatic AZ label (topology.kubernetes.io/zone) this module always sets from the pool's own subnet."
+  description = "Additional node-label: entries beyond the automatic AZ label (topology.kubernetes.io/zone) this module always sets from the pool's own subnet."
   type        = map(string)
   default     = {}
 }

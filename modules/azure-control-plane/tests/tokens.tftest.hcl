@@ -56,7 +56,7 @@ run "key_vault_holds_agent_token_not_server_token" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"

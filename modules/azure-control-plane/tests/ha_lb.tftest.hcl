@@ -36,7 +36,7 @@ run "single_node_creates_no_lb" {
   command = apply
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"
@@ -78,7 +78,7 @@ run "ha_creates_lb_and_two_additional_vms" {
   }
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"
@@ -110,7 +110,7 @@ run "invalid_control_plane_count_rejected" {
   command = plan
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"

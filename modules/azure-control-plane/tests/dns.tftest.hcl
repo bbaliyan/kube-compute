@@ -46,7 +46,7 @@ run "no_domain_means_no_dns_record" {
   command = apply
   variables {
     cluster_name          = "bharat"
-    k8s_version           = "v1.36.1+k3s1"
+    k8s_version           = "v1.36.2+rke2r1"
     resource_group_name   = "rg-k8s"
     location              = "eastus"
     vnet_name             = "vnet-main"
@@ -77,7 +77,7 @@ run "domain_and_zone_creates_wildcard_record" {
   command = apply
   variables {
     cluster_name            = "bharat"
-    k8s_version             = "v1.36.1+k3s1"
+    k8s_version             = "v1.36.2+rke2r1"
     resource_group_name     = "rg-k8s"
     location                = "eastus"
     vnet_name               = "vnet-main"

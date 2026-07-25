@@ -6,8 +6,8 @@
 # module's own copy of the same literal.
 
 locals {
-  # renovate: datasource=github-releases depName=k3s-io/k3s
-  k8s_version = "v1.36.1+k3s1"
+  # renovate: datasource=github-releases depName=rancher/rke2
+  k8s_version = "v1.36.2+rke2r1"
 
   # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
   cilium_version = "1.19.5"

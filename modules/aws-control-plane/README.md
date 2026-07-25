@@ -1,7 +1,7 @@
 # aws-control-plane
 
-Provisions the AWS control plane for a K3s cluster — its control-plane node(s) plus the
-cluster-wide resources — consuming `cloud-init` for the K3s cloud-init. A control plane with
+Provisions the AWS control plane for an RKE2 cluster — its control-plane node(s) plus the
+cluster-wide resources — consuming `cloud-init` for the RKE2 cloud-init. A control plane with
 `control_plane_count = 1` is a complete single-node cluster.
 
 ## Scope
@@ -19,13 +19,16 @@ existing networking, or it falls back to the account's default VPC.
   least 3 distinct AZs; fewer than 3 fails plan with a clear error) behind an internal NLB on
   6443; `registration_address` becomes the NLB's DNS name. The first control-plane node's
   bootstrap probes that address at boot: reachable → join the existing quorum; unreachable →
-  initialize (so replacing the first node is a safe rejoin, never a second `--cluster-init`).
+  initialize (so replacing the first node is a safe rejoin, never a second cluster
+  initialization — RKE2 has no `--cluster-init` flag at all; the first server is simply the
+  one whose config omits a `server:` join address).
 - **`cluster_type`** — `all_in_one` (default; control-plane node stays schedulable) or
   `dedicated_control_plane` (control-plane node is tainted `CriticalAddonsOnly=true:NoExecute`;
   intended for use once node pools exist). The taint is derived from this explicit intent, never
   from node counts — node pools are separate Terraform state this module cannot see.
-- **Datastore** — always embedded etcd (`k3s server --cluster-init`), including for
-  `control_plane_count = 1`, for one consistent datastore and uniform snapshots across topologies.
+- **Datastore** — always embedded etcd (RKE2 has no SQLite option — etcd is its only
+  supported datastore), including for `control_plane_count = 1`, for one consistent
+  datastore and uniform snapshots across topologies.
 
 ## Networking
 

@@ -18,8 +18,8 @@ run "newer_pool_version_rejected" {
   command = plan
   variables {
     cluster_name              = "bharat"
-    k8s_version               = "v1.37.0+k3s1"
-    control_plane_k8s_version = "v1.36.1+k3s1"
+    k8s_version               = "v1.37.0+rke2r1"
+    control_plane_k8s_version = "v1.36.2+rke2r1"
     proxmox_node              = "pve"
     vm_cores                  = 2
     vm_memory_mb              = 4096

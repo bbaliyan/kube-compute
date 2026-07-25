@@ -17,8 +17,8 @@ run "pool_version_equal_to_control_plane_is_accepted" {
   variables {
     cluster_name              = "bharat"
     aws_region                = "eu-west-1"
-    k8s_version               = "v1.36.1+k3s1"
-    control_plane_k8s_version = "v1.36.1+k3s1"
+    k8s_version               = "v1.36.2+rke2r1"
+    control_plane_k8s_version = "v1.36.2+rke2r1"
     registration_address      = "10.0.1.5"
     agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
@@ -39,8 +39,8 @@ run "pool_version_older_than_control_plane_is_accepted" {
   variables {
     cluster_name              = "bharat"
     aws_region                = "eu-west-1"
-    k8s_version               = "v1.35.5+k3s1"
-    control_plane_k8s_version = "v1.36.1+k3s1"
+    k8s_version               = "v1.35.5+rke2r1"
+    control_plane_k8s_version = "v1.36.2+rke2r1"
     registration_address      = "10.0.1.5"
     agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
@@ -61,8 +61,8 @@ run "pool_version_newer_than_control_plane_is_rejected" {
   variables {
     cluster_name              = "bharat"
     aws_region                = "eu-west-1"
-    k8s_version               = "v1.37.0+k3s1"
-    control_plane_k8s_version = "v1.36.1+k3s1"
+    k8s_version               = "v1.37.0+rke2r1"
+    control_plane_k8s_version = "v1.36.2+rke2r1"
     registration_address      = "10.0.1.5"
     agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"

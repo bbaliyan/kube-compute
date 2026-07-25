@@ -1,6 +1,6 @@
 # cloud-init
 
-Provider-agnostic renderer for the K3s node cloud-init. **No provider resources** —
+Provider-agnostic renderer for the RKE2 node cloud-init. **No provider resources** —
 it only renders a template, so it builds and tests with zero cloud credentials.
 
 ## Inputs
@@ -9,12 +9,12 @@ See `variables.tf`. All environment-specific inputs are nullable; pass only what
 environment needs. `trusted_ca_pem`, `registry_mirror_url`, the `gitops_*` inputs, and
 `cni` gate optional cloud-init sections.
 
-- **`cni`** (default `"flannel"`) — container network interface. When set to `"cilium"`,
-  the module renders K3s server flags `--flannel-backend=none --disable-network-policy
-  --disable-kube-proxy` on every server and installs Cilium via a HelmChart CR with
-  `bootstrap: true` written to K3s's own `/var/lib/rancher/k3s/server/manifests/` (Cilium
-  must exist before the node goes Ready, so it uses K3s's own bootstrap-manifest mechanism,
-  not the post-Ready `/etc/kube-compute/manifests/` + kubectl-apply path used for Argo/platform).
+- **`cni`** (default `"default"`) — container network interface. When set to `"cilium"`,
+  the module renders RKE2 config keys `cni: cilium` / `disable-kube-proxy: true` on every
+  server and installs Cilium via a HelmChart CR with `bootstrap: true` written to RKE2's
+  own `/var/lib/rancher/rke2/server/manifests/` (Cilium must exist before the node goes
+  Ready, so it uses RKE2's own bootstrap-manifest mechanism, not the post-Ready
+  `/etc/kube-compute/manifests/` + kubectl-apply path used for Argo/platform).
   
   Implemented in the AlmaLinux 9 cloud-init template.
 

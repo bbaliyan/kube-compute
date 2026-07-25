@@ -123,7 +123,7 @@ variable "control_plane_k8s_version" {
 }
 
 variable "registration_address" {
-  description = "The control plane's registration_address output. Workers join via --server https://<this>:6443."
+  description = "The control plane's registration_address output. Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
   type        = string
 }
 
@@ -148,7 +148,7 @@ variable "cluster_asg_id" {
 }
 
 variable "extra_node_labels" {
-  description = "Additional --node-label flags beyond the automatic AZ label (topology.kubernetes.io/zone) this module always sets from var.zone."
+  description = "Additional node-label: entries beyond the automatic AZ label (topology.kubernetes.io/zone) this module always sets from var.zone."
   type        = map(string)
   default     = {}
 }

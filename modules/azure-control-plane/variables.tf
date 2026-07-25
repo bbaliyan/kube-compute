@@ -17,7 +17,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version (a K3s release string today, e.g. v1.36.1+k3s1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
   default     = null
 }
@@ -76,17 +76,17 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'flannel' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 and 'flannel' for control_plane_count = 1. Set explicitly to override."
+  description = "CNI to install: 'default' or 'cilium'. Null (default) auto-derives to 'cilium' when control_plane_count > 1 and 'default' for control_plane_count = 1. Set explicitly to override."
   type        = string
   default     = null
   validation {
-    condition     = var.cni == null || contains(["flannel", "cilium"], var.cni)
-    error_message = "cni must be null, 'flannel', or 'cilium'."
+    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
+    error_message = "cni must be null, 'default', or 'cilium'."
   }
 }
 
 variable "etcd_snapshots_enabled" {
-  description = "Enable K3s' built-in scheduled etcd snapshots (local only — no object-store upload is wired in this module). Null (default) auto-derives to true when control_plane_count > 1 and false for control_plane_count = 1."
+  description = "Enable RKE2's built-in scheduled etcd snapshots (local only — no object-store upload is wired in this module). Null (default) auto-derives to true when control_plane_count > 1 and false for control_plane_count = 1."
   type        = bool
   default     = null
 }

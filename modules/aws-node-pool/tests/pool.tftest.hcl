@@ -17,8 +17,8 @@ run "fixed_pool_attaches_cluster_sg_and_sets_az_label" {
   variables {
     cluster_name              = "bharat"
     aws_region                = "eu-west-1"
-    k8s_version               = "v1.36.1+k3s1"
-    control_plane_k8s_version = "v1.36.1+k3s1"
+    k8s_version               = "v1.36.2+rke2r1"
+    control_plane_k8s_version = "v1.36.2+rke2r1"
     registration_address      = "10.0.1.5"
     agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
@@ -39,7 +39,7 @@ run "fixed_pool_attaches_cluster_sg_and_sets_az_label" {
     error_message = "IMDSv2 must be enforced"
   }
   assert {
-    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "--node-label topology.kubernetes.io/zone=eu-west-1a")
+    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "\"topology.kubernetes.io/zone=eu-west-1a\"")
     error_message = "the pool must derive the AZ from its subnet and set it as a node label"
   }
   assert {

@@ -7,7 +7,7 @@ run "with_ca_and_mirror" {
   command = plan
   variables {
     cluster_name        = "test1"
-    k8s_version         = "v1.36.1+k3s1"
+    k8s_version         = "v1.36.1+rke2r1"
     trusted_ca_pem      = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
     registry_mirror_url = "https://harbor.example.test"
   }
@@ -25,7 +25,7 @@ run "without_ca_or_mirror" {
   command = plan
   variables {
     cluster_name = "test1"
-    k8s_version  = "v1.36.1+k3s1"
+    k8s_version  = "v1.36.1+rke2r1"
   }
   assert {
     condition     = !strcontains(nonsensitive(output.cloud_init), "update-ca-trust extract")
