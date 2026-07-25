@@ -5,7 +5,6 @@
 
   "initializeCommand": "mkdir -p ~/.aws ~/.kube ~/.config/age",
   "postStartCommand": "mkdir -p .vscode && cp /usr/share/kube-devenv/tasks.json .vscode/tasks.json",
-  "postCreateCommand": "pre-commit install || true",
 
   "mounts": [
     "source=${localEnv:HOME}/.aws,target=/root/.aws,type=bind,readonly",
