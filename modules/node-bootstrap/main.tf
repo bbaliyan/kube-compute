@@ -27,6 +27,16 @@ locals {
     kubeProxyReplacement: true
     k8sServiceHost: "127.0.0.1"
     k8sServicePort: 6443
+    # Node IPAM LB is the platform's LoadBalancer mechanism on every provider:
+    # it advertises the node's own (LAN- or VPC-routable) IP into a
+    # LoadBalancer Service, with the eBPF datapath forwarding to pods — no ARP,
+    # BGP, cloud API, or extra component. defaultLBServiceIPAM makes every
+    # LoadBalancer Service use it without a per-Service loadBalancerClass. Kept
+    # in sync with bootstrap/templates/cilium-app.yaml in kube-platform, which
+    # is authoritative once Argo CD adopts this genesis install.
+    nodeIPAM:
+      enabled: true
+    defaultLBServiceIPAM: nodeipam
     operator:
     %{~if var.cilium_operator_replicas != null~}
       replicas: ${var.cilium_operator_replicas}
