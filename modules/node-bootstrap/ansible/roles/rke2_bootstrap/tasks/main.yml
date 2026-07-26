@@ -76,6 +76,32 @@
   args:
     creates: /etc/modules-load.d/rke2.conf
 
+- name: os-prep | label the local-path-provisioner directory for container write access
+  ansible.builtin.shell: |
+    set -euo pipefail
+    dnf install -y policycoreutils-python-utils
+    mkdir -p /var/lib/rancher/local-path-provisioner
+    if ! semanage fcontext -l | grep -q '^/var/lib/rancher/local-path-provisioner(/\.\*)?  '; then
+      semanage fcontext -a -t container_file_t '/var/lib/rancher/local-path-provisioner(/.*)?'
+    fi
+    restorecon -R /var/lib/rancher/local-path-provisioner
+  # SELinux enforcing on AlmaLinux 10 auto-labels fresh directories under
+  # /var/lib/rancher as container_var_lib_t, a type meant for container
+  # runtime storage, not for arbitrary containers to freely create files in
+  # via a bind mount. Without this, any pod writing into a hostPath-backed
+  # PVC under this path is denied, even running as root inside the
+  # container, confirmed on cluster-1: local-path-provisioner helper pods
+  # failing "mkdir: Permission denied" with no matching Unix permission
+  # issue, only a SELinux avc denied create/write in the audit log.
+  # container_file_t is the standard label for a host directory containers
+  # are meant to read and write through a bind mount. Harmless if
+  # local-path is never the chosen storage provisioner — this only prepares
+  # the directory, kube-platform's local-path chart decides whether
+  # anything ever gets written there. No creates guard: semanage fcontext -a
+  # errors on a duplicate rule (would break a rerun under set -e), so the
+  # grep check above is the real idempotency guard instead; restorecon
+  # itself is always safe to repeat.
+
 - name: os-trust | add trusted CA to the OS trust store
   ansible.builtin.copy:
     content: "{{ resolved_trusted_ca_pem }}"
