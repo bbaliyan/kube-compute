@@ -37,22 +37,22 @@
     set -euo pipefail
     dnf makecache
     dnf install -y ca-certificates curl
-    # kernel-modules-extra-matched: AlmaLinux 10's minimal cloud image ships
-    # only kernel-modules-core, which excludes nft_compat (the iptables-nft
-    # legacy translation shim). Cilium's default VXLAN tunnel mode installs
-    # its tunnel-accept rule via classic iptables syntax, which needs
-    # nft_compat to translate — without it, Cilium's iptables reconciliation
-    # fails continuously and any pod needing fresh routing state becomes
-    # unreachable over routed host/pod traffic (confirmed on cluster-1).
-    # Deliberately NOT pinned to "kernel-modules-extra-$(uname -r)": AlmaLinux's
-    # BaseOS repo only retains the exact-NVR subpackage for the latest kernel
-    # build, not the one baked into the base image, so a version-pinned
-    # request can silently match nothing for the running kernel once a newer
-    # point release supersedes it in the repo (this exact bug was hit and
-    # fixed on cluster-1 once already, on the cloud-init template's now-dead
-    # copy of this same logic — kept in sync here since Proxmox/AWS now run
-    # this Ansible task instead). "kernel-modules-extra-matched" is the
-    # unversioned meta-package dnf resolves correctly regardless of that skew.
+    # kernel-modules-extra-matched: the AlmaLinux 10 minimal cloud image ships
+    # only kernel-modules-core, which excludes nft_compat, the iptables-nft
+    # legacy translation shim. Cilium default VXLAN tunnel mode installs its
+    # tunnel-accept rule via classic iptables syntax, which needs nft_compat
+    # to translate — without it, Cilium iptables reconciliation fails
+    # continuously and any pod needing fresh routing state becomes
+    # unreachable over routed host/pod traffic, confirmed on cluster-1.
+    # Deliberately not pinned to an exact kernel-modules-extra version: the
+    # AlmaLinux BaseOS repo only retains the exact NVR subpackage for the
+    # latest kernel build, not the one baked into the base image, so a
+    # version-pinned request can silently match nothing for the running
+    # kernel once a newer point release supersedes it in the repo. This exact
+    # bug was hit and fixed on cluster-1 once already, on the cloud-init
+    # template now-dead copy of this same logic, kept in sync here since
+    # Proxmox and AWS now run this Ansible task instead. The matched
+    # meta-package is what dnf resolves correctly regardless of that skew.
     dnf install -y kernel-modules-extra-matched
     modprobe nft_compat
     # RHEL10-family kernels (6.12+, confirmed on AlmaLinux 10) dropped the
