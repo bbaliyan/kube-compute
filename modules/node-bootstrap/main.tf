@@ -103,6 +103,7 @@ locals {
     node_name                           = var.node_name
     k8s_version                         = var.k8s_version
     cluster_fqdn                        = var.cluster_fqdn != null ? var.cluster_fqdn : ""
+    cluster_fqdn_suffix                 = var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""
     node_role                           = var.node_role
     control_plane_taint                 = var.control_plane_taint
     registration_address                = var.registration_address != null ? var.registration_address : ""

@@ -35,6 +35,12 @@ variable "cluster_fqdn" {
   default     = null
 }
 
+variable "cluster_fqdn_suffix" {
+  description = "Optional DNS suffix under which the platform's web-UI ingress hostnames are published (e.g. 'cluster-1.example.com' yields argocd.cluster-1.example.com). Distinct from cluster_fqdn, which is the API server name (api.<suffix>) — the ingress suffix must not carry the 'api.' prefix. Null/empty disables platform ingress."
+  type        = string
+  default     = null
+}
+
 variable "node_role" {
   description = "Bootstrap role this node is being installed for: 'server-init' (first control-plane node — forms the etcd cluster), 'server-join' (an additional control-plane node), or 'worker' (joins as an agent only, no control plane)."
   type        = string

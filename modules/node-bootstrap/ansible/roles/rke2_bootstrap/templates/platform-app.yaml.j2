@@ -21,7 +21,7 @@ spec:
         - name: clusterName
           value: "{{ cluster_name }}"
         - name: clusterFqdnSuffix
-          value: "{{ cluster_fqdn }}"
+          value: "{{ cluster_fqdn_suffix }}"
         - name: trustedCaPemB64
           value: "{{ resolved_trusted_ca_pem | b64encode }}"
         - name: workloadsRepoURL

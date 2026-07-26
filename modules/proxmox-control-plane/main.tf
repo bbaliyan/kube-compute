@@ -288,6 +288,7 @@ module "node_bootstrap" {
   node_name                      = "${var.cluster_name}-cp-0"
   k8s_version                    = local.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
+  cluster_fqdn_suffix            = local.fqdn_suffix
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
@@ -363,6 +364,7 @@ module "node_bootstrap_additional" {
   node_name                   = "${var.cluster_name}-cp-${each.key}"
   k8s_version                 = local.k8s_version
   cluster_fqdn                = local.cluster_fqdn
+  cluster_fqdn_suffix         = local.fqdn_suffix
   node_role                   = "server-join"
   control_plane_taint         = local.control_plane_taint
   cni                         = local.effective_cni
