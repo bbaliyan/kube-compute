@@ -17,12 +17,15 @@ token: {{ resolved_cluster_token }}
 agent-token: {{ resolved_cluster_agent_token }}
 node-ip: {{ ansible_default_ipv4.address }}
 tls-san:
-  - {{ ansible_default_ipv4.address }}
+{# Quote every SAN: a wildcard entry (e.g. *.cluster.example) starts with '*',
+   which is YAML's alias indicator, so an unquoted "- *.foo" is invalid YAML and
+   RKE2 refuses to start. Quoting is inert for plain IPs/hostnames. #}
+  - "{{ ansible_default_ipv4.address }}"
 {% if cluster_fqdn %}
-  - {{ cluster_fqdn }}
+  - "{{ cluster_fqdn }}"
 {% endif %}
 {% for san in extra_tls_sans %}
-  - {{ san }}
+  - "{{ san }}"
 {% endfor %}
 write-kubeconfig-mode: "0644"
 secrets-encryption: true
