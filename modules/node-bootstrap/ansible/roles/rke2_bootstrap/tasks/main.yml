@@ -39,46 +39,52 @@
     mode: "0644"
 
 - name: os-prep | install ca-certificates and curl, load br_netfilter/overlay
-  ansible.builtin.shell: |
-    set -euo pipefail
-    dnf makecache
-    dnf install -y ca-certificates curl
-    # AlmaLinux 10's minimal image ships only kernel-modules-core, which excludes
-    # nft_compat (the iptables-nft translation shim). Cilium's default VXLAN mode
-    # installs its tunnel-accept rule via classic iptables syntax, which needs
-    # nft_compat — without it Cilium's iptables reconciliation fails and freshly
-    # created pods become unreachable. Use the unversioned "-matched" meta-package,
-    # not a pinned NVR: the BaseOS repo only keeps the subpackage for the latest
-    # kernel, so a pinned request can match nothing for the image's running kernel.
-    dnf install -y kernel-modules-extra-matched
-    modprobe nft_compat
-    # RHEL10 kernels (6.12+) dropped br_netfilter — bridged traffic is filtered
-    # natively via nftables bridge hooks, so there's no module to load and no
-    # bridge-nf-call-* knob. RHEL9 kernels still ship it and need both.
-    if modinfo br_netfilter >/dev/null 2>&1; then
-      printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
-      modprobe br_netfilter
-    else
-      printf 'overlay\n' >/etc/modules-load.d/rke2.conf
-    fi
-    modprobe overlay
-    printf 'net.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-rke2-bridge.conf
-    if [ -d /proc/sys/net/bridge ]; then
-      printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\n' >>/etc/sysctl.d/98-rke2-bridge.conf
-    fi
-    sysctl --system
-  args:
+  # cmd: (not free-form `shell: |`) — free-form invocation runs the whole script
+  # through Ansible's split_args for quote-balance checking before it ever reaches
+  # bash, so a stray apostrophe in a comment (e.g. "AlmaLinux 10's") throws
+  # "failed at splitting arguments: unbalanced ... quotes" at task-load time. The
+  # `cmd:` sub-key passes the script as a dict value instead, bypassing that parser.
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      dnf makecache
+      dnf install -y ca-certificates curl
+      # AlmaLinux 10's minimal image ships only kernel-modules-core, which excludes
+      # nft_compat (the iptables-nft translation shim). Cilium's default VXLAN mode
+      # installs its tunnel-accept rule via classic iptables syntax, which needs
+      # nft_compat — without it Cilium's iptables reconciliation fails and freshly
+      # created pods become unreachable. Use the unversioned "-matched" meta-package,
+      # not a pinned NVR: the BaseOS repo only keeps the subpackage for the latest
+      # kernel, so a pinned request can match nothing for the image's running kernel.
+      dnf install -y kernel-modules-extra-matched
+      modprobe nft_compat
+      # RHEL10 kernels (6.12+) dropped br_netfilter — bridged traffic is filtered
+      # natively via nftables bridge hooks, so there's no module to load and no
+      # bridge-nf-call-* knob. RHEL9 kernels still ship it and need both.
+      if modinfo br_netfilter >/dev/null 2>&1; then
+        printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
+        modprobe br_netfilter
+      else
+        printf 'overlay\n' >/etc/modules-load.d/rke2.conf
+      fi
+      modprobe overlay
+      printf 'net.ipv4.ip_forward = 1\n' >/etc/sysctl.d/98-rke2-bridge.conf
+      if [ -d /proc/sys/net/bridge ]; then
+        printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\n' >>/etc/sysctl.d/98-rke2-bridge.conf
+      fi
+      sysctl --system
     creates: /etc/modules-load.d/rke2.conf
 
 - name: os-prep | label the local-path-provisioner directory for container write access
-  ansible.builtin.shell: |
-    set -euo pipefail
-    dnf install -y policycoreutils-python-utils
-    mkdir -p /var/lib/rancher/local-path-provisioner
-    if ! semanage fcontext -l | grep -q '^/var/lib/rancher/local-path-provisioner(/\.\*)?  '; then
-      semanage fcontext -a -t container_file_t '/var/lib/rancher/local-path-provisioner(/.*)?'
-    fi
-    restorecon -R /var/lib/rancher/local-path-provisioner
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      dnf install -y policycoreutils-python-utils
+      mkdir -p /var/lib/rancher/local-path-provisioner
+      if ! semanage fcontext -l | grep -q '^/var/lib/rancher/local-path-provisioner(/\.\*)?  '; then
+        semanage fcontext -a -t container_file_t '/var/lib/rancher/local-path-provisioner(/.*)?'
+      fi
+      restorecon -R /var/lib/rancher/local-path-provisioner
   # SELinux on AlmaLinux 10 labels fresh dirs under /var/lib/rancher as
   # container_var_lib_t, which blocks containers from writing through a bind mount
   # (even as root). Relabel to container_file_t so hostPath-backed PVCs work.
@@ -141,16 +147,17 @@
 - name: selinux-prep | install rke2-selinux (retry + self-heal on lock contention)
   # No `creates:` guard — rke2-selinux writes no stable marker file. `dnf install`
   # on an already-installed package is a fast no-op, so re-running is safe.
-  ansible.builtin.shell: |
-    set -euo pipefail
-    dnf makecache
-    for attempt in 1 2 3 4 5; do
-      dnf install -y rke2-selinux && exit 0
-      [ "$attempt" -eq 5 ] && exit 1
-      sleep 15
-      pkill -x dnf 2>/dev/null || true
-      pkill -x rpm 2>/dev/null || true
-    done
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      dnf makecache
+      for attempt in 1 2 3 4 5; do
+        dnf install -y rke2-selinux && exit 0
+        [ "$attempt" -eq 5 ] && exit 1
+        sleep 15
+        pkill -x dnf 2>/dev/null || true
+        pkill -x rpm 2>/dev/null || true
+      done
   changed_when: true
 
 - name: Ensure /etc/rancher/rke2 exists
@@ -233,10 +240,10 @@
   when: node_role in ["server-init", "server-join"]
 
 - name: server-init/server-join | install RKE2
-  ansible.builtin.shell: |
-    set -euo pipefail
-    curl -sfL https://get.rke2.io | sh -
-  args:
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      curl -sfL https://get.rke2.io | sh -
     creates: /usr/local/bin/rke2-uninstall.sh
   environment:
     INSTALL_RKE2_VERSION: "{{ k8s_version }}"
@@ -254,20 +261,21 @@
 # (https://etcd.io/docs/v3.4/learning/design-learner/). Stagger by node index and
 # self-heal by wiping local server state and retrying if a collision slips through.
 - name: server-join | staggered, self-healing join
-  ansible.builtin.shell: |
-    set -euo pipefail
-    NODE_INDEX="$(echo '{{ node_name }}' | grep -oE '[0-9]+$' || echo 0)"
-    sleep $((NODE_INDEX * 60))
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      NODE_INDEX="$(echo '{{ node_name }}' | grep -oE '[0-9]+$' || echo 0)"
+      sleep $((NODE_INDEX * 60))
 
-    systemctl enable rke2-server.service
-    JOIN_ATTEMPT=0
-    until systemctl start rke2-server.service && timeout 90 bash -c 'until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
-      JOIN_ATTEMPT=$((JOIN_ATTEMPT + 1))
-      [ "$JOIN_ATTEMPT" -ge 3 ] && { echo "join-race exhausted after 3 attempts" >&2; exit 1; }
-      systemctl stop rke2-server 2>/dev/null || true
-      rm -rf /var/lib/rancher/rke2/server/tls /var/lib/rancher/rke2/server/cred /var/lib/rancher/rke2/server/db
-      sleep 15
-    done
+      systemctl enable rke2-server.service
+      JOIN_ATTEMPT=0
+      until systemctl start rke2-server.service && timeout 90 bash -c 'until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
+        JOIN_ATTEMPT=$((JOIN_ATTEMPT + 1))
+        [ "$JOIN_ATTEMPT" -ge 3 ] && { echo "join-race exhausted after 3 attempts" >&2; exit 1; }
+        systemctl stop rke2-server 2>/dev/null || true
+        rm -rf /var/lib/rancher/rke2/server/tls /var/lib/rancher/rke2/server/cred /var/lib/rancher/rke2/server/db
+        sleep 15
+      done
   when: node_role == "server-join"
 
 # ---- worker: fetch its own agent token, install as agent ----
@@ -296,10 +304,10 @@
   when: node_role == "worker"
 
 - name: worker | install RKE2 agent
-  ansible.builtin.shell: |
-    set -euo pipefail
-    curl -sfL https://get.rke2.io | sh -
-  args:
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      curl -sfL https://get.rke2.io | sh -
     creates: /usr/local/bin/rke2-uninstall.sh
   environment:
     INSTALL_RKE2_VERSION: "{{ k8s_version }}"
@@ -316,9 +324,10 @@
 # ---- wait for readiness, so Ansible's synchronous output reflects real success/
 #      failure rather than "service started" alone ----
 - name: server-init/server-join | wait for this node to report Ready
-  ansible.builtin.shell: |
-    set -euo pipefail
-    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -q Ready
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -q Ready
   register: ready_check
   until: ready_check.rc == 0
   retries: 60
