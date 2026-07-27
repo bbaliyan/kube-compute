@@ -6,18 +6,21 @@ mock_provider "azurerm" {
   mock_resource "azurerm_network_security_group" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkSecurityGroups/nsg-bharat-worker" }
   }
-  mock_resource "azurerm_linux_virtual_machine_scale_set" {
+  mock_resource "azurerm_linux_virtual_machine" {
     defaults = {
-      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachineScaleSets/vmss-bharat-worker"
+      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachines/vm-bharat-worker-0"
       identity = { principal_id = "00000000-0000-0000-0000-000000000099", tenant_id = "00000000-0000-0000-0000-000000000001" }
     }
   }
   mock_resource "azurerm_role_assignment" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000004" }
   }
+  mock_resource "azurerm_network_interface" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkInterfaces/nic-bharat-worker-0" }
+  }
 }
 
-run "worker_fetches_agent_token_via_imds_and_key_vault_rest_not_ssm" {
+run "workers_are_discrete_vms_joining_via_run_command_and_key_vault" {
   command = apply
   variables {
     cluster_name              = "bharat"
@@ -37,36 +40,41 @@ run "worker_fetches_agent_token_via_imds_and_key_vault_rest_not_ssm" {
     agent_token_secret_name   = "agent-token"
     cluster_asg_id            = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster"
   }
+  # Discrete VMs, not a VMSS.
   assert {
-    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "169.254.169.254/metadata/identity/oauth2/token")
-    error_message = "every worker's cloud-init must fetch its OAuth token from Azure IMDS, not az CLI"
+    condition     = length(azurerm_linux_virtual_machine.worker) == 2
+    error_message = "desired_count = 2 must create two discrete worker VMs"
   }
   assert {
-    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "kvbharat123456.vault.azure.net/secrets/agent-token")
-    error_message = "every worker's cloud-init must fetch the agent token from this cluster's own Key Vault secret"
+    condition     = azurerm_linux_virtual_machine.worker["0"].zone == "1"
+    error_message = "every worker VM must be pinned to the single configured zone"
+  }
+  # Bootstrap delivered via run-command.
+  assert {
+    condition     = strcontains(azurerm_virtual_machine_run_command.worker["0"].source[0].script, "ansible-playbook")
+    error_message = "each worker's run-command must deliver the node-bootstrap on_node bundle"
+  }
+  # The agent-token fetch is delivered out-of-band as a protected parameter, NOT
+  # embedded in the bundle (the IMDS/Key-Vault call must not appear in the script).
+  assert {
+    condition     = contains([for p in azurerm_virtual_machine_run_command.worker["0"].protected_parameter : p.name], "AGENT_TOKEN_FETCH_COMMAND")
+    error_message = "the agent-token fetch command must ride as a protected parameter"
   }
   assert {
-    condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "aws ssm")
+    condition     = !strcontains(azurerm_virtual_machine_run_command.worker["0"].source[0].script, "169.254.169.254")
+    error_message = "the token fetch (IMDS) must not be embedded in the bundle — it is a protected parameter"
+  }
+  assert {
+    condition     = !strcontains(azurerm_virtual_machine_run_command.worker["0"].source[0].script, "aws ssm")
     error_message = "an Azure worker must never reference AWS SSM"
   }
+  # Least-privilege token read, per worker identity, scoped to the one secret.
   assert {
-    condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "az keyvault")
-    error_message = "the fetch command must use raw curl+IMDS, not the az CLI (not guaranteed present on the image)"
-  }
-  assert {
-    condition     = azurerm_linux_virtual_machine_scale_set.worker.instances == 2
-    error_message = "desired_count = 2 must create a VMSS with instances = 2"
-  }
-  assert {
-    condition     = contains(azurerm_linux_virtual_machine_scale_set.worker.zones, "1")
-    error_message = "the VMSS must be pinned to the single configured zone"
-  }
-  assert {
-    condition     = azurerm_role_assignment.agent_token_read.role_definition_name == "Key Vault Secrets User"
+    condition     = azurerm_role_assignment.agent_token_read["0"].role_definition_name == "Key Vault Secrets User"
     error_message = "the worker identity must be granted Key Vault Secrets User, not a broader role"
   }
   assert {
-    condition     = azurerm_role_assignment.agent_token_read.scope == "${var.key_vault_id}/secrets/${var.agent_token_secret_name}"
+    condition     = azurerm_role_assignment.agent_token_read["0"].scope == "${var.key_vault_id}/secrets/${var.agent_token_secret_name}"
     error_message = "the role assignment must be scoped to the individual secret, not the whole vault"
   }
 }

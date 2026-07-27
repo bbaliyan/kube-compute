@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
-output "vmss_id" {
-  description = "Resource ID of the VM Scale Set backing this pool."
-  value       = azurerm_linux_virtual_machine_scale_set.worker.id
+output "instance_ids" {
+  description = "Resource IDs of every worker VM in this pool, keyed by index. Control-plane verb-scripts target these via az vm run-command."
+  value       = { for k, vm in azurerm_linux_virtual_machine.worker : k => vm.id }
 }
 
-output "vmss_name" {
-  description = "Name of the VM Scale Set backing this pool."
-  value       = azurerm_linux_virtual_machine_scale_set.worker.name
+output "private_ips" {
+  description = "Private IPv4 address of every worker in this pool, keyed by index."
+  value       = { for k, nic in azurerm_network_interface.worker : k => nic.private_ip_address }
 }
 
 output "node_provider" {
-  description = "Provider identifier the control-plane verb-scripts use to dispatch (Azure = az vm run-command, applied per-instance within the scale set)."
+  description = "Provider identifier the control-plane verb-scripts use to dispatch (Azure = az vm run-command, per VM)."
   value       = "azure"
 }
 
@@ -19,13 +19,12 @@ output "zone" {
   value       = var.zone
 }
 
-output "worker_identity_principal_id" {
-  description = "Principal ID of the VM Scale Set's system-assigned managed identity. Reference this to grant additional least-privilege role assignments (e.g. read access to other cluster secrets) from your consumer repo."
-  value       = azurerm_linux_virtual_machine_scale_set.worker.identity[0].principal_id
+output "worker_identity_principal_ids" {
+  description = "Principal ID of each worker's system-assigned managed identity, keyed by index. Reference these to grant additional least-privilege role assignments from your consumer repo."
+  value       = { for k, vm in azurerm_linux_virtual_machine.worker : k => vm.identity[0].principal_id }
 }
 
-output "rendered_cloud_init" {
-  description = "Plaintext rendered cloud-config shared by every worker in this pool, passed through from cloud-init. Sensitive — for tests/debugging only."
-  value       = module.bootstrap.cloud_init
-  sensitive   = true
+output "rendered_bootstrap_bundle" {
+  description = "The node-bootstrap on_node runner script delivered to each worker via run-command, keyed by index. Carries no secrets (those flow as protected parameters). For tests/debugging only."
+  value       = { for k, m in module.bootstrap : k => m.on_node_bundle }
 }

@@ -2,14 +2,21 @@
 
 A fixed-size node pool for a `azure-control-plane` cluster, pinned to a single availability zone
 (one pool = one zone, matching `aws-node-pool`'s one-pool-per-subnet-per-AZ convention).
-Backed by an `azurerm_linux_virtual_machine_scale_set` with `upgrade_mode = "Manual"` (no
-autoscaling, no rolling upgrades — a fixed pool is the safe default for stateful workloads,
-same rationale as `aws-node-pool`).
+Backed by discrete `azurerm_linux_virtual_machine` instances (one per index, each with its own
+NIC and system-assigned identity) — no autoscaling, no auto-healing (scale by changing
+`desired_count`; replace a bad worker by tainting/recreating it), a fixed pool being the safe
+default for stateful workloads, same rationale as `aws-node-pool`. Each worker gets a stable node
+name (`<cluster>-worker-<index>`).
+
+Each worker is bootstrapped by the shared `node-bootstrap` module in `on_node` mode: an
+`azurerm_virtual_machine_run_command` delivers the self-contained bundle and Ansible runs on the
+node itself (`-c local`). No inbound port is opened — the `deny-ssh` NSG rule stays — and secrets
+ride as run-command protected parameters, never in state or `custom_data`.
 
 ## Join flow
 
 Every worker's system-assigned managed identity is granted `Key Vault Secrets User`,
-scoped to exactly the control plane's `agent-token` secret (never the whole vault). At boot, the
+scoped to exactly the control plane's `agent-token` secret (never the whole vault). At join, the
 worker fetches an OAuth token from Azure's Instance Metadata Service and calls the Key
 Vault Secrets REST API directly via `curl` + `python3` — no Azure CLI dependency, since
 the AlmaLinux 10 image is not guaranteed to ship it.

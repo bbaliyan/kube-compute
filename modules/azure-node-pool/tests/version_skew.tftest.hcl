@@ -3,11 +3,17 @@ mock_provider "azurerm" {
   mock_data "azurerm_subnet" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-main/subnets/snet-k8s" }
   }
-  mock_resource "azurerm_linux_virtual_machine_scale_set" {
+  mock_resource "azurerm_network_security_group" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkSecurityGroups/nsg-bharat-worker" }
+  }
+  mock_resource "azurerm_linux_virtual_machine" {
     defaults = {
-      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachineScaleSets/vmss-bharat-worker"
+      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachines/vm-bharat-worker-0"
       identity = { principal_id = "00000000-0000-0000-0000-000000000099", tenant_id = "00000000-0000-0000-0000-000000000001" }
     }
+  }
+  mock_resource "azurerm_network_interface" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkInterfaces/nic-bharat-worker-0" }
   }
 }
 
@@ -30,5 +36,5 @@ run "newer_pool_version_than_control_plane_rejected" {
     agent_token_secret_name   = "agent-token"
     cluster_asg_id            = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster"
   }
-  expect_failures = [azurerm_linux_virtual_machine_scale_set.worker]
+  expect_failures = [azurerm_linux_virtual_machine.worker]
 }

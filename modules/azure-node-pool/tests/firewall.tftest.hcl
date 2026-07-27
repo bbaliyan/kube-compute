@@ -6,14 +6,17 @@ mock_provider "azurerm" {
   mock_resource "azurerm_network_security_group" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkSecurityGroups/nsg-bharat-worker" }
   }
-  mock_resource "azurerm_linux_virtual_machine_scale_set" {
+  mock_resource "azurerm_linux_virtual_machine" {
     defaults = {
-      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachineScaleSets/vmss-bharat-worker"
+      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Compute/virtualMachines/vm-bharat-worker-0"
       identity = { principal_id = "00000000-0000-0000-0000-000000000099", tenant_id = "00000000-0000-0000-0000-000000000001" }
     }
   }
   mock_resource "azurerm_role_assignment" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleAssignments/00000000-0000-0000-0000-000000000004" }
+  }
+  mock_resource "azurerm_network_interface" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkInterfaces/nic-bharat-worker-0" }
   }
 }
 
@@ -58,7 +61,7 @@ run "pool_owns_its_own_nsg_denying_ssh_and_allowing_cluster_self" {
     error_message = "the cluster-self rule must reference the control plane's cluster ASG as the destination"
   }
   assert {
-    condition     = azurerm_linux_virtual_machine_scale_set.worker.network_interface[0].network_security_group_id == azurerm_network_security_group.worker.id
-    error_message = "the VMSS network_interface must attach this pool's own NSG"
+    condition     = azurerm_network_interface_security_group_association.worker["0"].network_security_group_id == azurerm_network_security_group.worker.id
+    error_message = "every worker NIC must attach this pool's own NSG"
   }
 }
