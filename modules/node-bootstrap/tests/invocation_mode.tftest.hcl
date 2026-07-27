@@ -13,8 +13,9 @@ run "operator_connect_default_no_bundle" {
   command = plan
 
   variables {
-    node_role     = "server-init"
-    cluster_token = "operatorsecret"
+    node_role           = "server-init"
+    cluster_token       = "operatorsecret"
+    cluster_agent_token = "operatoragent"
   }
 
   assert {
@@ -76,9 +77,10 @@ run "on_node_worker_skips_genesis_helm_render" {
   command = plan
 
   variables {
-    invocation_mode      = "on_node"
-    node_role            = "worker"
-    registration_address = "10.0.0.10"
+    invocation_mode           = "on_node"
+    node_role                 = "worker"
+    registration_address      = "10.0.0.10"
+    agent_token_fetch_command = "echo tok"
   }
 
   assert {

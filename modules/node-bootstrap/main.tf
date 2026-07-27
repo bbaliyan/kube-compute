@@ -131,19 +131,22 @@ locals {
 
   extra_vars_json = jsonencode(local.extra_vars)
 
-  # Secrets, gated on presence rather than node_role: the caller (a provider
-  # module) already decides which tokens a given role receives — server-init
-  # gets both tokens, server-join gets cluster_token only, worker gets only
-  # agent_token_fetch_command. Mirroring that here (instead of hardcoding role
-  # checks) means this module doesn't need to know provider-module policy.
-  # trusted_ca_pem gets the same treatment as the join secrets, per Ticket 03's
-  # principle — never a file, never an extra-var. In operator_connect these are
-  # the local-exec `environment`; in on_node the caller maps them to run-command
-  # protected parameters (exposed via the on_node_secret_env output).
+  # Secrets, keyed by node_role so the key SET is known at plan time. This
+  # encodes the same role->secret policy every provider module already follows:
+  # server-init gets both tokens, server-join the cluster token, worker the fetch
+  # command; trusted_ca_pem (a plain input) is added for any role. Role-gating
+  # rather than value-presence-gating is deliberate: on_node's caller builds one
+  # run-command protected_parameter per key via for_each, which Terraform
+  # requires to be plan-known — but the token VALUES come from a random_password
+  # and are unknown until apply, so gating the key set on `!= null` would make
+  # for_each unknown and fail. node_role and trusted_ca_pem are plain inputs,
+  # known at plan. In operator_connect these are the local-exec `environment`;
+  # in on_node the caller maps them to run-command protected parameters (exposed
+  # via the on_node_secret_env output). Never a file, never an extra-var.
   secret_env = merge(
-    var.cluster_token != null ? { CLUSTER_TOKEN = var.cluster_token } : {},
-    var.cluster_agent_token != null ? { CLUSTER_AGENT_TOKEN = var.cluster_agent_token } : {},
-    var.agent_token_fetch_command != null ? { AGENT_TOKEN_FETCH_COMMAND = var.agent_token_fetch_command } : {},
+    var.node_role == "server-init" ? { CLUSTER_TOKEN = var.cluster_token, CLUSTER_AGENT_TOKEN = var.cluster_agent_token } : {},
+    var.node_role == "server-join" ? { CLUSTER_TOKEN = var.cluster_token } : {},
+    var.node_role == "worker" ? { AGENT_TOKEN_FETCH_COMMAND = var.agent_token_fetch_command } : {},
     var.trusted_ca_pem != null ? { TRUSTED_CA_PEM = var.trusted_ca_pem } : {},
   )
 
