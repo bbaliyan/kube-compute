@@ -11,7 +11,7 @@ module "bootstrap" {
   cluster_fqdn_suffix  = "render-check.example.test"
   trusted_ca_pem       = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
   registry_mirror_url  = "https://harbor.example.test"
-  gitops_root_repo_url = "https://github.com/example/kube-apps.git"
+  gitops_root_repo_url = "https://github.com/example/kube-root-app.git"
   gitops_root_revision = "v1.0.0"
   gitops_root_path     = "render-check"
   extra_tags           = { CostCenter = "example" }

@@ -8,7 +8,7 @@ run "root_app_rendered" {
   variables {
     cluster_name         = "test1"
     k8s_version          = "v1.36.1+rke2r1"
-    gitops_root_repo_url = "https://github.com/example/kube-apps.git"
+    gitops_root_repo_url = "https://github.com/example/kube-root-app.git"
     gitops_root_revision = "v1.0.0"
     gitops_root_path     = "test1"
   }
@@ -24,7 +24,7 @@ run "root_app_rendered" {
     error_message = "genesis must plant a single app-of-apps root Application"
   }
   assert {
-    condition     = strcontains(nonsensitive(output.cloud_init), "https://github.com/example/kube-apps.git")
+    condition     = strcontains(nonsensitive(output.cloud_init), "https://github.com/example/kube-root-app.git")
     error_message = "root Application must reference the root repo"
   }
   assert {
@@ -47,7 +47,7 @@ run "ingress_suffix_is_bare_not_api_fqdn" {
     k8s_version          = "v1.36.1+rke2r1"
     cluster_fqdn         = "api.test1.example.test"
     cluster_fqdn_suffix  = "test1.example.test"
-    gitops_root_repo_url = "https://github.com/example/kube-apps.git"
+    gitops_root_repo_url = "https://github.com/example/kube-root-app.git"
   }
   assert {
     # Guards the bug where clusterFqdnSuffix was fed the api-prefixed API FQDN:

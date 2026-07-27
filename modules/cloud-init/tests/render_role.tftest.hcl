@@ -201,7 +201,7 @@ run "argo_manifests_only_on_server_init" {
     node_role            = "server-join"
     registration_address = "10.0.1.10"
     cluster_token        = "cluster-secret-argo"
-    gitops_root_repo_url = "https://github.com/example/kube-apps.git"
+    gitops_root_repo_url = "https://github.com/example/kube-root-app.git"
     # Isolate this assertion from Cilium's own (legitimately server-join-rendered)
     # HelmChart manifest — both features emit "kind: HelmChart", so this test
     # scopes to Argo's own unique chart identifier instead of the generic kind.
