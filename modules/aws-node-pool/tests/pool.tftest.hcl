@@ -3,12 +3,9 @@ mock_provider "aws" {
   mock_data "aws_ec2_instance_type" {
     defaults = { supported_architectures = ["arm64"] }
   }
-  mock_resource "aws_launch_template" {
-    defaults = { id = "lt-mock0000000000001" }
-  }
 }
 
-run "fixed_pool_attaches_cluster_sg_and_sets_az_label" {
+run "fixed_pool_is_discrete_instances_on_the_cluster_sg" {
   command = plan
   override_data {
     target = data.aws_subnet.selected
@@ -26,32 +23,34 @@ run "fixed_pool_attaches_cluster_sg_and_sets_az_label" {
     instance_type             = "m7g.large"
     desired_count             = 3
   }
+  # Fixed pool = exactly desired_count discrete instances (no ASG).
   assert {
-    condition     = aws_autoscaling_group.worker.min_size == 3 && aws_autoscaling_group.worker.max_size == 3 && aws_autoscaling_group.worker.desired_capacity == 3
-    error_message = "a fixed pool must set min_size = max_size = desired_capacity"
+    condition     = length(aws_instance.worker) == 3
+    error_message = "a fixed pool must create exactly desired_count discrete instances"
   }
   assert {
-    condition     = contains(aws_launch_template.worker.vpc_security_group_ids, "sg-cluster123")
-    error_message = "the launch template must attach the control plane's cluster security group"
+    condition     = contains(aws_instance.worker[0].vpc_security_group_ids, "sg-cluster123")
+    error_message = "every worker must attach the control plane's cluster security group"
   }
   assert {
-    condition     = aws_launch_template.worker.metadata_options[0].http_tokens == "required"
+    condition     = aws_instance.worker[0].metadata_options[0].http_tokens == "required"
     error_message = "IMDSv2 must be enforced"
   }
+  # Connectivity-only user-data: SSM agent enabled, never an RKE2/cluster payload.
   assert {
-    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "\"topology.kubernetes.io/zone=eu-west-1a\"")
-    error_message = "the pool must derive the AZ from its subnet and set it as a node label"
+    condition     = strcontains(aws_instance.worker[0].user_data, "amazon-ssm-agent")
+    error_message = "worker user-data must enable the SSM agent for the Ansible transport"
   }
   assert {
-    condition     = strcontains(nonsensitive(module.bootstrap.cloud_init), "aws ssm get-parameter")
-    error_message = "the worker must fetch the agent token from SSM at boot, never embed it"
-  }
-  assert {
-    condition     = !strcontains(nonsensitive(module.bootstrap.cloud_init), "cluster-init")
-    error_message = "a node pool must never render server-only flags"
+    condition     = !strcontains(aws_instance.worker[0].user_data, "cluster-init")
+    error_message = "worker user-data must carry no server/cluster bootstrap payload"
   }
   assert {
     condition     = output.availability_zone == "eu-west-1a"
     error_message = "availability_zone output must reflect the subnet's AZ"
+  }
+  assert {
+    condition     = length(output.instance_ids) == 3
+    error_message = "instance_ids must list every worker for verb-script targeting"
   }
 }

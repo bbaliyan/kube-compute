@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to cloud-init) ----
-variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 10 template."
+# ---- Common inputs (pass through to node-bootstrap) ----
+variable "ansible_playbook_path" {
+  description = "Absolute path to the Ansible playbook node-bootstrap runs. Defaults to the bundled AlmaLinux-10-only playbook. Override only for a consumer-supplied playbook targeting a different OS (no compatibility guarantee)."
   type        = string
   default     = null
 }
@@ -107,7 +107,7 @@ variable "extra_node_labels" {
 }
 
 variable "extra_tags" {
-  description = "Additional tags applied to every AWS resource this module creates (launch template, ASG instances, security group attachment, IAM role)."
+  description = "Additional tags applied to every AWS resource this module creates (worker instances, IAM role, SSM staging bucket)."
   type        = map(string)
   default     = {}
 }

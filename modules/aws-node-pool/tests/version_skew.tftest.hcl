@@ -3,9 +3,6 @@ mock_provider "aws" {
   mock_data "aws_ec2_instance_type" {
     defaults = { supported_architectures = ["arm64"] }
   }
-  mock_resource "aws_launch_template" {
-    defaults = { id = "lt-mock0000000000001" }
-  }
 }
 
 run "pool_version_equal_to_control_plane_is_accepted" {
@@ -25,7 +22,7 @@ run "pool_version_equal_to_control_plane_is_accepted" {
     subnet_id                 = "subnet-worker-a"
   }
   assert {
-    condition     = aws_launch_template.worker.id != ""
+    condition     = length(aws_instance.worker) >= 1
     error_message = "equal pool/control-plane versions must plan successfully"
   }
 }
@@ -47,7 +44,7 @@ run "pool_version_older_than_control_plane_is_accepted" {
     subnet_id                 = "subnet-worker-a"
   }
   assert {
-    condition     = aws_launch_template.worker.id != ""
+    condition     = length(aws_instance.worker) >= 1
     error_message = "an older pool version (kubelet trailing the API server) must be accepted"
   }
 }
@@ -68,5 +65,5 @@ run "pool_version_newer_than_control_plane_is_rejected" {
     cluster_security_group_id = "sg-cluster123"
     subnet_id                 = "subnet-worker-a"
   }
-  expect_failures = [aws_launch_template.worker]
+  expect_failures = [aws_instance.worker]
 }

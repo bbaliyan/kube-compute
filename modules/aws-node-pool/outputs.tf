@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-output "autoscaling_group_name" {
-  description = "Name of the ASG backing this pool."
-  value       = aws_autoscaling_group.worker.name
+output "instance_ids" {
+  description = "EC2 instance IDs of every worker in this pool, in index order. Control-plane verb-scripts target these via SSM (aws ssm send-command/start-session)."
+  value       = aws_instance.worker[*].id
 }
 
-output "launch_template_id" {
-  description = "Launch template id used by the ASG."
-  value       = aws_launch_template.worker.id
+output "private_ips" {
+  description = "Private IPv4 address of every worker in this pool, in index order."
+  value       = aws_instance.worker[*].private_ip
 }
 
 output "node_provider" {
