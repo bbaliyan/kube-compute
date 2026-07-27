@@ -7,10 +7,24 @@ stays in the provider modules (`aws-control-plane`, `proxmox-control-plane`,
 `aws-node-pool`, `proxmox-node-pool`, ...), matching the existing two-layer
 split.
 
-Terraform triggers the run via a `null_resource`'s `local-exec` provisioner
-invoking `ansible-playbook`, which connects to the node over whichever
-transport the caller's `ansible_connection_vars` describe (AWS: SSM; Proxmox:
-SSH) — never a new inbound port.
+The same Ansible role is the single source of truth for the bootstrap; only how
+it's invoked differs by provider, selected by `invocation_mode`:
+
+- **`operator_connect`** (default — AWS, Proxmox): Terraform triggers a
+  `null_resource` `local-exec` running `ansible-playbook` on the operator, which
+  connects to the node over whichever transport the caller's
+  `ansible_connection_vars` describe (AWS: SSM; Proxmox: SSH) — never a new
+  inbound port.
+- **`on_node`** (Azure): this module renders a self-contained bootstrap bundle —
+  the playbook and role zipped and base64'd into a runner script — and exposes it
+  on the `on_node_bundle` output. It delivers nothing itself; the caller (an Azure
+  module) hands the bundle to `az vm run-command` and Ansible runs on the node via
+  `-c local`. Secrets are **not** in the bundle: they're exposed separately on the
+  `on_node_secret_env` output for the caller to pass as run-command protected
+  parameters (which Linux injects as environment variables — the same names the
+  role already reads). This keeps `az` out of this provider-neutral module, the
+  same render/attach split `cloud-init` used, while the Cilium/Argo genesis render
+  and extra-vars payload stay shared with `operator_connect` so they can't diverge.
 
 ## Scope of this build
 

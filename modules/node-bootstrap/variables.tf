@@ -9,9 +9,20 @@ variable "ansible_playbook_path" {
   default     = null
 }
 
+variable "invocation_mode" {
+  description = "How the Ansible role is executed. 'operator_connect' (default): ansible-playbook runs on the operator (the terragrunt-apply machine) and connects to the node via ansible_connection_vars — AWS SSM or Proxmox SSH. 'on_node': this module renders a self-contained bundle (playbook + role zipped and base64'd into a runner script) exposed via the on_node_bundle output; the caller (an Azure module) delivers it with az vm run-command and Ansible runs on the node itself (-c local). In on_node mode ansible_connection_vars is ignored, no local-exec runs, and the caller maps on_node_secret_env to run-command protected parameters."
+  type        = string
+  default     = "operator_connect"
+  validation {
+    condition     = contains(["operator_connect", "on_node"], var.invocation_mode)
+    error_message = "invocation_mode must be 'operator_connect' or 'on_node'."
+  }
+}
+
 variable "ansible_connection_vars" {
-  description = "Non-secret Ansible connection facts for this node, assembled by the caller (a provider module) since connection transport is inherently provider-specific — e.g. { ansible_connection = \"ssh\", ansible_host = \"10.0.1.5\", ansible_user = \"almalinux\", ansible_ssh_private_key_file = \"...\" } for Proxmox, or { ansible_connection = \"amazon.aws.aws_ssm\", ansible_aws_ssm_instance_id = \"i-...\", ansible_aws_ssm_region = \"...\", ansible_aws_ssm_bucket_name = \"...\" } for AWS. This module does not interpret the keys — it forwards them to ansible-playbook as extra-vars."
+  description = "Non-secret Ansible connection facts for this node, assembled by the caller (a provider module) since connection transport is inherently provider-specific — e.g. { ansible_connection = \"ssh\", ansible_host = \"10.0.1.5\", ansible_user = \"almalinux\", ansible_ssh_private_key_file = \"...\" } for Proxmox, or { ansible_connection = \"amazon.aws.aws_ssm\", ansible_aws_ssm_instance_id = \"i-...\", ansible_aws_ssm_region = \"...\", ansible_aws_ssm_bucket_name = \"...\" } for AWS. This module does not interpret the keys — it forwards them to ansible-playbook as extra-vars. Ignored when invocation_mode = \"on_node\" (Ansible runs locally on the node, no connection); pass {} there."
   type        = map(string)
+  default     = {}
 }
 
 variable "cluster_name" {
