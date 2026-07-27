@@ -4,8 +4,6 @@ module "component_versions" {
 }
 
 locals {
-  cloud_init_template = coalesce(var.cloud_init_template, "${path.module}/../cloud-init/templates/cloud-init-almalinux-10.yaml.tpl")
-
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
@@ -233,10 +231,14 @@ resource "azurerm_network_interface_application_security_group_association" "etc
 }
 
 # ---- The genesis control-plane node (server-init) ----
+# on_node invocation: node-bootstrap renders a self-contained bundle we deliver
+# via az vm run-command (azurerm_virtual_machine_run_command below). Ansible runs
+# on the node itself (-c local); no inbound port, so the deny-ssh NSG rule stays.
 module "bootstrap" {
-  source = "../cloud-init"
+  source = "../node-bootstrap"
 
-  cloud_init_template            = local.cloud_init_template
+  invocation_mode                = "on_node"
+  ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
   k8s_version                    = local.k8s_version
@@ -293,7 +295,8 @@ resource "azurerm_linux_virtual_machine" "control_plane" {
     version   = local.image_version
   }
 
-  custom_data = module.bootstrap.user_data_base64
+  # No custom_data: bootstrap runs post-boot via az vm run-command (on_node), not
+  # cloud-init. The VM only needs the Azure Linux Guest Agent, which the image ships.
 
   lifecycle {
     precondition {
@@ -307,9 +310,10 @@ resource "azurerm_linux_virtual_machine" "control_plane" {
 module "bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
-  source = "../cloud-init"
+  source = "../node-bootstrap"
 
-  cloud_init_template         = local.cloud_init_template
+  invocation_mode             = "on_node"
+  ansible_playbook_path       = var.ansible_playbook_path
   cluster_name                = var.cluster_name
   node_name                   = "${var.cluster_name}-cp-${each.key}"
   k8s_version                 = local.k8s_version
@@ -363,9 +367,68 @@ resource "azurerm_linux_virtual_machine" "control_plane_additional" {
     version   = local.image_version
   }
 
-  custom_data = each.value.user_data_base64
+  # No custom_data — bootstrap is delivered via run-command (see below).
 
   depends_on = [azurerm_linux_virtual_machine.control_plane]
+}
+
+# ---- Bootstrap delivery: az vm run-command, one per control-plane node ----
+# The portless Azure transport (constraint 6): run-command pushes node-bootstrap's
+# self-contained on_node bundle and Ansible runs on the node. Secrets travel as
+# protected parameters, which Azure's Linux guest agent injects as environment
+# variables named exactly as each parameter — the names node-bootstrap's runner
+# reads (CLUSTER_TOKEN, CLUSTER_AGENT_TOKEN, TRUSTED_CA_PEM, ...). keys() is
+# non-secret (fixed names); only the values are sensitive.
+#
+# NOTE (pending real-apply verification — Azure is untested here): two
+# assumptions ride on this — (1) managed run-command runs on the AlmaLinux 10
+# image (waagent >= 2.4.0.2; AL10 is not in Microsoft's support table), and
+# (2) protected-parameter names surface verbatim as env vars on Linux. Both must
+# be confirmed on a real apply before this path is trusted. Full-log streaming to
+# an output blob is deliberately deferred to a separate ticket; until then the
+# captured output view is the last-4KB instanceView (the script still runs fully).
+resource "azurerm_virtual_machine_run_command" "genesis" {
+  name               = "kube-compute-bootstrap"
+  location           = var.location
+  virtual_machine_id = azurerm_linux_virtual_machine.control_plane.id
+
+  source {
+    script = module.bootstrap.on_node_bundle
+  }
+
+  dynamic "protected_parameter" {
+    for_each = nonsensitive(toset(keys(module.bootstrap.on_node_secret_env)))
+    content {
+      name  = protected_parameter.value
+      value = module.bootstrap.on_node_secret_env[protected_parameter.value]
+    }
+  }
+}
+
+# Additional servers join one at a time after genesis is up — node-bootstrap's own
+# staggered join-race retry orders them among themselves; this depends_on ensures
+# genesis's run-command has finished first (the first server must exist before any
+# server-join can reach the registration endpoint).
+resource "azurerm_virtual_machine_run_command" "additional" {
+  for_each = module.bootstrap_additional
+
+  name               = "kube-compute-bootstrap"
+  location           = var.location
+  virtual_machine_id = azurerm_linux_virtual_machine.control_plane_additional[each.key].id
+
+  source {
+    script = each.value.on_node_bundle
+  }
+
+  dynamic "protected_parameter" {
+    for_each = nonsensitive(toset(keys(each.value.on_node_secret_env)))
+    content {
+      name  = protected_parameter.value
+      value = each.value.on_node_secret_env[protected_parameter.value]
+    }
+  }
+
+  depends_on = [azurerm_virtual_machine_run_command.genesis]
 }
 
 # ---- Internal Standard LB fronting the control plane on 6443 (control_plane_count > 1) ----

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to cloud-init) ----
-variable "cloud_init_template" {
-  description = "Absolute path to the cloud-init template to render. Defaults to the bundled AlmaLinux 10 template. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
+# ---- Common inputs (pass through to node-bootstrap) ----
+variable "ansible_playbook_path" {
+  description = "Absolute path to the Ansible playbook node-bootstrap runs. Defaults to the bundled AlmaLinux-10-only playbook. Override only for a consumer-supplied playbook targeting a different OS (no compatibility guarantee)."
   type        = string
   default     = null
 }

@@ -44,8 +44,12 @@ run "single_node_no_endpoint" {
     error_message = "password authentication must be disabled"
   }
   assert {
-    condition     = length(azurerm_linux_virtual_machine.control_plane.custom_data) > 0
-    error_message = "genesis VM must have cloud-init custom_data from node-bootstrap"
+    condition     = azurerm_linux_virtual_machine.control_plane.custom_data == null
+    error_message = "genesis VM must carry no custom_data — bootstrap is delivered via run-command, not cloud-init"
+  }
+  assert {
+    condition     = strcontains(azurerm_virtual_machine_run_command.genesis.source[0].script, "ansible-playbook")
+    error_message = "genesis run-command must deliver the node-bootstrap on_node bundle"
   }
   assert {
     condition     = length(azurerm_network_interface.control_plane) == 1

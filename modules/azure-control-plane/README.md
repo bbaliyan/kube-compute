@@ -14,8 +14,13 @@ tokens delivered via Key Vault (RBAC authorization).
   (control-plane-only, ports 2379-2380) — the Azure equivalent of AWS's self-referencing
   security group. `azure-node-pool` joins the `cluster` ASG by id; it never creates one.
 - One Key Vault (`rbac_authorization_enabled = true`) holding the agent join token as a secret.
-  The server token is passed directly to `cloud-init` within this module's own state —
-  control-plane nodes never read from Key Vault.
+  The server token is delivered directly to each control-plane node as a run-command protected
+  parameter — control-plane nodes never read from Key Vault.
+- One `azurerm_virtual_machine_run_command` per node that delivers the `node-bootstrap` `on_node`
+  bundle. Bootstrap runs on the node itself (Ansible `-c local`); secrets ride as protected
+  parameters (injected as environment variables), so nothing sensitive lands in `custom_data` or
+  state, and **no inbound port is opened** — the `deny-ssh` NSG rule (priority 100) stays. This is
+  the same `az vm run-command` primitive the control-plane verb-scripts use.
 
 ## What this module never creates
 

@@ -28,7 +28,7 @@ output "node_provider" {
 }
 
 output "node_control_ref" {
-  description = "Genesis VM resource ID, for control-plane verb-scripts that need a single node reference. Usage: az vm run-command invoke --ids <this> --command-id RunShellScript. Renamed from bootstrap_status_ref for naming consistency with AWS/Proxmox (Azure is not part of the Ansible-bootstrap cutover — see kube-compute's node-bootstrap module — and still uses cloud-init; this is a naming-only fix)."
+  description = "Genesis VM resource ID, for control-plane verb-scripts that need a single node reference. Usage: az vm run-command invoke --ids <this> --command-id RunShellScript. Same primitive this module now uses to bootstrap the node (node-bootstrap on_node delivered via az vm run-command)."
   value       = azurerm_linux_virtual_machine.control_plane.id
 }
 
@@ -104,14 +104,12 @@ output "control_plane_node_refs" {
   )
 }
 
-output "rendered_cloud_init" {
-  description = "Plaintext rendered cloud-config for the genesis node, passed through from cloud-init. Sensitive — for tests/debugging only."
-  value       = module.bootstrap.cloud_init
-  sensitive   = true
+output "rendered_bootstrap_bundle" {
+  description = "The node-bootstrap on_node runner script delivered to the genesis node via run-command. Carries no secrets (those flow as protected parameters). For tests/debugging only."
+  value       = module.bootstrap.on_node_bundle
 }
 
-output "rendered_cloud_init_additional" {
-  description = "Map of rendered cloud-config for additional control-plane nodes, keyed by index. Sensitive."
-  value       = { for k, m in module.bootstrap_additional : k => m.cloud_init }
-  sensitive   = true
+output "rendered_bootstrap_bundle_additional" {
+  description = "Map of node-bootstrap on_node runner scripts for additional control-plane nodes, keyed by index. No secrets. For tests/debugging."
+  value       = { for k, m in module.bootstrap_additional : k => m.on_node_bundle }
 }
