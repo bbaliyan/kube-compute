@@ -518,8 +518,12 @@ write_files:
       # limit entirely.
       } | kubectl --kubeconfig "$KC" apply --server-side -f -
       rm -f "$ARGOCD_VALUES"
-      echo "[bootstrap] waiting for argocd-server to be ready..."
-      timeout 600 bash -c 'until kubectl --kubeconfig '"$KC"' -n argocd rollout status deployment/argocd-server --timeout=30s 2>/dev/null; do sleep 15; done' || { status "FAILED:argo-bootstrap"; exit 1; }
+      # Wait only for the Application CRD to be registered by the server-side
+      # apply above (avoids a "no matches for kind Application" race), NOT for
+      # argocd-server to roll out: on a dedicated_control_plane node, or before a
+      # worker pool has joined, it has nowhere to schedule yet — Argo CD converges
+      # once capacity exists, so genesis must not block on its health.
+      kubectl --kubeconfig "$KC" wait --for=condition=established --timeout=120s crd/applications.argoproj.io || { status "FAILED:argo-bootstrap"; exit 1; }
       kubectl --kubeconfig "$KC" apply -f /etc/kube-compute/manifests/10-root-app.yaml
       %{ endif ~}
 

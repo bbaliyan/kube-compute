@@ -38,6 +38,16 @@ run "root_app_rendered" {
     condition     = strcontains(nonsensitive(output.cloud_init), "\"platform\":")
     error_message = "root Application must thread per-cluster values under a platform key"
   }
+  assert {
+    # Genesis must not block on argocd-server health/scheduling — that breaks
+    # dedicated_control_plane and any bootstrap before a worker pool has joined.
+    condition     = !strcontains(nonsensitive(output.cloud_init), "rollout status deployment/argocd-server")
+    error_message = "genesis must not wait for argocd-server to roll out"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(output.cloud_init), "wait --for=condition=established --timeout=120s crd/applications.argoproj.io")
+    error_message = "genesis must wait only for the Application CRD to be established before applying the root app"
+  }
 }
 
 run "ingress_suffix_is_bare_not_api_fqdn" {

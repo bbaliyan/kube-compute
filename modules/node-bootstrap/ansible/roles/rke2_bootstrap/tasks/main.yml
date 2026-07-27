@@ -13,6 +13,15 @@
 
 # ---- universal OS prep (all roles) ----
 
+- name: os-prep | set a unique OS hostname (RKE2/kubelet derive the Kubernetes
+    node name from the OS hostname; AlmaLinux 10's cloud image boots every VM as
+    "localhost", so without this the control plane and all workers would try to
+    register under the same name and the agents get rejected with "Node password
+    rejected, duplicate hostname". Must run before rke2 starts.)
+  ansible.builtin.hostname:
+    name: "{{ node_name }}"
+    use: systemd
+
 - name: os-prep | inotify limits (written early — sysctl.d is only read at next
     boot; applying now covers the current boot, matching cloud-init's ordering)
   ansible.builtin.copy:
@@ -416,14 +425,18 @@
     apply --server-side -f /etc/kube-compute/manifests/00-argocd.yaml
   when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
-- name: gitops | wait for argocd-server to be ready
+- name: gitops | wait for the Argo CD Application CRD to be established
+  # NOT a readiness/health wait. The CRD is registered by the server-side apply
+  # above; this only blocks until the API server serves the type, avoiding a
+  # "no matches for kind Application" race when the root Application is applied
+  # next. Deliberately does NOT wait for argocd-server to roll out: on a
+  # dedicated_control_plane (tainted) node, or before a worker pool has joined,
+  # argocd-server has nowhere to schedule yet — Argo CD is expected to converge
+  # once capacity exists, in both single-node and multi-node clusters, so
+  # genesis must not block on its health.
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
-    -n argocd rollout status deployment/argocd-server --timeout=30s
-  register: argocd_rollout
-  until: argocd_rollout.rc == 0
-  retries: 40
-  delay: 15
+    wait --for=condition=established --timeout=120s crd/applications.argoproj.io
   changed_when: false
   when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
