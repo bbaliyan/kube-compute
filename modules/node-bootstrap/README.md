@@ -61,16 +61,11 @@ second terminal — it tails the `bootstrap_log_path` output
 (`/tmp/kube-compute-bootstrap-<node_name>.log` on whatever machine runs
 `terragrunt apply`) for you, prompting to pick a node the same way
 `kube-status`/`kube-shell` do. It's a plain mirror of the same output Ansible
-would print anyway — every secret-touching task in the role already sets
-`no_log: true`, so nothing new or sensitive lands there that wasn't already
-safe to display. (An earlier design considered splitting the secrets and the
-Ansible invocation into separate provisioner steps so the apply console
-itself could stream live — Terraform's output suppression turned out to be
-scoped per-provisioner-block, not per-resource, so this is technically
-possible — but doing so needs secrets to cross between the two steps via a
-brief on-disk file, a real trade-off against Ticket 03's "secrets never touch
-a file" principle. `kube-tail` avoids that trade-off entirely by watching the
-existing log file from a separate process instead.)
+would print anyway — every secret-touching task in the role sets `no_log: true`,
+so nothing sensitive lands there. (Splitting the invocation so the apply console
+could stream live was considered, but it would need secrets to cross between
+provisioner steps via an on-disk file — `kube-tail` avoids that by watching the
+log from a separate process instead.)
 
 ## Interface notes
 

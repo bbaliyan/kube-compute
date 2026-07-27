@@ -245,9 +245,8 @@ module "node_bootstrap" {
     # rotated host key on every recreate is expected, not suspicious. Without
     # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
     # the operator's real known_hosts and requires a manual `ssh-keygen -R`
-    # before every apply — confirmed hitting this repeatedly against a real
-    # cluster-1 destroy/recreate cycle. Deliberate trade-off, confirmed with
-    # the user: still verifies the key isn't swapped mid-apply, but gives up
+    # before every apply after a destroy/recreate. Deliberate trade-off: it
+    # still verifies the key isn't swapped mid-apply, but gives up
     # host-key continuity *across* destroy/recreate cycles — acceptable here
     # since the disposable-cluster model already discards that continuity by
     # design once a node is destroyed. Nothing is written to the operator's

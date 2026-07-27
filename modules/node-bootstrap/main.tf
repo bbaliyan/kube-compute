@@ -6,21 +6,16 @@ module "component_versions" {
 locals {
   playbook_path = coalesce(var.ansible_playbook_path, "${path.module}/ansible/playbook.yml")
 
-  # Callers (aws-control-plane, proxmox-control-plane, ...) don't pass these
-  # through today, unlike k8s_version — falling back to "" (empty string)
-  # rendered a real, live "version: """ into the Cilium HelmChart CR on a
-  # cluster-1 apply (Helm/RKE2 silently treats that as "latest" rather than
-  # erroring). Resolve here instead, matching cloud-init's existing pattern.
+  # Resolve to the platform default rather than passing null through: a null/empty
+  # version renders "version: \"\"" into the Cilium HelmChart CR, which Helm/RKE2
+  # silently treats as "latest".
   cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
   argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
 
-  # Cilium/Argo CD genesis values, computed as plain Terraform strings (never
-  # embedded as a literal bash heredoc — a heredoc nested inside the runner
-  # script's own outer heredoc, itself invoked via `bash -c` after an
-  # `exec > >(tee ...)` redirect, could not be reliably reproduced as safe
-  # across environments during testing, so the whole class of risk is avoided
-  # by base64-encoding these and decoding with a single `base64 -d` in the
-  # runner). `%{ if ~}` here is evaluated by Terraform itself, not by bash.
+  # Cilium/Argo CD genesis values, computed as plain Terraform strings and
+  # base64-encoded into the runner (decoded with a single `base64 -d`) rather than
+  # embedded as a nested bash heredoc, which proved fragile inside the runner's own
+  # heredoc. `%{ if ~}` here is evaluated by Terraform, not bash.
   cilium_values_yaml = <<-EOT
     kubeProxyReplacement: true
     k8sServiceHost: "127.0.0.1"
@@ -46,13 +41,10 @@ locals {
         clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
   EOT
 
-  # repoServer/controller resources + probe timeouts: upstream defaults are
-  # zero resource requests (BestEffort QoS) and a 1s probe timeoutSeconds.
-  # Sizing matches the small-cluster figures generally quoted in the Argo CD
-  # community, cross-checked against a real measurement on cluster-1 where
-  # application-controller sat around 500Mi reconciling the full ~17-app
-  # platform tree. Kept in sync with bootstrap/templates/argocd-app.yaml in
-  # kube-platform.
+  # repoServer/controller resources + probe timeouts: upstream defaults are zero
+  # requests (BestEffort QoS) and a 1s probe timeout, which crash-loop Argo CD
+  # under a real platform tree. Kept in sync with bootstrap/templates/argocd-app.yaml
+  # in kube-platform.
   argocd_values_yaml = <<-EOT
     configs:
       params:
@@ -93,9 +85,9 @@ locals {
   ansible_requirements_txt = "${path.module}/ansible/requirements.txt"
 
   # Non-secret extra-vars only. Secrets (cluster_token, cluster_agent_token,
-  # agent_token_fetch_command, trusted_ca_pem) are deliberately excluded here —
-  # they flow through the local-exec `environment` block (operator_connect) or
-  # run-command protected parameters (on_node), never the bundle. See Ticket 03.
+  # agent_token_fetch_command, trusted_ca_pem) are excluded here — they flow
+  # through the local-exec `environment` block (operator_connect) or run-command
+  # protected parameters (on_node), never the bundle.
   extra_vars = merge(var.ansible_connection_vars, {
     cluster_name                        = var.cluster_name
     node_name                           = var.node_name

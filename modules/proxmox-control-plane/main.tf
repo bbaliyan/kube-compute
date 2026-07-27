@@ -43,8 +43,7 @@ locals {
   # error. The explicit CIDR form is understood by every cloud-init version.
   #
   # "eth0" as the ethernets key directly (not a "primary" alias + match:
-  # {name: "en*"}): confirmed against a real cluster-1 apply that this
-  # doesn't work on AlmaLinux 9 — the image's kernel cmdline sets
+  # {name: "en*"}): verified this does not work on AlmaLinux 9 — the image's kernel cmdline sets
   # net.ifnames=0 biosdevname=0, so its NIC is always legacy-named eth0/eth1,
   # never systemd-predictable ens*/enp* (the pattern "en*" was written for).
   # Separately, cloud-init's RHEL/NetworkManager renderer doesn't honor
@@ -324,9 +323,8 @@ module "node_bootstrap" {
     # rotated host key on every recreate is expected, not suspicious. Without
     # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
     # the operator's real known_hosts and requires a manual `ssh-keygen -R`
-    # before every apply — confirmed hitting this repeatedly against a real
-    # cluster-1 destroy/recreate cycle. Deliberate trade-off, confirmed with
-    # the user: still verifies the key isn't swapped mid-apply, but gives up
+    # before every apply after a destroy/recreate. Deliberate trade-off: it
+    # still verifies the key isn't swapped mid-apply, but gives up
     # host-key continuity *across* destroy/recreate cycles — acceptable here
     # since the disposable-cluster model already discards that continuity by
     # design once a node is destroyed. Nothing is written to the operator's
@@ -393,9 +391,8 @@ module "node_bootstrap_additional" {
     # rotated host key on every recreate is expected, not suspicious. Without
     # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
     # the operator's real known_hosts and requires a manual `ssh-keygen -R`
-    # before every apply — confirmed hitting this repeatedly against a real
-    # cluster-1 destroy/recreate cycle. Deliberate trade-off, confirmed with
-    # the user: still verifies the key isn't swapped mid-apply, but gives up
+    # before every apply after a destroy/recreate. Deliberate trade-off: it
+    # still verifies the key isn't swapped mid-apply, but gives up
     # host-key continuity *across* destroy/recreate cycles — acceptable here
     # since the disposable-cluster model already discards that continuity by
     # design once a node is destroyed. Nothing is written to the operator's

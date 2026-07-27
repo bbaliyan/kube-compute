@@ -1,7 +1,5 @@
 ---
 # SPDX-License-Identifier: Apache-2.0
-# GitOps/Argo CD bootstrap remains deferred — see this module's README.md
-# "Scope of this build" (a distinct post-install step, ported separately).
 
 - name: Read secrets from the control node's environment
   ansible.builtin.set_fact:
@@ -13,17 +11,16 @@
 
 # ---- universal OS prep (all roles) ----
 
-- name: os-prep | set a unique OS hostname (RKE2/kubelet derive the Kubernetes
-    node name from the OS hostname; AlmaLinux 10's cloud image boots every VM as
-    "localhost", so without this the control plane and all workers would try to
-    register under the same name and the agents get rejected with "Node password
-    rejected, duplicate hostname". Must run before rke2 starts.)
+# RKE2 derives the Kubernetes node name from the OS hostname, and AlmaLinux 10's
+# cloud image boots every VM as "localhost" — without a unique hostname the nodes
+# collide ("duplicate hostname"). Must run before rke2 starts.
+- name: os-prep | set a unique OS hostname
   ansible.builtin.hostname:
     name: "{{ node_name }}"
     use: systemd
 
-- name: os-prep | inotify limits (written early — sysctl.d is only read at next
-    boot; applying now covers the current boot, matching cloud-init's ordering)
+# Written early: sysctl.d is only read at next boot, so this covers the current boot.
+- name: os-prep | inotify limits
   ansible.builtin.copy:
     src: 99-rke2-inotify.conf
     dest: /etc/sysctl.d/99-rke2-inotify.conf
@@ -46,30 +43,18 @@
     set -euo pipefail
     dnf makecache
     dnf install -y ca-certificates curl
-    # kernel-modules-extra-matched: the AlmaLinux 10 minimal cloud image ships
-    # only kernel-modules-core, which excludes nft_compat, the iptables-nft
-    # legacy translation shim. Cilium default VXLAN tunnel mode installs its
-    # tunnel-accept rule via classic iptables syntax, which needs nft_compat
-    # to translate — without it, Cilium iptables reconciliation fails
-    # continuously and any pod needing fresh routing state becomes
-    # unreachable over routed host/pod traffic, confirmed on cluster-1.
-    # Deliberately not pinned to an exact kernel-modules-extra version: the
-    # AlmaLinux BaseOS repo only retains the exact NVR subpackage for the
-    # latest kernel build, not the one baked into the base image, so a
-    # version-pinned request can silently match nothing for the running
-    # kernel once a newer point release supersedes it in the repo. This exact
-    # bug was hit and fixed on cluster-1 once already, on an earlier copy of
-    # this same logic (a cloud-init template, since removed — this Ansible
-    # task is now the sole copy). The matched meta-package is what dnf
-    # resolves correctly regardless of that skew.
+    # AlmaLinux 10's minimal image ships only kernel-modules-core, which excludes
+    # nft_compat (the iptables-nft translation shim). Cilium's default VXLAN mode
+    # installs its tunnel-accept rule via classic iptables syntax, which needs
+    # nft_compat — without it Cilium's iptables reconciliation fails and freshly
+    # created pods become unreachable. Use the unversioned "-matched" meta-package,
+    # not a pinned NVR: the BaseOS repo only keeps the subpackage for the latest
+    # kernel, so a pinned request can match nothing for the image's running kernel.
     dnf install -y kernel-modules-extra-matched
     modprobe nft_compat
-    # RHEL10-family kernels (6.12+, confirmed on AlmaLinux 10) dropped the
-    # legacy br_netfilter module entirely — bridged traffic is filtered
-    # natively via nftables' bridge-family hooks (nf_conntrack_bridge et al,
-    # auto-loaded with the bridge module), so there's no module to load and
-    # no bridge-nf-call-iptables/-ip6tables knob to set on those kernels.
-    # RHEL9-family kernels still ship br_netfilter and need both.
+    # RHEL10 kernels (6.12+) dropped br_netfilter — bridged traffic is filtered
+    # natively via nftables bridge hooks, so there's no module to load and no
+    # bridge-nf-call-* knob. RHEL9 kernels still ship it and need both.
     if modinfo br_netfilter >/dev/null 2>&1; then
       printf 'br_netfilter\noverlay\n' >/etc/modules-load.d/rke2.conf
       modprobe br_netfilter
@@ -94,22 +79,12 @@
       semanage fcontext -a -t container_file_t '/var/lib/rancher/local-path-provisioner(/.*)?'
     fi
     restorecon -R /var/lib/rancher/local-path-provisioner
-  # SELinux enforcing on AlmaLinux 10 auto-labels fresh directories under
-  # /var/lib/rancher as container_var_lib_t, a type meant for container
-  # runtime storage, not for arbitrary containers to freely create files in
-  # via a bind mount. Without this, any pod writing into a hostPath-backed
-  # PVC under this path is denied, even running as root inside the
-  # container, confirmed on cluster-1: local-path-provisioner helper pods
-  # failing "mkdir: Permission denied" with no matching Unix permission
-  # issue, only a SELinux avc denied create/write in the audit log.
-  # container_file_t is the standard label for a host directory containers
-  # are meant to read and write through a bind mount. Harmless if
-  # local-path is never the chosen storage provisioner — this only prepares
-  # the directory, kube-platform's local-path chart decides whether
-  # anything ever gets written there. No creates guard: semanage fcontext -a
-  # errors on a duplicate rule (would break a rerun under set -e), so the
-  # grep check above is the real idempotency guard instead; restorecon
-  # itself is always safe to repeat.
+  # SELinux on AlmaLinux 10 labels fresh dirs under /var/lib/rancher as
+  # container_var_lib_t, which blocks containers from writing through a bind mount
+  # (even as root). Relabel to container_file_t so hostPath-backed PVCs work.
+  # Harmless if local-path isn't the chosen provisioner. No `creates:` guard:
+  # `semanage fcontext -a` errors on a duplicate rule, so the grep above guards
+  # idempotency instead; restorecon is always safe to repeat.
 
 - name: os-trust | add trusted CA to the OS trust store
   ansible.builtin.copy:
@@ -164,10 +139,8 @@
   until: gpg_import is succeeded
 
 - name: selinux-prep | install rke2-selinux (retry + self-heal on lock contention)
-  # No `creates:` idempotency guard here (unlike the os-prep task above) —
-  # this project could not verify a stable marker file rke2-selinux always
-  # writes. `dnf install -y` on an already-installed package is itself a fast
-  # no-op, so this is safe to re-run every time, just not skip-reported.
+  # No `creates:` guard — rke2-selinux writes no stable marker file. `dnf install`
+  # on an already-installed package is a fast no-op, so re-running is safe.
   ansible.builtin.shell: |
     set -euo pipefail
     dnf makecache
@@ -233,28 +206,17 @@
     mode: "0700"
   when: node_role in ["server-init", "server-join"]
 
-# Genesis-only (Ticket 04): Cilium is a cluster-wide DaemonSet/Deployment,
-# not per-node state — a joining server doesn't need it re-applied, it just
-# needs the cluster to already have it. Rendered via `helm template` — never
-# RKE2's HelmChart CRD (Ticket 01): a HelmChart CR's finalizer runs
-# `helm uninstall` on deletion with no supported way to avoid it, which would
-# fight (and later block handing off to) Argo CD-native management.
+# Genesis-only: Cilium is a cluster-wide DaemonSet/Deployment, not per-node state,
+# so a joining server doesn't re-apply it. Rendered via `helm template`, never
+# RKE2's HelmChart CRD — that CR's finalizer runs `helm uninstall` on deletion,
+# which would fight handing off to Argo CD.
 #
-# The actual `helm template` render happens in node-bootstrap's own main.tf,
-# in the shell script that invokes ansible-playbook — not here as a
-# `delegate_to: localhost` task. That was tried first and failed: this
-# module's own extra-vars set ansible_connection/ansible_host as plain
-# (non-host-scoped) vars, and Ansible's extra-vars ALWAYS win over even
-# task-level `vars:` overrides (documented precedence), so `delegate_to:
-# localhost` silently resolved back to the target node instead of the
-# control machine and failed with "helm: not found" there — confirmed via a
-# real cluster-1 apply. `helm template` needs no cluster/network access at
-# all (pure local rendering from chart + values), so rendering it in the
-# wrapping shell script — unambiguously the operator machine — sidesteps
-# Ansible's connection model entirely; this task's only job is a plain copy
-# of the already-rendered file, which `copy` always reads from the control
-# machine regardless of connection settings. See Tickets 01/05/06 of
-# .scratch/cilium-argocd-gitops-handoff/map.md in the kube-claude repo.
+# The render happens in main.tf's wrapping shell script, not a `delegate_to:
+# localhost` task: this module's extra-vars set ansible_connection as plain vars,
+# and extra-vars outrank task-level `vars:`, so delegate_to silently resolved back
+# to the target node ("helm: not found"). `helm template` needs no cluster access,
+# so rendering it on the operator sidesteps the connection model; this task just
+# copies the already-rendered file (copy always reads from the control machine).
 - name: server-init | write the rendered Cilium manifest
   ansible.builtin.copy:
     src: "/tmp/kube-compute-cilium-manifest-{{ node_name }}.yaml"
@@ -287,13 +249,10 @@
     state: started
   when: node_role == "server-init"
 
-# Additional control-plane nodes join RKE2's embedded-etcd cluster one at a
-# time: an upstream etcd limitation (only one non-voting "learner" member
-# allowed at a time — https://etcd.io/docs/v3.4/learning/design-learner/),
-# not a K3s-only quirk (rancher/rke2#3562, #4035, #349). This staggers by the
-# node's own index (parsed from node_name's numeric suffix) and self-heals by
-# wiping local server state and retrying if a collision still slips through —
-# reproducing cloud-init's proven mechanics one-for-one.
+# Additional control-plane nodes join embedded-etcd one at a time — an upstream
+# etcd limit of one non-voting learner at a time
+# (https://etcd.io/docs/v3.4/learning/design-learner/). Stagger by node index and
+# self-heal by wiping local server state and retrying if a collision slips through.
 - name: server-join | staggered, self-healing join
   ansible.builtin.shell: |
     set -euo pipefail
@@ -354,8 +313,7 @@
     state: started
   when: node_role == "worker"
 
-# ---- wait for readiness, so Ansible's own synchronous output (this project's
-#      primary live-visibility mechanism per Ticket 02) reflects real success/
+# ---- wait for readiness, so Ansible's synchronous output reflects real success/
 #      failure rather than "service started" alone ----
 - name: server-init/server-join | wait for this node to report Ready
   ansible.builtin.shell: |
@@ -385,16 +343,11 @@
     mode: "0755"
   when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
-# Rendered via `helm template` in node-bootstrap's own main.tf (the shell
-# script that invokes ansible-playbook), not a `delegate_to: localhost` task
-# here — same reasoning and the same real bug found via a `cluster-1` apply
-# as Cilium's genesis install above. Genesis only needs *a* working pinned
-# Argo CD version, not the consumer's target version (Ticket 02): Argo CD
-# upgrading itself in place is ordinary, low-risk operation, unlike a CNI
-# swap — so kube-platform's own self-managing Application is what carries
-# the consumer's chosen version going forward, not this genesis step. See
-# Tickets 01/02/05/06 of .scratch/cilium-argocd-gitops-handoff/map.md in the
-# kube-claude repo.
+# Rendered via `helm template` in main.tf's wrapping shell script, not a
+# `delegate_to: localhost` task — same reason as Cilium's genesis install above.
+# Genesis only needs a working pinned Argo CD version; kube-platform's own
+# self-managing Application carries the consumer's chosen version afterward (an
+# in-place Helm upgrade, unlike a CNI swap).
 - name: gitops | write the rendered Argo CD manifest (Namespace + chart)
   ansible.builtin.copy:
     src: "/tmp/kube-compute-argocd-manifest-{{ node_name }}.yaml"
@@ -411,29 +364,21 @@
   no_log: true
 
 - name: gitops | apply the Argo CD manifest
-  # --server-side is required, not stylistic: a plain (client-side) apply
-  # stores the whole previous config in a last-applied-configuration
-  # annotation for 3-way merging, and Argo CD's own applicationsets.argoproj.io
-  # CRD is large enough to exceed Kubernetes' 262144-byte annotation-size
-  # limit — confirmed via a real cluster-1 apply ("metadata.annotations: Too
-  # long"). Server-side apply uses field-manager metadata instead of that
-  # annotation, sidestepping the limit entirely — the same mechanism this
-  # project already relies on for kube-platform's own Applications
-  # (ServerSideApply=true), just invoked via kubectl's own flag here.
+  # --server-side is required: a client-side apply stores the previous config in a
+  # last-applied-configuration annotation, and Argo CD's applicationsets CRD
+  # exceeds Kubernetes' 262144-byte annotation limit. Server-side apply uses
+  # field-manager metadata instead, sidestepping the limit.
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
     apply --server-side -f /etc/kube-compute/manifests/00-argocd.yaml
   when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
 - name: gitops | wait for the Argo CD Application CRD to be established
-  # NOT a readiness/health wait. The CRD is registered by the server-side apply
-  # above; this only blocks until the API server serves the type, avoiding a
-  # "no matches for kind Application" race when the root Application is applied
-  # next. Deliberately does NOT wait for argocd-server to roll out: on a
-  # dedicated_control_plane (tainted) node, or before a worker pool has joined,
-  # argocd-server has nowhere to schedule yet — Argo CD is expected to converge
-  # once capacity exists, in both single-node and multi-node clusters, so
-  # genesis must not block on its health.
+  # NOT a health wait — only blocks until the API server serves the Application
+  # type (avoids a "no matches for kind Application" race). Deliberately does not
+  # wait for argocd-server to roll out: on a tainted control plane, or before a
+  # worker pool joins, it has nowhere to schedule yet and converges once capacity
+  # exists.
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
     wait --for=condition=established --timeout=120s crd/applications.argoproj.io
