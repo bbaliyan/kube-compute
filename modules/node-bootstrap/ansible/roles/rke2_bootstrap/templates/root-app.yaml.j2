@@ -1,0 +1,37 @@
+{# SPDX-License-Identifier: Apache-2.0 #}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: {{ gitops_root_repo_url }}
+    targetRevision: {{ gitops_root_revision }}
+    path: {{ gitops_root_path }}
+    helm:
+      # Per-cluster values injected at genesis and threaded by the root
+      # app-of-apps chart into its kube-platform child Application. Passed as a
+      # nested valuesObject (not flat parameters) so the dynamic
+      # extraHelmParameters map survives intact. These stay OUT of the root
+      # repo, which is public and carries only empty defaults — no
+      # environment-specific value is ever committed to git.
+      valuesObject:
+        platform:
+          certMode: "{{ cert_mode }}"
+          clusterName: "{{ cluster_name }}"
+          clusterFqdnSuffix: "{{ cluster_fqdn_suffix }}"
+          trustedCaPemB64: "{{ resolved_trusted_ca_pem | b64encode }}"
+          extraHelmParameters:
+{{ platform_extra_helm_parameters | to_nice_yaml(indent=2) | indent(12, first=true) }}
+          helmValues:
+{{ platform_helm_values_object | to_nice_yaml(indent=2) | indent(12, first=true) }}
+          extraTags:
+{{ extra_tags | to_nice_yaml(indent=2) | indent(12, first=true) }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: ["CreateNamespace=true"]

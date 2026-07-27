@@ -4,18 +4,17 @@
 module "bootstrap" {
   source = "../../.."
 
-  cloud_init_template       = "${path.module}/../../../templates/cloud-init-almalinux-10.yaml.tpl"
-  cluster_name              = "render-check"
-  k8s_version               = "v1.36.1+rke2r1"
-  cluster_fqdn              = "api.render-check.example.test"
-  trusted_ca_pem            = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
-  registry_mirror_url       = "https://harbor.example.test"
-  gitops_platform_repo_url  = "https://github.com/example/kube-platform.git"
-  gitops_platform_revision  = "v1.0.0"
-  gitops_workloads_repo_url = "https://github.com/example/my-apps.git"
-  gitops_workloads_revision = "main"
-  gitops_workloads_path     = "apps"
-  extra_tags                = { CostCenter = "example" }
+  cloud_init_template  = "${path.module}/../../../templates/cloud-init-almalinux-10.yaml.tpl"
+  cluster_name         = "render-check"
+  k8s_version          = "v1.36.1+rke2r1"
+  cluster_fqdn         = "api.render-check.example.test"
+  cluster_fqdn_suffix  = "render-check.example.test"
+  trusted_ca_pem       = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+  registry_mirror_url  = "https://harbor.example.test"
+  gitops_root_repo_url = "https://github.com/example/kube-apps.git"
+  gitops_root_revision = "v1.0.0"
+  gitops_root_path     = "render-check"
+  extra_tags           = { CostCenter = "example" }
 }
 
 output "cloud_init" {

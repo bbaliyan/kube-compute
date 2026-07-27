@@ -178,40 +178,28 @@ variable "extra_server_manifests" {
   default     = {}
 }
 
-variable "gitops_platform_repo_url" {
-  description = "Optional Argo CD platform Application source repo (kube-platform or a fork). Null = skip all Argo CD wiring. Only meaningful for node_role = server-init — Argo/platform bootstrap never runs on server-join or worker."
+variable "gitops_root_repo_url" {
+  description = "Optional Argo CD root Application source repo — an app-of-apps that wraps the platform bootstrap and this cluster's workloads. Null = skip all Argo CD wiring. Only meaningful for node_role = server-init — Argo/root bootstrap never runs on server-join or worker."
   type        = string
   default     = null
 }
 
 variable "argocd_version" {
-  description = "Argo CD Helm chart version. Only meaningful when gitops_platform_repo_url is set."
+  description = "Argo CD Helm chart version. Only meaningful when gitops_root_repo_url is set."
   type        = string
   default     = null
 }
 
-variable "gitops_platform_revision" {
-  description = "Branch/tag/SHA the platform Application tracks."
+variable "gitops_root_revision" {
+  description = "Branch/tag/SHA the root Application tracks."
   type        = string
   default     = "main"
 }
 
-variable "gitops_workloads_repo_url" {
-  description = "Optional user workloads Application source repo. Null = no workloads Application."
+variable "gitops_root_path" {
+  description = "Path within the root repo Argo CD renders as the app-of-apps — a Helm chart directory that creates the platform and workload Applications."
   type        = string
-  default     = null
-}
-
-variable "gitops_workloads_revision" {
-  description = "Branch/tag/SHA the workloads Application tracks."
-  type        = string
-  default     = "main"
-}
-
-variable "gitops_workloads_path" {
-  description = "Path within the workloads repo the ApplicationSet scans."
-  type        = string
-  default     = "apps"
+  default     = "."
 }
 
 variable "cert_mode" {

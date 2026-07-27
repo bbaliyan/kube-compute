@@ -121,12 +121,10 @@ locals {
     etcd_snapshot_object_store_folder   = var.etcd_snapshot_object_store_folder != null ? var.etcd_snapshot_object_store_folder : ""
     node_labels                         = var.node_labels
     extra_server_manifests              = var.extra_server_manifests
-    gitops_platform_repo_url            = var.gitops_platform_repo_url != null ? var.gitops_platform_repo_url : ""
+    gitops_root_repo_url                = var.gitops_root_repo_url != null ? var.gitops_root_repo_url : ""
     argocd_version                      = local.argocd_version
-    gitops_platform_revision            = var.gitops_platform_revision
-    gitops_workloads_repo_url           = var.gitops_workloads_repo_url != null ? var.gitops_workloads_repo_url : ""
-    gitops_workloads_revision           = var.gitops_workloads_revision
-    gitops_workloads_path               = var.gitops_workloads_path
+    gitops_root_revision                = var.gitops_root_revision
+    gitops_root_path                    = var.gitops_root_path
     cert_mode                           = var.cert_mode
     platform_extra_helm_parameters      = var.platform_extra_helm_parameters
     platform_helm_values_object         = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
@@ -220,7 +218,7 @@ resource "null_resource" "ansible_bootstrap" {
       helm template cilium cilium --repo https://helm.cilium.io/ --version "${local.cilium_version}" --namespace kube-system --include-crds -f "$CILIUM_VALUES" >"/tmp/kube-compute-cilium-manifest-${var.node_name}.yaml"
       rm -f "$CILIUM_VALUES"
       %{endif~}
-      %{if var.gitops_platform_repo_url != null && var.node_role == "server-init"~}
+      %{if var.gitops_root_repo_url != null && var.node_role == "server-init"~}
       ARGOCD_VALUES="$(mktemp)"
       echo "${base64encode(local.argocd_values_yaml)}" | base64 -d >"$ARGOCD_VALUES"
       {

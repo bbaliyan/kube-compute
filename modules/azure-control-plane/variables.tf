@@ -35,34 +35,22 @@ variable "registry_mirror_url" {
   default     = null
 }
 
-variable "gitops_platform_repo_url" {
-  description = "Optional Argo CD platform Application source repo. Null = skip Argo CD wiring."
+variable "gitops_root_repo_url" {
+  description = "Optional Argo CD root Application source repo — an app-of-apps wrapping the platform and this cluster's workloads. Null = skip Argo CD wiring."
   type        = string
   default     = null
 }
 
-variable "gitops_platform_revision" {
-  description = "Branch/tag/SHA the platform Application tracks."
+variable "gitops_root_revision" {
+  description = "Branch/tag/SHA the root Application tracks."
   type        = string
   default     = "main"
 }
 
-variable "gitops_workloads_repo_url" {
-  description = "Optional user workloads Application source repo. Null = no workloads Application."
+variable "gitops_root_path" {
+  description = "Path within the root repo Argo CD renders as the app-of-apps (a Helm chart directory)."
   type        = string
-  default     = null
-}
-
-variable "gitops_workloads_revision" {
-  description = "Branch/tag/SHA the workloads Application tracks."
-  type        = string
-  default     = "main"
-}
-
-variable "gitops_workloads_path" {
-  description = "Path within the workloads repo the ApplicationSet scans."
-  type        = string
-  default     = "apps"
+  default     = "."
 }
 
 variable "cluster_type" {

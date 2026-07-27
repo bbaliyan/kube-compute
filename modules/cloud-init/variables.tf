@@ -39,6 +39,12 @@ variable "cluster_fqdn" {
   default     = null
 }
 
+variable "cluster_fqdn_suffix" {
+  description = "Optional DNS suffix under which the platform's web-UI ingress hostnames are published (e.g. 'cluster-1.example.com' yields argocd.cluster-1.example.com). Distinct from cluster_fqdn, which is the API server name (api.<suffix>) — the ingress suffix must not carry the 'api.' prefix. Null/empty disables platform ingress."
+  type        = string
+  default     = null
+}
+
 variable "node_role" {
   description = "Bootstrap role this node renders cloud-init for: 'server-init' (first control-plane node — forms the etcd cluster), 'server-join' (an additional control-plane node), or 'worker' (joins as an agent only, no control plane). Only 'server-init' is fully rendered by this build; the other two are reserved for a later slice and fail fast at boot if selected."
   type        = string
@@ -158,40 +164,28 @@ variable "registry_mirror_url" {
   default     = null
 }
 
-variable "gitops_platform_repo_url" {
-  description = "Optional Argo CD platform Application source repo (kube-platform or a fork). Null = skip all Argo CD wiring."
+variable "gitops_root_repo_url" {
+  description = "Optional Argo CD root Application source repo — an app-of-apps that wraps the platform bootstrap and this cluster's workloads. Null = skip all Argo CD wiring."
   type        = string
   default     = null
 }
 
 variable "argocd_version" {
-  description = "Argo CD Helm chart version, only meaningful when gitops_platform_repo_url is set. Null uses the platform default (module.component_versions.argocd_version)."
+  description = "Argo CD Helm chart version, only meaningful when gitops_root_repo_url is set. Null uses the platform default (module.component_versions.argocd_version)."
   type        = string
   default     = null
 }
 
-variable "gitops_platform_revision" {
-  description = "Branch/tag/SHA the platform Application tracks."
+variable "gitops_root_revision" {
+  description = "Branch/tag/SHA the root Application tracks."
   type        = string
   default     = "main"
 }
 
-variable "gitops_workloads_repo_url" {
-  description = "Optional user workloads Application source repo. Null = no workloads Application."
+variable "gitops_root_path" {
+  description = "Path within the root repo Argo CD renders as the app-of-apps — a Helm chart directory that creates the platform and workload Applications."
   type        = string
-  default     = null
-}
-
-variable "gitops_workloads_revision" {
-  description = "Branch/tag/SHA the workloads Application tracks."
-  type        = string
-  default     = "main"
-}
-
-variable "gitops_workloads_path" {
-  description = "Path within the workloads repo the ApplicationSet scans. Config (not convention) because we do not control that repo."
-  type        = string
-  default     = "apps"
+  default     = "."
 }
 
 variable "cert_mode" {

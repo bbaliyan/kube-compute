@@ -374,7 +374,7 @@
     path: /etc/kube-compute/manifests
     state: directory
     mode: "0755"
-  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+  when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
 # Rendered via `helm template` in node-bootstrap's own main.tf (the shell
 # script that invokes ansible-playbook), not a `delegate_to: localhost` task
@@ -391,14 +391,14 @@
     src: "/tmp/kube-compute-argocd-manifest-{{ node_name }}.yaml"
     dest: /etc/kube-compute/manifests/00-argocd.yaml
     mode: "0644"
-  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+  when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
-- name: gitops | render the platform Application manifest
+- name: gitops | render the root Application manifest
   ansible.builtin.template:
-    src: platform-app.yaml.j2
-    dest: /etc/kube-compute/manifests/10-platform-app.yaml
+    src: root-app.yaml.j2
+    dest: /etc/kube-compute/manifests/10-root-app.yaml
     mode: "0644"
-  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+  when: node_role == "server-init" and gitops_root_repo_url | length > 0
   no_log: true
 
 - name: gitops | apply the Argo CD manifest
@@ -414,7 +414,7 @@
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
     apply --server-side -f /etc/kube-compute/manifests/00-argocd.yaml
-  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+  when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
 - name: gitops | wait for argocd-server to be ready
   ansible.builtin.command: >-
@@ -425,10 +425,10 @@
   retries: 40
   delay: 15
   changed_when: false
-  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+  when: node_role == "server-init" and gitops_root_repo_url | length > 0
 
-- name: gitops | apply the platform Application manifest
+- name: gitops | apply the root Application manifest
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
-    apply -f /etc/kube-compute/manifests/10-platform-app.yaml
-  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+    apply -f /etc/kube-compute/manifests/10-root-app.yaml
+  when: node_role == "server-init" and gitops_root_repo_url | length > 0

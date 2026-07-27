@@ -255,11 +255,9 @@ module "bootstrap" {
   etcd_snapshot_retention        = var.etcd_snapshot_retention
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
-  gitops_platform_repo_url       = var.gitops_platform_repo_url
-  gitops_platform_revision       = var.gitops_platform_revision
-  gitops_workloads_repo_url      = var.gitops_workloads_repo_url
-  gitops_workloads_revision      = var.gitops_workloads_revision
-  gitops_workloads_path          = var.gitops_workloads_path
+  gitops_root_repo_url           = var.gitops_root_repo_url
+  gitops_root_revision           = var.gitops_root_revision
+  gitops_root_path               = var.gitops_root_path
   cert_mode                      = var.cert_mode
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
   platform_helm_values_object    = var.platform_helm_values_object

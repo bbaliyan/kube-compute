@@ -196,12 +196,12 @@ run "argo_manifests_only_on_server_init" {
   command = plan
 
   variables {
-    cluster_name             = "test1"
-    k8s_version              = "v1.36.1+rke2r1"
-    node_role                = "server-join"
-    registration_address     = "10.0.1.10"
-    cluster_token            = "cluster-secret-argo"
-    gitops_platform_repo_url = "https://github.com/example/kube-platform.git"
+    cluster_name         = "test1"
+    k8s_version          = "v1.36.1+rke2r1"
+    node_role            = "server-join"
+    registration_address = "10.0.1.10"
+    cluster_token        = "cluster-secret-argo"
+    gitops_root_repo_url = "https://github.com/example/kube-apps.git"
     # Isolate this assertion from Cilium's own (legitimately server-join-rendered)
     # HelmChart manifest — both features emit "kind: HelmChart", so this test
     # scopes to Argo's own unique chart identifier instead of the generic kind.
@@ -210,7 +210,7 @@ run "argo_manifests_only_on_server_init" {
 
   assert {
     condition     = !strcontains(nonsensitive(output.cloud_init), "chart: argo-cd")
-    error_message = "Argo/platform bootstrap manifests must never render for server-join, even if gitops_platform_repo_url is set — they belong on the first server only"
+    error_message = "Argo/root bootstrap manifests must never render for server-join, even if gitops_root_repo_url is set — they belong on the first server only"
   }
 }
 
