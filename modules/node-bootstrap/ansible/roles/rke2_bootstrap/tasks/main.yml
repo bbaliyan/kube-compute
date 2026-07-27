@@ -58,10 +58,10 @@
     # latest kernel build, not the one baked into the base image, so a
     # version-pinned request can silently match nothing for the running
     # kernel once a newer point release supersedes it in the repo. This exact
-    # bug was hit and fixed on cluster-1 once already, on the cloud-init
-    # template now-dead copy of this same logic, kept in sync here since
-    # Proxmox and AWS now run this Ansible task instead. The matched
-    # meta-package is what dnf resolves correctly regardless of that skew.
+    # bug was hit and fixed on cluster-1 once already, on an earlier copy of
+    # this same logic (a cloud-init template, since removed — this Ansible
+    # task is now the sole copy). The matched meta-package is what dnf
+    # resolves correctly regardless of that skew.
     dnf install -y kernel-modules-extra-matched
     modprobe nft_compat
     # RHEL10-family kernels (6.12+, confirmed on AlmaLinux 10) dropped the

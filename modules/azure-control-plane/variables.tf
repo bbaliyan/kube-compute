@@ -114,7 +114,7 @@ variable "platform_helm_values_object" {
 }
 
 variable "extra_tags" {
-  description = "Additional tags applied to every Azure resource this module creates, and forwarded to cloud-init's platform Application (helm.valuesObject.extraTags)."
+  description = "Additional tags applied to every Azure resource this module creates, and forwarded to node-bootstrap's platform Application (helm.valuesObject.extraTags)."
   type        = map(string)
   default     = {}
 }

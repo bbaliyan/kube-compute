@@ -23,38 +23,29 @@ it's invoked differs by provider, selected by `invocation_mode`:
   `on_node_secret_env` output for the caller to pass as run-command protected
   parameters (which Linux injects as environment variables — the same names the
   role already reads). This keeps `az` out of this provider-neutral module, the
-  same render/attach split `cloud-init` used, while the Cilium/Argo genesis render
+  same render/attach split a cloud-init renderer would use (this module renders, the
+  caller attaches), while the Cilium/Argo genesis render
   and extra-vars payload stay shared with `operator_connect` so they can't diverge.
 
-## Scope of this build
+## What this module does
 
-This module reproduces `cloud-init`'s RKE2 install/join mechanics: config.yaml
-generation for all three roles, the etcd-learner join-race staggering,
-systemd unit management, secrets flow, AWS+Proxmox connectivity, OS prep
-(`br_netfilter`/`overlay`, sysctls, SELinux package install — `br_netfilter`
+The RKE2 install/join for one node: config.yaml generation for all three roles,
+the etcd-learner join-race staggering, systemd unit management, secrets flow, OS
+prep (`br_netfilter`/`overlay`, sysctls, SELinux package install — `br_netfilter`
 and its `bridge-nf-call-*` sysctls are skipped on AlmaLinux 10, whose kernel
-dropped that legacy module; see `cni` below for the deeper consequence of
-that same kernel change), CA trust (`trusted_ca_pem`), registry mirror
+dropped that legacy module; see `cni` below for the deeper consequence of that
+same kernel change), CA trust (`trusted_ca_pem`), registry mirror
 (`registry_mirror_url`), the Cilium CNI HelmChart manifest, etcd snapshot
 configuration (`etcd_snapshot_*`), node labels (`node_labels`), extra server
-manifests (`extra_server_manifests`), and GitOps/Argo CD bootstrap
-(`gitops_*`, `cert_mode`, `platform_*`, `extra_tags` — a distinct post-install
-step, applied via `kubectl` once the cluster reports Ready, server-init only).
+manifests (`extra_server_manifests`), and GitOps/Argo CD bootstrap (`gitops_*`,
+`cert_mode`, `platform_*`, `extra_tags` — a distinct post-install step, applied
+via `kubectl` once the cluster reports Ready, server-init only).
 
-**Deliberately deferred** — present in `cloud-init`'s template but not yet
-ported here:
-
-- Kubeconfig publish-to-local-file step (cloud-init's old
-  `/var/lib/kube-compute/kubeconfig` — superseded anyway by `kube-kubeconfig`
-  fetching `/etc/rancher/rke2/rke2.yaml` directly)
-
-A follow-on ticket adds the minimal connectivity-only user-data each provider
-module needs, and cuts the provider modules (`aws-control-plane`,
-`proxmox-control-plane`, `aws-node-pool`, `proxmox-node-pool`) over from
-calling `cloud-init` to calling this module, in one atomic step — avoiding a
-functionality-regression window on `kube-compute` main's working baseline.
-Until that lands, `cloud-init` remains the module actually wired into every
-provider module; this module is a new, independently validated build.
+This module is the single bootstrap path for every provider module
+(`aws-control-plane`, `aws-node-pool`, `proxmox-control-plane`,
+`proxmox-node-pool`, `azure-control-plane`, `azure-node-pool`). The kubeconfig is
+not published to a local file — `kube-kubeconfig` fetches
+`/etc/rancher/rke2/rke2.yaml` out-of-band instead.
 
 ## Watching progress during a real apply
 
@@ -83,8 +74,8 @@ existing log file from a separate process instead.)
 
 ## Interface notes
 
-- `ansible_playbook_path` mirrors `cloud-init`'s `cloud_init_template`
-  escape hatch: overridable, defaults to the bundled AlmaLinux-10-only
+- `ansible_playbook_path` is an escape hatch: overridable, defaults to the
+  bundled AlmaLinux-10-only
   playbook (`ansible/playbook.yml`). No compatibility guarantee for other
   distributions.
 - `ansible_connection_vars` is a non-secret map the caller assembles for its

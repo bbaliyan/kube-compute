@@ -128,13 +128,13 @@ variable "etcd_snapshots_enabled" {
 }
 
 variable "etcd_snapshot_schedule_cron" {
-  description = "Cron schedule for etcd snapshots, passed through to cloud-init. Only meaningful when etcd_snapshots_enabled resolves to true."
+  description = "Cron schedule for etcd snapshots, passed through to node-bootstrap. Only meaningful when etcd_snapshots_enabled resolves to true."
   type        = string
   default     = "0 */12 * * *"
 }
 
 variable "etcd_snapshot_retention" {
-  description = "Number of local etcd snapshots to retain, passed through to cloud-init. Only meaningful when etcd_snapshots_enabled resolves to true."
+  description = "Number of local etcd snapshots to retain, passed through to node-bootstrap. Only meaningful when etcd_snapshots_enabled resolves to true."
   type        = number
   default     = 5
 }
@@ -215,7 +215,7 @@ variable "instance_type" {
 
 variable "os_image_ami_id" {
   description = <<-EOT
-    AMI ID for the node. Tested with AlmaLinux 10 (RHEL-family — cloud-init uses dnf and
+    AMI ID for the node. Tested with AlmaLinux 10 (RHEL-family — node-bootstrap uses dnf and
     update-ca-trust). Other RHEL-family images (Rocky, AL2023) may work but are untested —
     no compatibility guarantee. Null = latest AlmaLinux 10 for the derived architecture via
     data lookup.
@@ -248,7 +248,7 @@ variable "root_volume_type" {
 }
 
 variable "cert_mode" {
-  description = "Certificate issuer mode deployed by kube-platform. Passed through to the cloud-init platform Application parameters. 'selfsigned' (default), 'byo' (consumer provides byo-ca-tls Secret), 'acme' (ACME DNS-01)."
+  description = "Certificate issuer mode deployed by kube-platform. Passed through to the node-bootstrap platform Application parameters. 'selfsigned' (default), 'byo' (consumer provides byo-ca-tls Secret), 'acme' (ACME DNS-01)."
   type        = string
   default     = "selfsigned"
   validation {
@@ -258,7 +258,7 @@ variable "cert_mode" {
 }
 
 variable "platform_extra_helm_parameters" {
-  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application. See cloud-init for full description."
+  description = "Additional Helm parameters forwarded verbatim to the kube-platform bootstrap Application. See node-bootstrap for full description."
   type        = map(string)
   default     = {}
 }
@@ -270,7 +270,7 @@ variable "platform_helm_values_object" {
 }
 
 variable "extra_tags" {
-  description = "Additional tags applied to every AWS resource this module creates (EC2 instance, root EBS volume, security group, IAM role), and forwarded to cloud-init so platform-managed resources (e.g. CSI-provisioned storage) can tag themselves consistently."
+  description = "Additional tags applied to every AWS resource this module creates (EC2 instance, root EBS volume, security group, IAM role), and forwarded to node-bootstrap so platform-managed resources (e.g. CSI-provisioned storage) can tag themselves consistently."
   type        = map(string)
   default     = {}
 }

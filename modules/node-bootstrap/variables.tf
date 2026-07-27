@@ -1,8 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-# NOTE — scoped build (see README.md "Scope of this build"): nothing calls
-# this module yet; the provider-module cutover (repointing from
-# `cloud-init`, deleting it) is still pending.
-
 variable "ansible_playbook_path" {
   description = "Absolute path to the Ansible playbook to run. Use the bundled AlmaLinux 10 playbook (the default), or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
   type        = string

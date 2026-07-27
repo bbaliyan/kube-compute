@@ -18,13 +18,13 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 
 | Module | Purpose |
 |--------|---------|
-| `modules/cloud-init`          | RKE2 cloud-init renderer, role-aware (`server-init` / `server-join` / `worker`). Ships a single AlmaLinux 10 template, used by every provider module. No provider resources. |
+| `modules/node-bootstrap`      | RKE2 install/join for one node via Ansible, role-aware (`server-init` / `server-join` / `worker`). Two invocation modes: `operator_connect` (AWS SSM, Proxmox SSH) and `on_node` (Azure, delivered via run-command). Ships a single AlmaLinux 10 playbook, used by every provider module. No provider resources. |
 | `modules/aws-control-plane`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (AlmaLinux 10). |
-| `modules/aws-node-pool`     | Fixed, AZ-pinned AWS node pool (ASG + launch template) that joins an existing aws-control-plane cluster (AlmaLinux 10). |
+| `modules/aws-node-pool`     | Fixed, AZ-pinned AWS node pool (discrete EC2 instances) that joins an existing aws-control-plane cluster (AlmaLinux 10). |
 | `modules/proxmox-control-plane`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (AlmaLinux 10). |
 | `modules/proxmox-node-pool` | Fixed Proxmox node pool (discrete VMs) that joins an existing proxmox-control-plane cluster (AlmaLinux 10). |
 | `modules/azure-control-plane`         | Azure control-plane node(s) + shared cluster resources: join tokens via Key Vault (RBAC), cluster/etcd Application Security Groups, internal Standard LB registration endpoint (AlmaLinux 10). |
-| `modules/azure-node-pool`   | Fixed, AZ-pinned Azure node pool (VM Scale Set, manual upgrade mode) that joins an existing azure-control-plane cluster (AlmaLinux 10). |
+| `modules/azure-node-pool`   | Fixed, AZ-pinned Azure node pool (discrete VMs) that joins an existing azure-control-plane cluster (AlmaLinux 10). |
 
 ## Concepts
 

@@ -46,9 +46,10 @@ locals {
 }
 
 # ---- Join-token flow: pre-generated so a control plane + pool join in one apply pass ----
-# Two tokens, least privilege: the server token grants joining etcd/control-plane (embedded
-# directly into this control plane's own cloud-init calls — control-plane nodes never fetch
-# anything from Key Vault); the agent token is all a worker ever receives, delivered via
+# Two tokens, least privilege: the server token grants joining etcd/control-plane (delivered
+# directly to this control plane's own nodes as a run-command protected parameter —
+# control-plane nodes never fetch anything from Key Vault); the agent token is all a worker
+# ever receives, delivered via
 # Key Vault + managed identity so a compromised worker cannot
 # rejoin as a control-plane/etcd member.
 resource "random_password" "server_token" {
