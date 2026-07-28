@@ -36,8 +36,13 @@ output "node_control_ref" {
 }
 
 output "wildcard_dns_name" {
-  description = "Wildcard hostname for cluster services, or null when no cluster_domain was given. Register it yourself at cluster_ip (this module creates no DNS beyond the optional cluster_fqdn A record — see dns_server_address)."
+  description = "Wildcard hostname for cluster services, or null when no cluster_domain was given. On an all_in_one cluster this module also publishes it to DNS itself (at cluster_ip) whenever dns_server_address is set — check wildcard_registration_enabled. On a dedicated_control_plane cluster this module never publishes it (the control plane is tainted; proxmox-node-pool publishes it instead, at its own worker IPs) — register it yourself if that pool's DNS registration isn't enabled either."
   value       = local.wildcard_name
+}
+
+output "wildcard_registration_enabled" {
+  description = "Whether this control plane actually published wildcard_dns_name to DNS itself (true only for an all_in_one cluster with dns_server_address set). Always false for dedicated_control_plane — see wildcard_dns_name."
+  value       = local.wildcard_registration_enabled
 }
 
 output "node_arch" {

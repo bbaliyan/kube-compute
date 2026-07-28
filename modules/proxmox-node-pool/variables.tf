@@ -175,3 +175,67 @@ variable "extra_node_labels" {
   type        = map(string)
   default     = {}
 }
+
+# ---- Wildcard DNS registration (optional): publishes *.<cluster_name> via RFC2136 ----
+# On a dedicated_control_plane cluster the control plane is tainted, so this
+# pool's workers are where ingress actually runs — this pool, not
+# proxmox-control-plane, owns the wildcard record in that shape. All
+# null/default = no record published, same "DNS is optional, name-only by
+# default" rule as every other provider module. Mirrors
+# proxmox-control-plane's identical dns_server_address/tsig_* block.
+variable "cluster_domain" {
+  description = "DNS suffix matching the control plane's own cluster_domain (e.g. 'homelab.local'). Required to compute the wildcard record's zone; ignored when dns_server_address is null."
+  type        = string
+  default     = null
+}
+
+variable "dns_server_address" {
+  description = "Hostname or IPv4 address of an RFC2136-compliant DNS server to publish the wildcard record to. Null (default) skips DNS registration entirely; register the wildcard yourself in that case."
+  type        = string
+  default     = null
+}
+
+variable "dns_server_port" {
+  description = "Port the DNS server accepts dynamic updates on. Ignored when dns_server_address is null."
+  type        = number
+  default     = 53
+}
+
+variable "dns_transport" {
+  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp' — see proxmox-control-plane's identical variable for why (tcp was found to fail against Technitium with a mid-update EOF)."
+  type        = string
+  default     = "udp"
+  validation {
+    condition     = contains(["udp", "tcp", "udp4", "udp6", "tcp4", "tcp6"], var.dns_transport)
+    error_message = "dns_transport must be one of: udp, tcp, udp4, udp6, tcp4, tcp6."
+  }
+}
+
+variable "dns_record_ttl" {
+  description = "TTL in seconds for the published wildcard record. Ignored when dns_server_address is null."
+  type        = number
+  default     = 300
+}
+
+variable "tsig_key_name" {
+  description = "Name of the TSIG key configured on the DNS server, used to authenticate the dynamic update. Required when dns_server_address is set."
+  type        = string
+  default     = null
+}
+
+variable "tsig_key_algorithm" {
+  description = "TSIG key algorithm: 'hmac-md5', 'hmac-sha1', 'hmac-sha256', or 'hmac-sha512'. Must match how the key was created on the DNS server. Ignored when dns_server_address is null."
+  type        = string
+  default     = "hmac-sha256"
+  validation {
+    condition     = contains(["hmac-md5", "hmac-sha1", "hmac-sha256", "hmac-sha512"], var.tsig_key_algorithm)
+    error_message = "tsig_key_algorithm must be one of: hmac-md5, hmac-sha1, hmac-sha256, hmac-sha512."
+  }
+}
+
+variable "tsig_key_secret" {
+  description = "Base64-encoded TSIG shared secret. Required when dns_server_address is set. Sensitive — supply via a TF_VAR_* environment variable, never committed."
+  type        = string
+  default     = null
+  sensitive   = true
+}

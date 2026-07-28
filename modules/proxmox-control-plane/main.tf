@@ -50,6 +50,16 @@ locals {
   dns_zone                 = local.has_domain ? "${trimsuffix(var.cluster_domain, ".")}." : null
   dns_record_name          = "api.${var.cluster_name}"
 
+  # Wildcard ingress record (*.<cluster_name>.<cluster_domain>): only this
+  # module's job on an all_in_one cluster, where the control-plane node is
+  # also the only place ingress can run. On a dedicated_control_plane cluster
+  # the control plane is tainted — ingress runs on proxmox-node-pool's
+  # workers instead, so that module publishes the wildcard record itself,
+  # using its own worker IPs. Registering it here too for that case would
+  # both be wrong (points at the wrong nodes) and race node-pool's own write.
+  wildcard_registration_enabled = local.dns_registration_enabled && var.cluster_type == "all_in_one"
+  dns_wildcard_record_name      = "*.${var.cluster_name}"
+
   # dns-registration's provider requires a fully-qualified (trailing-dot)
   # TSIG key name, but DNS servers commonly configure key names without one
   # (e.g. Technitium's own UI accepts a bare name like "kube-compute") —
@@ -370,6 +380,22 @@ module "dns_registration" {
   enabled          = local.dns_registration_enabled
   dns_zone         = coalesce(local.dns_zone, "invalid.")
   record_name      = local.dns_record_name
+  record_addresses = values(local.cp_ips)
+  record_ttl       = var.dns_record_ttl
+}
+
+# ---- Wildcard DNS registration: publishes *.<cluster_name> -> the same IPs ----
+# Only on all_in_one clusters — see wildcard_registration_enabled above for why
+# a dedicated_control_plane cluster leaves this to proxmox-node-pool instead.
+module "dns_registration_wildcard" {
+  source = "../dns-registration"
+
+  providers  = { dns = dns }
+  depends_on = [module.node_bootstrap, module.node_bootstrap_additional]
+
+  enabled          = local.wildcard_registration_enabled
+  dns_zone         = coalesce(local.dns_zone, "invalid.")
+  record_name      = local.dns_wildcard_record_name
   record_addresses = values(local.cp_ips)
   record_ttl       = var.dns_record_ttl
 }

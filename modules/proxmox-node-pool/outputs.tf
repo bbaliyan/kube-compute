@@ -16,3 +16,8 @@ output "worker_node_refs" {
     }
   }
 }
+
+output "wildcard_dns_registration_enabled" {
+  description = "Whether this pool actually published *.<cluster_name> to a DNS server via dns-registration (true only when both cluster_domain and dns_server_address were set). Relevant on a dedicated_control_plane cluster, where this pool (not the control plane) owns the wildcard record — see proxmox-control-plane's wildcard_registration_enabled output for the all_in_one case."
+  value       = local.dns_registration_enabled
+}

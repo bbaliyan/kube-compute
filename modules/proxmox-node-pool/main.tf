@@ -3,11 +3,41 @@ module "component_versions" {
   source = "../component-versions"
 }
 
+# Configured here (not in dns-registration) for the same reason
+# proxmox-control-plane configures its own: dns-registration needs depends_on
+# to sequence its write after node_bootstrap succeeds, and Terraform forbids
+# depends_on/count/for_each on a module call whose module owns its own
+# provider block. Coalesced to harmless placeholders when DNS registration is
+# disabled (var.dns_server_address null) — see proxmox-control-plane's
+# identical provider block for the full reasoning.
+provider "dns" {
+  update {
+    server        = coalesce(var.dns_server_address, "127.0.0.1")
+    port          = var.dns_server_port
+    transport     = var.dns_transport
+    key_name      = local.tsig_key_name_fqdn
+    key_algorithm = var.tsig_key_algorithm
+    key_secret    = coalesce(var.tsig_key_secret, "dW51c2VkAA==")
+  }
+}
+
 locals {
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
   static_ips = var.worker_ip_addresses != null
+
+  # Wildcard DNS registration (RFC2136): publishes *.<cluster_name> -> every
+  # resolved worker IP. See the variable block's comment for why this pool
+  # (not proxmox-control-plane) owns the wildcard on a dedicated_control_plane
+  # cluster.
+  dns_registration_enabled = var.cluster_domain != null && var.dns_server_address != null
+  dns_zone                 = var.cluster_domain != null ? "${trimsuffix(var.cluster_domain, ".")}." : null
+  dns_wildcard_record_name = "*.${var.cluster_name}"
+
+  # Same fully-qualified-TSIG-key-name quirk as proxmox-control-plane — see
+  # its identical local for why.
+  tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
 
   # Proxmox-native delivery: the token is embedded verbatim into this pool's own
   # cloud-init snippet (no secret store to fetch from), unlike AWS's SSM fetch command.
@@ -263,6 +293,24 @@ module "node_bootstrap" {
     # OS bump doesn't silently break this.
     ansible_python_interpreter = "/usr/bin/python3"
   }
+}
+
+# ---- Wildcard DNS registration: publishes *.<cluster_name> -> every worker IP ----
+# depends_on every worker's node_bootstrap run so the record only appears
+# once each worker has actually joined — mirrors proxmox-control-plane's
+# identical "depends on the Ansible run, not just the VM" reasoning. Optional:
+# skipped entirely when no dns_server_address is supplied.
+module "dns_registration" {
+  source = "../dns-registration"
+
+  providers  = { dns = dns }
+  depends_on = [module.node_bootstrap]
+
+  enabled          = local.dns_registration_enabled
+  dns_zone         = coalesce(local.dns_zone, "invalid.")
+  record_name      = local.dns_wildcard_record_name
+  record_addresses = values(local.worker_ips)
+  record_ttl       = var.dns_record_ttl
 }
 
 resource "proxmox_virtual_environment_firewall_options" "worker" {
