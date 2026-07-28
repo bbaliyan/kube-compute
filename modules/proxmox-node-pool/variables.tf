@@ -155,7 +155,7 @@ variable "control_plane_k8s_version" {
 }
 
 variable "registration_address" {
-  description = "The control plane's registration_address output (kube-vip VIP for HA, or the sole node's IP for single-node). Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
+  description = "The address workers join through — opaque to this module. Typically the control plane's registration_address output (genesis's raw IP) or, when the caller has DNS registration set up, its cluster_fqdn output instead (see proxmox-control-plane's dns_registration_enabled output before choosing the latter). Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
   type        = string
 }
 

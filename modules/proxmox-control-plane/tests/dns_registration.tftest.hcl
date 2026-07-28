@@ -48,6 +48,10 @@ run "dns_registration_enabled_when_server_supplied" {
     condition     = module.dns_registration.record_created == true
     error_message = "dns_server_address set must actually create the dns_a_record_set resource"
   }
+  assert {
+    condition     = output.dns_registration_enabled == true
+    error_message = "dns_registration_enabled output must reflect that dns_server_address was supplied"
+  }
 }
 
 run "dns_registration_disabled_without_server" {
@@ -56,5 +60,9 @@ run "dns_registration_disabled_without_server" {
   assert {
     condition     = module.dns_registration.record_created == false
     error_message = "no dns_server_address must skip creating the dns_a_record_set resource — DNS registration is optional"
+  }
+  assert {
+    condition     = output.dns_registration_enabled == false
+    error_message = "dns_registration_enabled output must be false when dns_server_address is unset, even though cluster_fqdn is still non-null — consumers must not join via cluster_fqdn in this case"
   }
 }

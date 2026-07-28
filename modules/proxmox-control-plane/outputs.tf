@@ -16,8 +16,13 @@ output "cluster_ip" {
 }
 
 output "cluster_fqdn" {
-  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given."
+  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given. This name is always computed from cluster_domain, whether or not anything actually publishes it to DNS — see dns_registration_enabled before joining through it."
   value       = local.cluster_fqdn
+}
+
+output "dns_registration_enabled" {
+  description = "Whether this control plane actually published cluster_fqdn to a DNS server via dns-registration (true only when dns_server_address was set). Consumers deciding whether to join/connect via cluster_fqdn rather than registration_address (a raw IP) should check this first — cluster_fqdn is a non-null name whenever cluster_domain is set, regardless of whether anything makes it resolve."
+  value       = local.dns_registration_enabled
 }
 
 output "node_provider" {
