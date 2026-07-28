@@ -31,7 +31,7 @@ output "node_control_ref" {
 }
 
 output "wildcard_dns_name" {
-  description = "Wildcard hostname for cluster services, or null when no cluster_domain was given. Register it yourself at cluster_ip (single-node) or control_plane_vip_address (HA)."
+  description = "Wildcard hostname for cluster services, or null when no cluster_domain was given. Register it yourself at cluster_ip (this module creates no DNS beyond the optional cluster_fqdn A record — see dns_server_address)."
   value       = local.wildcard_name
 }
 
@@ -52,8 +52,8 @@ output "k8s_version" {
 
 # ---- Join flow: consumed by proxmox-node-pool ----
 output "registration_address" {
-  description = "Address workers/joining servers use to reach the cluster API: the genesis node's IP for control_plane_count = 1, the kube-vip VIP otherwise."
-  value       = local.registration_address != null ? local.registration_address : local.cp_ips["0"]
+  description = "Address workers/joining servers use to reach the cluster API: genesis's raw IP. Proxmox has no load-balancer primitive, so every node (control-plane joiner or worker) dials genesis directly rather than a VIP; cluster_fqdn (when dns_server_address is set) is the DNS-based alternative for clients outside this join flow."
+  value       = local.cp_ips["0"]
 }
 
 output "cluster_agent_token" {

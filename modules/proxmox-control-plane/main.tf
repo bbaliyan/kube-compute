@@ -3,6 +3,25 @@ module "component_versions" {
   source = "../component-versions"
 }
 
+# Configured here (not in dns-registration) because that module needs
+# depends_on to sequence its write after node-bootstrap succeeds, and
+# Terraform forbids depends_on/count/for_each on a module call whose module
+# owns its own provider block — see dns-registration's README. Coalesced to
+# harmless placeholders when DNS registration is disabled (var.dns_server_address
+# null): this provider is still configured either way since it's passed to an
+# always-instantiated module call, but dns-registration's own resource has
+# count = 0 in that case, so nothing ever actually dials these placeholders.
+provider "dns" {
+  update {
+    server        = coalesce(var.dns_server_address, "127.0.0.1")
+    port          = var.dns_server_port
+    transport     = var.dns_transport
+    key_name      = local.tsig_key_name_fqdn
+    key_algorithm = var.tsig_key_algorithm
+    key_secret    = coalesce(var.tsig_key_secret, "dW51c2VkAA==")
+  }
+}
+
 locals {
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
@@ -19,11 +38,27 @@ locals {
   effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
   effective_etcd_snapshots_enabled   = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
-  # Null for control_plane_count = 1 (no registration endpoint), the VIP otherwise.
-  registration_address = var.control_plane_count == 1 ? null : var.control_plane_vip_address
-
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
   etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
+
+  # DNS registration (RFC2136): publishes cluster_fqdn -> every resolved control-plane
+  # IP, the HA registration/access endpoint (Proxmox has no load-balancer/VIP
+  # primitive). Gated on both a domain (cluster_fqdn must exist) and a DNS server
+  # being supplied — genuinely optional per this module's "DNS is optional and
+  # name-only" rule.
+  dns_registration_enabled = local.has_domain && var.dns_server_address != null
+  dns_zone                 = local.has_domain ? "${trimsuffix(var.cluster_domain, ".")}." : null
+  dns_record_name          = "api.${var.cluster_name}"
+
+  # dns-registration's provider requires a fully-qualified (trailing-dot)
+  # TSIG key name, but DNS servers commonly configure key names without one
+  # (e.g. Technitium's own UI accepts a bare name like "kube-compute") —
+  # qualify here so the caller of this module doesn't need to know that
+  # provider-specific quirk. Idempotent whether or not var.tsig_key_name
+  # already ends in a dot. Only meaningful when dns_registration_enabled;
+  # coalesced to a harmless placeholder otherwise so the (unused) provider
+  # block below always has a syntactically valid value.
+  tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
 
   # One IP per control-plane node; index 0 is genesis. DHCP only when control_plane_count = 1
   # and control_plane_ip_addresses was left null (parity with node-proxmox's existing default).
@@ -111,9 +146,9 @@ resource "proxmox_virtual_environment_firewall_ipset" "etcd" {
   comment = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
 
   dynamic "cidr" {
-    for_each = var.control_plane_count > 1 ? [for ip in var.control_plane_ip_addresses : "${split("/", ip)[0]}/32"] : ["${local.cp_ips["0"]}/32"]
+    for_each = local.cp_ips
     content {
-      name = cidr.value
+      name = "${cidr.value}/32"
     }
   }
 }
@@ -152,99 +187,6 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
     ))
     file_name = "${var.cluster_name}-vendor-data.yaml"
   }
-}
-
-locals {
-  kube_vip_manifest = var.control_plane_count == 1 ? null : <<-EOT
-    apiVersion: v1
-    kind: ServiceAccount
-    metadata:
-      name: kube-vip
-      namespace: kube-system
-    ---
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
-    metadata:
-      name: system:kube-vip-role
-    rules:
-      - apiGroups: [""]
-        resources: ["services", "services/status", "nodes", "endpoints", "configmaps"]
-        verbs: ["list", "get", "watch", "update", "create"]
-      - apiGroups: ["coordination.k8s.io"]
-        resources: ["leases"]
-        verbs: ["list", "get", "watch", "update", "create"]
-    ---
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRoleBinding
-    metadata:
-      name: system:kube-vip-binding
-    roleRef:
-      apiGroup: rbac.authorization.k8s.io
-      kind: ClusterRole
-      name: system:kube-vip-role
-    subjects:
-      - kind: ServiceAccount
-        name: kube-vip
-        namespace: kube-system
-    ---
-    apiVersion: apps/v1
-    kind: DaemonSet
-    metadata:
-      name: kube-vip-ds
-      namespace: kube-system
-    spec:
-      selector:
-        matchLabels:
-          name: kube-vip-ds
-      template:
-        metadata:
-          labels:
-            name: kube-vip-ds
-        spec:
-          serviceAccountName: kube-vip
-          tolerations:
-            - key: CriticalAddonsOnly
-              operator: Exists
-            - effect: NoSchedule
-              operator: Exists
-            - effect: NoExecute
-              operator: Exists
-          hostNetwork: true
-          containers:
-            - name: kube-vip
-              # renovate: datasource=docker depName=ghcr.io/kube-vip/kube-vip
-              image: ghcr.io/kube-vip/kube-vip:v0.8.9
-              imagePullPolicy: IfNotPresent
-              args: ["manager"]
-              env:
-                - name: vip_arp
-                  value: "true"
-                - name: port
-                  value: "6443"
-                - name: vip_cidr
-                  value: "32"
-                - name: cp_enable
-                  value: "true"
-                - name: cp_namespace
-                  value: "kube-system"
-                - name: vip_ddns
-                  value: "false"
-                - name: svc_enable
-                  value: "false"
-                - name: vip_leaderelection
-                  value: "true"
-                - name: vip_leaseduration
-                  value: "5"
-                - name: vip_renewdeadline
-                  value: "3"
-                - name: vip_retryperiod
-                  value: "1"
-                - name: address
-                  value: "${var.control_plane_vip_address}"
-              securityContext:
-                capabilities:
-                  add: ["NET_ADMIN", "NET_RAW"]
-  EOT
 }
 
 # ---- Minimal, RKE2-agnostic boot-time cloud-init: hostname only ----
@@ -294,12 +236,10 @@ module "node_bootstrap" {
   cilium_operator_replicas       = local.effective_cilium_operator_replicas
   cluster_token                  = random_password.server_token.result
   cluster_agent_token            = random_password.agent_token.result
-  registration_address           = local.registration_address
-  extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  extra_tls_sans                 = compact([local.wildcard_name])
   etcd_snapshot_enabled          = local.effective_etcd_snapshots_enabled
   etcd_snapshot_schedule_cron    = var.etcd_snapshot_schedule_cron
   etcd_snapshot_retention        = var.etcd_snapshot_retention
-  extra_server_manifests         = local.kube_vip_manifest != null ? { "kube-vip.yaml" = local.kube_vip_manifest } : {}
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_root_repo_url           = var.gitops_root_repo_url
@@ -355,22 +295,25 @@ module "node_bootstrap_additional" {
 
   depends_on = [module.node_bootstrap]
 
-  ansible_playbook_path       = var.ansible_playbook_path
-  cluster_name                = var.cluster_name
-  node_name                   = "${var.cluster_name}-cp-${each.key}"
-  k8s_version                 = local.k8s_version
-  cluster_fqdn                = local.cluster_fqdn
-  cluster_fqdn_suffix         = local.fqdn_suffix
-  node_role                   = "server-join"
-  control_plane_taint         = local.control_plane_taint
-  cni                         = local.effective_cni
-  cilium_operator_replicas    = local.effective_cilium_operator_replicas
-  registration_address        = local.registration_address
-  extra_tls_sans              = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  ansible_playbook_path    = var.ansible_playbook_path
+  cluster_name             = var.cluster_name
+  node_name                = "${var.cluster_name}-cp-${each.key}"
+  k8s_version              = local.k8s_version
+  cluster_fqdn             = local.cluster_fqdn
+  cluster_fqdn_suffix      = local.fqdn_suffix
+  node_role                = "server-join"
+  control_plane_taint      = local.control_plane_taint
+  cni                      = local.effective_cni
+  cilium_operator_replicas = local.effective_cilium_operator_replicas
+  # Genesis's own raw IP — the module's node-bootstrap dependency already
+  # forces genesis's Ansible run to finish first (see depends_on below), so
+  # this is stable and known by the time a joiner runs. No VIP/load-balancer
+  # primitive exists on Proxmox; every joiner dials genesis directly.
+  registration_address        = local.cp_ips["0"]
+  extra_tls_sans              = compact([local.wildcard_name])
   etcd_snapshot_enabled       = local.effective_etcd_snapshots_enabled
   etcd_snapshot_schedule_cron = var.etcd_snapshot_schedule_cron
   etcd_snapshot_retention     = var.etcd_snapshot_retention
-  extra_server_manifests      = local.kube_vip_manifest != null ? { "kube-vip.yaml" = local.kube_vip_manifest } : {}
   cluster_token               = random_password.server_token.result
   trusted_ca_pem              = var.trusted_ca_pem
   registry_mirror_url         = var.registry_mirror_url
@@ -409,6 +352,26 @@ module "node_bootstrap_additional" {
     # OS bump doesn't silently break this.
     ansible_python_interpreter = "/usr/bin/python3"
   }
+}
+
+# ---- DNS registration: publishes cluster_fqdn -> every control-plane IP via RFC2136 ----
+# depends_on every node-bootstrap run (not just the VMs) so the record only
+# appears once the API server is actually reachable at those IPs — mirrors the
+# same "depends on the Ansible run, not just the resource" reasoning used for
+# module.node_bootstrap_additional above. Optional: skipped entirely when no
+# dns_server_address is supplied (this module creates no DNS by default,
+# same as every other provider module in this project).
+module "dns_registration" {
+  source = "../dns-registration"
+
+  providers  = { dns = dns }
+  depends_on = [module.node_bootstrap, module.node_bootstrap_additional]
+
+  enabled          = local.dns_registration_enabled
+  dns_zone         = coalesce(local.dns_zone, "invalid.")
+  record_name      = local.dns_record_name
+  record_addresses = values(local.cp_ips)
+  record_ttl       = var.dns_record_ttl
 }
 
 resource "proxmox_virtual_environment_file" "network_data" {

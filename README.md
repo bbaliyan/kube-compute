@@ -21,8 +21,9 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
 | `modules/node-bootstrap`      | RKE2 install/join for one node via Ansible, role-aware (`server-init` / `server-join` / `worker`). Two invocation modes: `operator_connect` (AWS SSM, Proxmox SSH) and `on_node` (Azure, delivered via run-command). Ships a single AlmaLinux 10 playbook, used by every provider module. No provider resources. |
 | `modules/aws-control-plane`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster/etcd security groups, registration endpoint (AlmaLinux 10). |
 | `modules/aws-node-pool`     | Fixed, AZ-pinned AWS node pool (discrete EC2 instances) that joins an existing aws-control-plane cluster (AlmaLinux 10). |
-| `modules/proxmox-control-plane`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, kube-vip VIP registration endpoint (AlmaLinux 10). |
+| `modules/proxmox-control-plane`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (delivered via cloud-init), cluster/etcd firewall ipsets, genesis-direct registration endpoint, optional RFC2136 DNS registration (AlmaLinux 10). |
 | `modules/proxmox-node-pool` | Fixed Proxmox node pool (discrete VMs) that joins an existing proxmox-control-plane cluster (AlmaLinux 10). |
+| `modules/dns-registration` | Publishes an A record set to an RFC2136-compliant DNS server via TSIG-authenticated dynamic update. Used by `proxmox-control-plane` for its HA registration endpoint. |
 | `modules/azure-control-plane`         | Azure control-plane node(s) + shared cluster resources: join tokens via Key Vault (RBAC), cluster/etcd Application Security Groups, internal Standard LB registration endpoint (AlmaLinux 10). |
 | `modules/azure-node-pool`   | Fixed, AZ-pinned Azure node pool (discrete VMs) that joins an existing azure-control-plane cluster (AlmaLinux 10). |
 
@@ -53,9 +54,11 @@ required) and gives joining nodes a stable `registration_address`:
   name.
 - **Azure** — an internal Standard `azurerm_lb` on port 6443; `registration_address` is its
   frontend private IP.
-- **Proxmox** — no managed load-balancer primitive, so a [kube-vip](https://kube-vip.io)
-  ARP-mode VIP floats across the control-plane nodes instead; `registration_address` is that VIP.
-  Verify VIP failover and the live join flow against a real Proxmox cluster before relying on
+- **Proxmox** — no managed load-balancer primitive, so joining control-plane nodes dial genesis's
+  own IP directly (`registration_address`); `cluster_fqdn` (optionally published to an
+  RFC2136-compliant DNS server via the `dns-registration` submodule) is the stable multi-node
+  address for clients outside the join flow — see `modules/dns-registration`'s README. Verify the
+  live join flow and DNS registration against a real Proxmox cluster before relying on
   `proxmox-control-plane`/`proxmox-node-pool` in production — they're validated with `tofu test`
   against a mocked provider only.
 

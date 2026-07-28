@@ -39,14 +39,56 @@ client).
 
 ## Inputs of note
 
-- `tsig_key_secret` is `sensitive` — supply it via a `TF_VAR_*` environment
-  variable, never commit it. This module doesn't care where the caller
-  sourced it from (a plain env var, a secret manager read elsewhere, etc.).
 - `dns_zone` must be a trailing-dot FQDN (`"lan."`, not `"lan"`); `record_name`
   is relative to it (`"api.cluster-3"`, not the full name).
+- `enabled` (default `true`) is a no-op switch: set `false` and no record is
+  created. Exists so a caller can gate DNS registration without wrapping this
+  module call in `count`/`for_each` (see below for why that matters).
+
+## Provider configuration: the caller's job, not this module's
+
+This module does **not** contain a `provider "dns" {}` block. The
+`hashicorp/dns` provider signs every dynamic update using TSIG credentials
+configured at the *provider* level (server/port/transport/key), not per
+resource — so those credentials have to live somewhere. Terraform's own rule
+forces where: a module call that uses `count`, `for_each`, or `depends_on`
+cannot target a module that owns its own provider configuration block (a
+"legacy module", in Terraform's terms). A caller invoking this module
+virtually always needs `depends_on` — the whole point is to sequence the DNS
+write after a control plane has actually formed — so the `provider "dns" {}`
+block, and the `dns_server_address`/`tsig_key_*` inputs that fill it, live in
+the **caller** instead. The caller then passes its configured provider down
+explicitly:
+
+```hcl
+provider "dns" {
+  update {
+    server        = var.dns_server_address
+    port          = var.dns_server_port
+    transport     = var.dns_transport
+    key_name      = "${trimsuffix(var.tsig_key_name, ".")}."  # provider needs a trailing dot
+    key_algorithm = var.tsig_key_algorithm
+    key_secret    = var.tsig_key_secret  # sensitive — supply via a TF_VAR_* env var, never commit
+  }
+}
+
+module "dns_registration" {
+  source     = "../dns-registration"
+  providers  = { dns = dns }
+  depends_on = [module.node_bootstrap]
+  enabled    = var.dns_server_address != null
+  dns_zone   = "lan."
+  record_name      = "api.${var.cluster_name}"
+  record_addresses = [...]
+}
+```
+
+See `proxmox-control-plane` for the concrete implementation of this pattern.
 
 ## What this module does *not* do
 
+- Configure the `dns` provider (TSIG server/port/transport/key) — the
+  caller's job, per the section above.
 - Create the DNS zone or TSIG key — both are prerequisites, set up on the DNS
   server directly (out of Terraform's hands, since that's server-side config,
   not a resource this provider manages).

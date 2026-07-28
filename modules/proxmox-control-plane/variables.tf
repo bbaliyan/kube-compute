@@ -227,13 +227,13 @@ variable "control_plane_count" {
 }
 
 variable "control_plane_ip_addresses" {
-  description = "Static IPv4 addresses in CIDR notation (e.g. '192.168.1.10/24'), one per control-plane node, in order. Required when control_plane_count > 1 (join tokens, TLS SANs, and the etcd firewall ipset all need known IPs at plan time — DHCP is only supported for control_plane_count = 1). Null with control_plane_count = 1 falls back to DHCP, matching node-proxmox's existing behavior."
+  description = "Static IPv4 addresses in CIDR notation (e.g. '192.168.1.10/24'), one per control-plane node, in order. Optional at any control_plane_count: when null, every control-plane node gets its IP via DHCP and it's resolved post-apply through the Proxmox guest agent (used for join tokens, TLS SANs, the etcd firewall ipset, and the dns-registration record). Static IPs remain the practical default for HA — genesis must be reachable before joiners' node-bootstrap runs, and DHCP-assigned IPs are only known after each VM boots."
   type        = list(string)
   default     = null
 
   validation {
-    condition     = var.control_plane_count == 1 || (var.control_plane_ip_addresses != null && length(var.control_plane_ip_addresses) == var.control_plane_count)
-    error_message = "control_plane_ip_addresses must be set with exactly control_plane_count entries when control_plane_count > 1."
+    condition     = var.control_plane_ip_addresses == null || length(var.control_plane_ip_addresses) == var.control_plane_count
+    error_message = "When set, control_plane_ip_addresses must have exactly control_plane_count entries."
   }
 }
 
@@ -241,17 +241,6 @@ variable "vm_gateway" {
   description = "IPv4 default gateway for every control-plane VM (e.g. '192.168.1.1'). Required when control_plane_ip_addresses is set; ignored for DHCP."
   type        = string
   default     = null
-}
-
-variable "control_plane_vip_address" {
-  description = "kube-vip virtual IP (bare IPv4, no CIDR suffix) on the cluster's L2 subnet, used as the registration_address when control_plane_count > 1. Required in that case — Proxmox has no load balancer primitive, so a floating ARP VIP is the HA registration endpoint."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.control_plane_count == 1 || var.control_plane_vip_address != null
-    error_message = "control_plane_vip_address is required when control_plane_count > 1."
-  }
 }
 
 variable "cluster_network_cidr" {
@@ -271,9 +260,69 @@ variable "ingress_ports" {
   default     = [80, 443, 6443]
 }
 
-# DNS: optional naming only. This module creates NO DNS records — Proxmox has no managed DNS.
+# DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
+# Real record publication (optional) is the separate dns_server_address/tsig_* block below.
 variable "cluster_domain" {
-  description = "Optional DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>. No DNS record is created — register wildcard_dns_name at cluster_ip/control_plane_vip_address in your local resolver."
+  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the HA registration/access endpoint — without it there is no single address that names every control-plane node."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.control_plane_count == 1 || var.cluster_domain != null
+    error_message = "cluster_domain is required when control_plane_count > 1."
+  }
+}
+
+# ---- DNS registration (optional): publishes cluster_fqdn via RFC2136 dynamic update ----
+# All null/default = no record is published, matching every other provider module's
+# "DNS is optional, name-only by default" rule. Set dns_server_address to enable.
+variable "dns_server_address" {
+  description = "Hostname or IPv4 address of an RFC2136-compliant DNS server to publish cluster_fqdn to (any server that speaks RFC2136 — not tied to a specific product). Null (default) skips DNS registration entirely; register wildcard_dns_name/cluster_fqdn yourself in that case."
+  type        = string
+  default     = null
+}
+
+variable "dns_server_port" {
+  description = "Port the DNS server accepts dynamic updates on. Ignored when dns_server_address is null."
+  type        = number
+  default     = 53
+}
+
+variable "dns_transport" {
+  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null."
+  type        = string
+  default     = "tcp"
+  validation {
+    condition     = contains(["udp", "tcp", "udp4", "udp6", "tcp4", "tcp6"], var.dns_transport)
+    error_message = "dns_transport must be one of: udp, tcp, udp4, udp6, tcp4, tcp6."
+  }
+}
+
+variable "dns_record_ttl" {
+  description = "TTL in seconds for the published cluster_fqdn record. Ignored when dns_server_address is null."
+  type        = number
+  default     = 300
+}
+
+variable "tsig_key_name" {
+  description = "Name of the TSIG key configured on the DNS server, used to authenticate the dynamic update. Required when dns_server_address is set."
+  type        = string
+  default     = null
+}
+
+variable "tsig_key_algorithm" {
+  description = "TSIG key algorithm: 'hmac-md5', 'hmac-sha1', 'hmac-sha256', or 'hmac-sha512'. Must match how the key was created on the DNS server. Ignored when dns_server_address is null."
+  type        = string
+  default     = "hmac-sha256"
+  validation {
+    condition     = contains(["hmac-md5", "hmac-sha1", "hmac-sha256", "hmac-sha512"], var.tsig_key_algorithm)
+    error_message = "tsig_key_algorithm must be one of: hmac-md5, hmac-sha1, hmac-sha256, hmac-sha512."
+  }
+}
+
+variable "tsig_key_secret" {
+  description = "Base64-encoded TSIG shared secret. Required when dns_server_address is set. Sensitive — supply via a TF_VAR_* environment variable, never committed."
+  type        = string
+  default     = null
+  sensitive   = true
 }

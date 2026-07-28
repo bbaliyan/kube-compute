@@ -25,7 +25,7 @@ run "cluster_and_etcd_ipsets_created_and_referenced" {
     vm_disk_gb                 = 50
     control_plane_count        = 3
     control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-    control_plane_vip_address  = "192.168.1.5"
+    cluster_domain             = "example.com"
     cluster_network_cidr       = "192.168.1.0/24"
     vm_gateway                 = "192.168.1.1"
     allowed_ingress_cidrs      = ["192.168.1.0/24"]
