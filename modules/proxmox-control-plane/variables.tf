@@ -289,9 +289,9 @@ variable "dns_server_port" {
 }
 
 variable "dns_transport" {
-  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null."
+  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp': a real apply against Technitium found 'tcp' fails with 'Error updating DNS record: EOF' (the connection drops mid-update) while 'udp' is the one transport actually proven end-to-end (the RFC2136 smoke test in kube-examples' technitium/README.md uses nsupdate's UDP default). A handful of IPv4 addresses in one A record set fits comfortably under UDP's message-size limit, so there's no capacity reason to prefer TCP here."
   type        = string
-  default     = "tcp"
+  default     = "udp"
   validation {
     condition     = contains(["udp", "tcp", "udp4", "udp6", "tcp4", "tcp6"], var.dns_transport)
     error_message = "dns_transport must be one of: udp, tcp, udp4, udp6, tcp4, tcp6."
