@@ -14,7 +14,7 @@ uses. Because the instances are discrete (not an ASG), each gets a stable node n
 The module provisions **workers and only what is intrinsic to them** — the EC2 instances, their
 IAM role/instance-profile, and the S3 staging bucket the SSM Ansible transport requires. It
 **never creates network fabric** and owns **no
-security group of its own** in this slice: workers attach only the control plane's
+security group of its own** in this slice: workers attach only `aws-cluster-facts`'s
 `cluster_security_group_id` (east-west among cluster members) and accept no traffic from outside
 the cluster. An ingress-facing SG for workers that serve external traffic is a deliberate gap,
 left for whichever later slice wires up an ingress load balancer.

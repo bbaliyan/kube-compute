@@ -60,17 +60,25 @@ IMDSv2 is enforced. Operator access to the node is via AWS SSM (the IAM role att
 
 ## Join flow (workers and, later, additional control-plane nodes)
 
-The control plane pre-generates two tokens (`random_password`, both sensitive) so a node pool can join
-in the same apply pass it's created in: a **server token** (unused until the HA control-plane
-slice wires up additional control-plane nodes) and a separate **agent token**, mirrored into an
-SSM `SecureString` (`agent_token_ssm_parameter` output). Workers receive only the agent token —
-never the server token — so a compromised worker cannot rejoin as a control-plane/etcd member.
+This module no longer generates the join tokens. They come from this cluster's
+`aws-cluster-facts` unit, which applies first and fast, so a node pool no longer has to wait on
+the control plane's full apply for them: `cluster_token` (the **server token**, used for both the
+genesis `server-init` and every additional `server-join` node) and `cluster_agent_token` (the
+**agent token**, mirrored by `aws-cluster-facts` into an SSM `SecureString` that workers fetch via
+their own instance IAM role). Both are required, sensitive inputs here. Workers receive only the
+agent token — never the server token — so a compromised worker cannot rejoin as a
+control-plane/etcd member. `k8s_version` is required for the same reason: both this module and
+`aws-node-pool` consume the one resolved value from `aws-cluster-facts`, so version skew between
+them is prevented by construction.
 
-Two security groups carry this: `cluster_security_group_id` is self-referencing and shared by
-every cluster member (control-plane and node pools) for east-west traffic; a second,
-control-plane-only security group scopes etcd (2379-2380) so workers can never reach it.
-`registration_address` is what a joining node's `--server` flag targets — for `control_plane_count
-= 1` this is simply the control-plane node's private IP.
+Two security groups carry the cluster's east-west traffic. The self-referencing, every-member one
+is created by `aws-cluster-facts` and passed in as `cluster_security_group_id` (this module
+attaches its own instances to it, exactly as `aws-node-pool` does — it does not create it, and
+does not re-export it). The second, created here, is control-plane-only and scopes etcd
+(2379-2380) so workers can never reach it. `registration_address` is what a joining node's
+`--server` flag targets — for `control_plane_count = 1` this is simply the control-plane node's
+private IP; it is still this module's own output, the one join value `aws-node-pool` continues to
+source from the control plane rather than from `aws-cluster-facts`.
 
 ## HA control plane (`control_plane_count` > 1)
 
@@ -101,10 +109,10 @@ modules that flannel and Felix's iptables dataplane both hard-require — confir
 apply, not a theoretical concern. It's kept as an escape hatch for a consumer-supplied
 playbook targeting a different OS. On a single-node cluster (`control_plane_count = 1`), the
 Cilium operator's replica count is set to `1` (rather than the chart default of `2`) so the
-second replica doesn't sit permanently `Pending` with nowhere to schedule. The cluster
-security group's self-referencing all-protocol rule already covers every CNI's control-plane and
-pod-to-pod traffic; switching `cni` never requires a security-group change, and no per-CNI ingress
-rules are created by this module.
+second replica doesn't sit permanently `Pending` with nowhere to schedule. The cluster security
+group's self-referencing all-protocol rule (created by `aws-cluster-facts`) already covers every
+CNI's control-plane and pod-to-pod traffic; switching `cni` never requires a security-group
+change, and no per-CNI ingress rules are created by this module.
 
 ## Registration endpoint modes (`endpoint_mode`)
 
@@ -125,18 +133,22 @@ endpoint at all.
 
 See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing
 is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `root_volume_type`.
-`os_image_ami_id` defaults to the latest AlmaLinux 10 for the derived architecture.
+`os_image_ami_id` defaults to the latest AlmaLinux 10 for the derived architecture. Four inputs
+come from this cluster's `aws-cluster-facts` unit and are required: `cluster_token`,
+`cluster_agent_token`, `cluster_security_group_id`, and `k8s_version` (wire them via a terragrunt
+`dependency` block in a real consumer repo) — see "Join flow" above.
 
 ## Outputs
 
 Standardized across provider modules: `instance_id`, `cluster_ip`, `cluster_fqdn` (null when
-IP-only), `node_provider` (`"aws"`), `bootstrap_status_ref`. Plus `wildcard_dns_name` (for
+IP-only), `node_provider` (`"aws"`), `node_control_ref`. Plus `wildcard_dns_name` (for
 self-service DNS), `aws_region`, `node_arch`, `effective_ami_id`, `vpc_id`, `subnet_id`,
 `node_iam_role_name`. Join flow: `registration_address` (a node's private IP for
 `control_plane_count = 1`; otherwise shaped by `endpoint_mode` — see "Registration endpoint modes"
-above), `agent_token_ssm_parameter`, `cluster_security_group_id`, `control_plane_node_refs` (every
-control-plane node once `control_plane_count > 1`, not just the first) — see "Join flow" and "HA
-control plane" above.
+above) and `control_plane_node_refs` (every control-plane node once `control_plane_count > 1`, not
+just the first) — see "Join flow" and "HA control plane" above. The agent-token SSM parameter name
+and the cluster security group id are **not** outputs of this module; `aws-node-pool` reads both
+from `aws-cluster-facts` directly.
 
 ## Out of scope (lives in the consumer repo)
 
