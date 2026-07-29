@@ -24,6 +24,10 @@ variables {
   allowed_ingress_cidrs = ["192.168.1.0/24"]
   os_image_url          = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
   os_image_file_name    = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+  cluster_token         = "test-cluster-token-0123456789"
+  cluster_agent_token   = "test-agent-token-0123456789"
+  cluster_ipset_name    = "kube-compute-bharat-cluster"
+  etcd_ipset_name       = "kube-compute-bharat-etcd"
 }
 
 run "single_node_no_endpoint" {
