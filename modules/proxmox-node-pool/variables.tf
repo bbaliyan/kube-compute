@@ -155,7 +155,7 @@ variable "control_plane_k8s_version" {
 }
 
 variable "registration_address" {
-  description = "The address workers join through — opaque to this module. Typically the control plane's registration_address output (genesis's raw IP) or, when the caller has DNS registration set up, its cluster_fqdn output instead (see proxmox-control-plane's dns_registration_enabled output before choosing the latter). Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
+  description = "The address workers join through — opaque to this module. Prefer the control plane's registration_address output (genesis's raw IP), not its cluster_fqdn: a real multi-CP apply found that pointing all workers at a DNS name resolving to every control-plane IP causes join hangs lasting 10-20+ minutes per worker — retries land on different control-plane nodes across a round-robin/multi-address record, racing RKE2's own per-node 'orphaned node-password secret' garbage collection (~10 min window), which deletes a still-in-progress join credential signed by a different node than the one now being asked. Pinning every worker to one fixed control-plane IP avoids the race entirely; only kubectl/human access should use cluster_fqdn (unaffected by this issue). Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
   type        = string
 }
 

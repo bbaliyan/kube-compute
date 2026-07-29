@@ -16,12 +16,12 @@ output "cluster_ip" {
 }
 
 output "cluster_fqdn" {
-  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given. This name is always computed from cluster_domain, whether or not anything actually publishes it to DNS — see dns_registration_enabled before joining through it."
+  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given. This name is always computed from cluster_domain, whether or not anything actually publishes it to DNS — see dns_registration_enabled before connecting through it. For kubectl/human access only: don't wire this into proxmox-node-pool's registration_address (see that variable's own doc for why worker joins need a single fixed IP instead)."
   value       = local.cluster_fqdn
 }
 
 output "dns_registration_enabled" {
-  description = "Whether this control plane actually published cluster_fqdn to a DNS server via dns-registration (true only when dns_server_address was set). Consumers deciding whether to join/connect via cluster_fqdn rather than registration_address (a raw IP) should check this first — cluster_fqdn is a non-null name whenever cluster_domain is set, regardless of whether anything makes it resolve."
+  description = "Whether this control plane actually published cluster_fqdn to a DNS server via dns-registration (true only when dns_server_address was set). Consumers deciding whether to connect via cluster_fqdn rather than registration_address (a raw IP) for kubectl/human access should check this first — cluster_fqdn is a non-null name whenever cluster_domain is set, regardless of whether anything makes it resolve. Does not apply to worker joins, which should always use registration_address regardless of this flag."
   value       = local.dns_registration_enabled
 }
 
