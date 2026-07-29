@@ -11,7 +11,7 @@ output "instance_id" {
 }
 
 output "cluster_ip" {
-  description = "Genesis control-plane node's IP. For control_plane_count > 1, prefer registration_address."
+  description = "Genesis control-plane node's IP. For control_plane_count > 1, prefer cluster_fqdn (when dns_registration_enabled) for a name that covers every control-plane node, not just genesis."
   value       = local.cp_ips["0"]
 }
 
@@ -57,24 +57,7 @@ output "proxmox_node" {
 
 output "k8s_version" {
   description = "K8s distro version installed on this control plane's control-plane nodes. Wire proxmox-node-pool's control_plane_k8s_version to this output so the version-skew guard is enforced automatically rather than by convention."
-  value       = local.k8s_version
-}
-
-# ---- Join flow: consumed by proxmox-node-pool ----
-output "registration_address" {
-  description = "Address workers/joining servers use to reach the cluster API: genesis's raw IP. Proxmox has no load-balancer primitive, so every node (control-plane joiner or worker) dials genesis directly rather than a VIP; cluster_fqdn (when dns_server_address is set) is the DNS-based alternative for clients outside this join flow."
-  value       = local.cp_ips["0"]
-}
-
-output "cluster_agent_token" {
-  description = "The agent join token. Delivered to proxmox-node-pool directly (no managed secret store on Proxmox); embed it in cloud-init only, never log it."
-  value       = random_password.agent_token.result
-  sensitive   = true
-}
-
-output "cluster_ipset_name" {
-  description = "Name of the cluster-wide firewall ipset (see module README for its subnet-CIDR scoping rationale). Node pools reference this by name ('+<name>') in their own per-VM firewall rules — they never create or own this ipset."
-  value       = local.cluster_ipset_name
+  value       = var.k8s_version
 }
 
 output "control_plane_node_refs" {

@@ -29,9 +29,30 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Sourced from this cluster's cluster-facts unit — both control-plane and node-pool consume the same resolved value, so version-skew between them is prevented by construction rather than checked at runtime."
   type        = string
-  default     = null
+}
+
+variable "cluster_token" {
+  description = "Join token from this cluster's cluster-facts unit. Passed straight through to every node-bootstrap call (server-init and server-join alike)."
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_agent_token" {
+  description = "Agent token from this cluster's cluster-facts unit. Passed to the genesis (server-init) node-bootstrap call only — workers fetch it themselves via proxmox-node-pool, which sources it directly from cluster-facts, not from this module."
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_ipset_name" {
+  description = "Name of the cluster-wide firewall ipset, from this cluster's cluster-facts unit. This module still creates the ipset resource itself (see main.tf) — this is only the name, so it matches what proxmox-node-pool independently receives from the same cluster-facts unit."
+  type        = string
+}
+
+variable "etcd_ipset_name" {
+  description = "Name of the etcd-peer firewall ipset, from this cluster's cluster-facts unit. Same treatment as cluster_ipset_name."
+  type        = string
 }
 
 variable "trusted_ca_pem" {

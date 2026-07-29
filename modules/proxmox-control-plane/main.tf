@@ -1,8 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-module "component_versions" {
-  source = "../component-versions"
-}
-
 # Configured here (not in dns-registration) because that module needs
 # depends_on to sequence its write after node-bootstrap succeeds, and
 # Terraform forbids depends_on/count/for_each on a module call whose module
@@ -23,22 +19,26 @@ provider "dns" {
 }
 
 locals {
-  # Falls back to the platform-wide default when the caller doesn't override k8s_version.
-  k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
-
   has_domain    = var.cluster_domain != null
   fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
+
+  # The join address for this cluster's own additional-CP joins (module.node_bootstrap_additional
+  # below). A single-target DNS name — distinct from cluster_fqdn's round-robin
+  # api.* record — genesis self-registers via node-bootstrap's dns_self_register_*
+  # inputs (wired below) as soon as it knows its own IP, so this is a plain
+  # zero-resource-dependency string whenever DNS is configured; falls back to genesis's
+  # raw IP (a real resource dependency, unavoidable without DNS) only when
+  # dns_server_address is null.
+  genesis_dns_name     = local.has_domain ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+  registration_address = var.dns_server_address != null ? local.genesis_dns_name : local.cp_ips["0"]
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")
   # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one
   # replica permanently Pending on a genuinely single-node cluster.
   effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
-
-  cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
-  etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
 
   # DNS registration (RFC2136): publishes cluster_fqdn -> every resolved control-plane
   # IP, the HA registration/access endpoint (Proxmox has no load-balancer/VIP
@@ -128,20 +128,9 @@ locals {
     EOT
 }
 
-# ---- Join-token flow: pre-generated so a control plane + pool join in one apply pass ----
-resource "random_password" "server_token" {
-  length  = 48
-  special = false
-}
-
-resource "random_password" "agent_token" {
-  length  = 48
-  special = false
-}
-
 # ---- Cluster firewall: an ipset scoped to the cluster's L2 subnet CIDR (see plan design note 2) ----
 resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
-  name    = local.cluster_ipset_name
+  name    = var.cluster_ipset_name
   comment = "kube-compute ${var.cluster_name}: east-west traffic among cluster members (subnet-scoped — see module README)."
 
   cidr {
@@ -151,7 +140,7 @@ resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
 
 # ---- etcd firewall: exact control-plane IPs only, never joined by workers ----
 resource "proxmox_virtual_environment_firewall_ipset" "etcd" {
-  name    = local.etcd_ipset_name
+  name    = var.etcd_ipset_name
   comment = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
 
   dynamic "cidr" {
@@ -236,15 +225,15 @@ module "node_bootstrap" {
   ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
-  k8s_version                    = local.k8s_version
+  k8s_version                    = var.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
   cluster_fqdn_suffix            = local.fqdn_suffix
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
   cilium_operator_replicas       = local.effective_cilium_operator_replicas
-  cluster_token                  = random_password.server_token.result
-  cluster_agent_token            = random_password.agent_token.result
+  cluster_token                  = var.cluster_token
+  cluster_agent_token            = var.cluster_agent_token
   extra_tls_sans                 = compact([local.wildcard_name])
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
@@ -255,6 +244,16 @@ module "node_bootstrap" {
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
   platform_helm_values_object    = var.platform_helm_values_object
   extra_tags                     = var.extra_tags
+
+  dns_self_register_zone        = var.dns_server_address != null ? local.dns_zone : null
+  dns_self_register_record_name = "genesis.${var.cluster_name}"
+  dns_self_register_ttl         = var.dns_record_ttl
+  dns_server_address            = var.dns_server_address
+  dns_server_port               = var.dns_server_port
+  dns_transport                 = var.dns_transport
+  tsig_key_name                 = var.tsig_key_name
+  tsig_key_algorithm            = var.tsig_key_algorithm
+  tsig_key_secret               = var.tsig_key_secret
 
   ansible_connection_vars = {
     ansible_connection           = "ssh"
@@ -306,20 +305,23 @@ module "node_bootstrap_additional" {
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name
   node_name                = "${var.cluster_name}-cp-${each.key}"
-  k8s_version              = local.k8s_version
+  k8s_version              = var.k8s_version
   cluster_fqdn             = local.cluster_fqdn
   cluster_fqdn_suffix      = local.fqdn_suffix
   node_role                = "server-join"
   control_plane_taint      = local.control_plane_taint
   cni                      = local.effective_cni
   cilium_operator_replicas = local.effective_cilium_operator_replicas
-  # Genesis's own raw IP — the module's node-bootstrap dependency already
-  # forces genesis's Ansible run to finish first (see depends_on below), so
-  # this is stable and known by the time a joiner runs. No VIP/load-balancer
-  # primitive exists on Proxmox; every joiner dials genesis directly.
-  registration_address = local.cp_ips["0"]
+  # local.registration_address (genesis's self-registered DNS name when DNS is
+  # configured, its raw IP otherwise) — the module's node-bootstrap dependency already
+  # forces genesis's Ansible run to finish first (see depends_on below), and genesis's
+  # own dns-self-register task (gated on node_role == "server-init", wired in
+  # module.node_bootstrap below) runs early in that same run, well before this
+  # staggered joiner's own sleep-then-join task fires. No round-robin race here (see
+  # cluster_fqdn's own doc) — this is always a single target.
+  registration_address = local.registration_address
   extra_tls_sans       = compact([local.wildcard_name])
-  cluster_token        = random_password.server_token.result
+  cluster_token        = var.cluster_token
   trusted_ca_pem       = var.trusted_ca_pem
   registry_mirror_url  = var.registry_mirror_url
   cert_mode            = var.cert_mode
@@ -462,6 +464,11 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
       condition     = (var.os_image_url != null) != (var.os_image_file_id != null)
       error_message = "Set exactly one of os_image_url (download) or os_image_file_id (pre-existing Proxmox file)."
     }
+
+    precondition {
+      condition     = var.control_plane_count == 1 || var.dns_server_address != null
+      error_message = "dns_server_address is required when control_plane_count > 1 — multi-node clusters need it to self-register the genesis join address."
+    }
   }
 }
 
@@ -570,7 +577,7 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
   rule {
     type    = "in"
     action  = "ACCEPT"
-    source  = "+${local.cluster_ipset_name}"
+    source  = "+${var.cluster_ipset_name}"
     comment = "all traffic among cluster members"
   }
 
@@ -579,7 +586,7 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
     action  = "ACCEPT"
     proto   = "tcp"
     dport   = "2379:2380"
-    source  = "+${local.etcd_ipset_name}"
+    source  = "+${var.etcd_ipset_name}"
     comment = "etcd peer/client traffic, control-plane nodes only"
   }
 
