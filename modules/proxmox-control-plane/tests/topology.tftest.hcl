@@ -33,10 +33,12 @@ variables {
 run "single_node_no_endpoint" {
   command = plan
 
-  assert {
-    condition     = output.registration_address == "192.168.1.10"
-    error_message = "control_plane_count = 1 must fall back to the genesis node's own IP"
-  }
+  # NOTE: registration_address is no longer an output — Task 2 of this effort
+  # intentionally removed it since nothing outside this module consumes it
+  # anymore (it's now purely local.registration_address, wired internally into
+  # module.node_bootstrap_additional's own input). This assertion's coverage
+  # is no longer expressible via a module output and was removed rather than
+  # replaced.
   assert {
     condition     = length(proxmox_virtual_environment_vm.control_plane_additional) == 0
     error_message = "control_plane_count = 1 must create no additional control-plane VMs"
@@ -62,16 +64,21 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
     cluster_domain             = "example.com"
     cluster_network_cidr       = "192.168.1.0/24"
     vm_gateway                 = "192.168.1.1"
+    dns_server_address         = "192.168.1.53"
+    tsig_key_name              = "kube-compute"
+    tsig_key_secret            = "ZmFrZXNlY3JldA=="
   }
 
   assert {
     condition     = length(proxmox_virtual_environment_vm.control_plane_additional) == 2
     error_message = "control_plane_count = 3 must create exactly 2 additional control-plane VMs"
   }
-  assert {
-    condition     = output.registration_address == "192.168.1.10"
-    error_message = "control_plane_count > 1 must use genesis's own IP as registration_address — Proxmox has no VIP/load-balancer primitive"
-  }
+  # NOTE: registration_address is no longer an output — Task 2 of this effort
+  # intentionally removed it since nothing outside this module consumes it
+  # anymore (it's now purely local.registration_address, wired internally into
+  # module.node_bootstrap_additional's own input). This assertion's coverage
+  # is no longer expressible via a module output and was removed rather than
+  # replaced.
   assert {
     condition = alltrue([
       for k, v in proxmox_virtual_environment_file.hostname_init_additional :

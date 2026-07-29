@@ -60,6 +60,10 @@ run "dns_registration_enabled_when_server_supplied" {
 
 run "dns_registration_disabled_without_server" {
   command = plan
+  variables {
+    control_plane_count        = 1
+    control_plane_ip_addresses = ["192.168.1.10/24"]
+  }
 
   assert {
     condition     = module.dns_registration.record_created == false
