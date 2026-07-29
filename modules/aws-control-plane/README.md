@@ -121,12 +121,6 @@ endpoint at all.
 - **`static`** — creates no load balancer or DNS record at all; `static_registration_address` is
   used verbatim. For a consumer that already runs its own front end.
 
-## Access
-
-Zero inbound beyond `ingress_ports` (default 80/443/6443) from `allowed_ingress_cidrs`; no SSH.
-IMDSv2 is enforced. Operator access to the node is via AWS SSM (the IAM role attaches
-`AmazonSSMManagedInstanceCore`) — there is no inbound shell port.
-
 ## Inputs
 
 See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing

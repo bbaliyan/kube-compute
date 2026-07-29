@@ -13,14 +13,17 @@ mock_provider "aws" {
   }
 }
 
+variables {
+  cluster_name          = "bharat"
+  aws_region            = "eu-west-1"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
+  subnet_id             = "subnet-abc"
+}
+
 run "control_plane_count_3_places_one_per_az_behind_nlb" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
+    control_plane_count = 3
     control_plane_subnets = {
       "eu-west-1a" = "subnet-az-a"
       "eu-west-1b" = "subnet-az-b"
@@ -64,11 +67,7 @@ run "control_plane_count_3_places_one_per_az_behind_nlb" {
 run "control_plane_count_5_places_one_per_az" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 5
+    control_plane_count = 5
     control_plane_subnets = {
       "eu-west-1a" = "subnet-az-a"
       "eu-west-1b" = "subnet-az-b"
@@ -86,11 +85,7 @@ run "control_plane_count_5_places_one_per_az" {
 run "control_plane_count_5_round_robins_when_fewer_than_five_azs" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 5
+    control_plane_count = 5
     control_plane_subnets = {
       "eu-west-1a" = "subnet-az-a"
       "eu-west-1b" = "subnet-az-b"
@@ -110,10 +105,6 @@ run "control_plane_count_5_round_robins_when_fewer_than_five_azs" {
 run "empty_control_plane_subnets_map_declines_cleanly" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
     control_plane_count   = 3
     control_plane_subnets = {}
   }
@@ -123,11 +114,7 @@ run "empty_control_plane_subnets_map_declines_cleanly" {
 run "fewer_than_three_azs_declines" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
+    control_plane_count = 3
     control_plane_subnets = {
       "eu-west-1a" = "subnet-az-a"
       "eu-west-1b" = "subnet-az-b"
@@ -139,11 +126,7 @@ run "fewer_than_three_azs_declines" {
 run "ha_registration_address_is_nlb_and_refs_include_all_nodes" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
+    control_plane_count = 3
     control_plane_subnets = {
       "eu-west-1a" = "subnet-az-a"
       "eu-west-1b" = "subnet-az-b"

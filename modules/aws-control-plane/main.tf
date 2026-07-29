@@ -293,7 +293,8 @@ module "node_bootstrap" {
     # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
     # symlink to whatever the current default Python actually is (3.12 as of
     # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
-    # OS bump doesn't silently break this.
+    # OS bump doesn't silently break this. (Same reasoning applies to
+    # node_bootstrap_additional's identical block below.)
     ansible_python_interpreter = "/usr/bin/python3"
   }
 }
@@ -342,15 +343,7 @@ module "node_bootstrap_additional" {
     ansible_aws_ssm_instance_id = aws_instance.control_plane_additional[each.key].id
     ansible_aws_ssm_region      = var.aws_region
     ansible_aws_ssm_bucket_name = aws_s3_bucket.ansible_ssm.id
-    # Pinned rather than left to Ansible's auto-discovery: every node this
-    # project targets is always AlmaLinux 10 (this project's only supported
-    # OS, no compatibility claim for others), so there's nothing to actually
-    # discover, and pinning avoids the "future installation of another Python
-    # interpreter could cause a different interpreter to be discovered"
-    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
-    # symlink to whatever the current default Python actually is (3.12 as of
-    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
-    # OS bump doesn't silently break this.
+    # Pinned for the same reason as module.node_bootstrap's identical block above.
     ansible_python_interpreter = "/usr/bin/python3"
   }
 }
@@ -589,8 +582,8 @@ resource "aws_instance" "control_plane" {
 
   metadata_options {
     http_endpoint               = "enabled"
-    http_tokens                 = "required" # IMDSv2 enforced
-    http_put_response_hop_limit = 2          # lets pods reach IMDS for instance-profile auth
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2 # lets pods reach IMDS for instance-profile auth
   }
 
   root_block_device {

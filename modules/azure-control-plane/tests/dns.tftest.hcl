@@ -42,19 +42,20 @@ mock_provider "azurerm" {
   }
 }
 
+variables {
+  cluster_name          = "bharat"
+  k8s_version           = "v1.36.2+rke2r1"
+  resource_group_name   = "rg-k8s"
+  location              = "eastus"
+  vnet_name             = "vnet-main"
+  subnet_name           = "snet-k8s"
+  vm_size               = "Standard_D4s_v3"
+  admin_ssh_public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-compute-test"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
+}
+
 run "no_domain_means_no_dns_record" {
   command = apply
-  variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    resource_group_name   = "rg-k8s"
-    location              = "eastus"
-    vnet_name             = "vnet-main"
-    subnet_name           = "snet-k8s"
-    vm_size               = "Standard_D4s_v3"
-    admin_ssh_public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-compute-test"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-  }
   assert {
     condition     = length(azurerm_dns_a_record.wildcard) == 0
     error_message = "no cluster_domain means no DNS record should be created"
@@ -76,15 +77,6 @@ run "no_domain_means_no_dns_record" {
 run "domain_and_zone_creates_wildcard_record" {
   command = apply
   variables {
-    cluster_name            = "bharat"
-    k8s_version             = "v1.36.2+rke2r1"
-    resource_group_name     = "rg-k8s"
-    location                = "eastus"
-    vnet_name               = "vnet-main"
-    subnet_name             = "snet-k8s"
-    vm_size                 = "Standard_D4s_v3"
-    admin_ssh_public_key    = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-compute-test"
-    allowed_ingress_cidrs   = ["10.0.0.0/8"]
     cluster_domain          = "example.com"
     dns_zone_resource_group = "rg-dns"
   }

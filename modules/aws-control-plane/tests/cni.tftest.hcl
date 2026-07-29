@@ -8,6 +8,14 @@ mock_provider "aws" {
   }
 }
 
+variables {
+  cluster_name          = "bharat"
+  aws_region            = "eu-west-1"
+  instance_type         = "m7g.large"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
+  subnet_id             = "subnet-abc"
+}
+
 # NOTE: the run blocks that used to live here (single_node_cni_defaults_to_default,
 # ha_cni_defaults_to_cilium, explicit_cni_overrides_single_node_default,
 # explicit_cni_overrides_ha_default) asserted on the `rendered_cloud_init`/
@@ -20,12 +28,7 @@ mock_provider "aws" {
 run "invalid_cni_rejected" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    cni                   = "calico"
+    cni = "calico"
   }
   expect_failures = [var.cni]
 }
@@ -33,12 +36,7 @@ run "invalid_cni_rejected" {
 run "cluster_sg_self_reference_covers_default_cni" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    cni                   = "default"
+    cni = "default"
   }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.cluster_self.ip_protocol == "-1"
@@ -49,12 +47,7 @@ run "cluster_sg_self_reference_covers_default_cni" {
 run "cluster_sg_self_reference_covers_cilium" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    cni                   = "cilium"
+    cni = "cilium"
   }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.cluster_self.ip_protocol == "-1"

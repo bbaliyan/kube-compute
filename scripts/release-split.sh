@@ -12,12 +12,12 @@
 #   source_dir  path to the kube-compute checkout to copy from (default: repo
 #               root, derived from this script's own location)
 #
-# Path-set copied in: component-versions, cloud-init, <provider>-control-plane
+# Path-set copied in: component-versions, node-bootstrap, <provider>-control-plane
 # (becomes the split repo's root module, renamed to bare "control-plane" — the
 # split repo's own name already carries the provider), <provider>-node-pool
 # (nests under modules/, renamed to bare "node-pool" for the same reason).
 #
-# Only the root module's "../cloud-init" and "../component-versions" source
+# Only the root module's "../node-bootstrap" and "../component-versions" source
 # lines are rewritten (sibling -> parent-child, since it moves from being a
 # sibling of those two modules to being their parent in the split repo). No
 # other content differs between source and output.
@@ -37,7 +37,7 @@ source_dir="${3:-$(cd "$script_dir/.." && pwd)}"
 control_plane_mod="${provider}-control-plane"
 node_pool_mod="${provider}-node-pool"
 
-for mod in "$control_plane_mod" "$node_pool_mod" component-versions cloud-init; do
+for mod in "$control_plane_mod" "$node_pool_mod" component-versions node-bootstrap; do
   if [[ ! -d "$source_dir/modules/$mod" ]]; then
     echo "error: $source_dir/modules/$mod does not exist" >&2
     exit 1
@@ -70,33 +70,30 @@ cp -a "$source_dir/modules/$control_plane_mod/." "$target_dir/"
 
 # ---- Copy the rest under modules/<name>/ ----
 # node-pool drops its provider prefix here (the split repo's own name already
-# carries the provider); cloud-init/component-versions are already
+# carries the provider); node-bootstrap/component-versions are already
 # provider-neutral, so their destination name matches their source name.
 mkdir -p "$target_dir/modules/node-pool"
 cp -a "$source_dir/modules/$node_pool_mod/." "$target_dir/modules/node-pool/"
-for mod in cloud-init component-versions; do
+for mod in node-bootstrap component-versions; do
   mkdir -p "$target_dir/modules/$mod"
   cp -a "$source_dir/modules/$mod/." "$target_dir/modules/$mod/"
 done
 
 find "$target_dir" -type d -name ".terraform" -exec rm -rf {} +
 
-# ---- Rewrite the root module's known relative references to cloud-init /
+# ---- Rewrite the root module's known relative references to node-bootstrap /
 # component-versions ----
-# Scoped find/replace only — not a general HCL rewrite. Two forms exist in
-# control-plane-<provider>/main.tf: the module "source" lines, and a
-# path.module-relative default (coalesce(var.cloud_init_template,
-# "${path.module}/../cloud-init/...")) used to locate the bundled template
-# file when the consumer doesn't override it.
+# Scoped find/replace only — not a general HCL rewrite. Only the module
+# "source" lines need rewriting (sibling -> parent-child); neither module is
+# otherwise referenced by a path.module-relative default in control-plane's
+# own main.tf.
 main_tf="$target_dir/main.tf"
 if [[ ! -f "$main_tf" ]]; then
   echo "error: $main_tf missing after copy" >&2
   exit 1
 fi
-perl -pi -e 's{source\s*=\s*"\.\./cloud-init"}{source = "./modules/cloud-init"}g;
-             s{source\s*=\s*"\.\./component-versions"}{source = "./modules/component-versions"}g;
-             s{\$\{path\.module\}/\.\./cloud-init}{\${path.module}/modules/cloud-init}g;
-             s{\$\{path\.module\}/\.\./component-versions}{\${path.module}/modules/component-versions}g;' \
+perl -pi -e 's{source\s*=\s*"\.\./node-bootstrap"}{source = "./modules/node-bootstrap"}g;
+             s{source\s*=\s*"\.\./component-versions"}{source = "./modules/component-versions"}g;' \
   "$main_tf"
 
 # ---- Copy LICENSE/NOTICE verbatim (not on the exclude-list) ----
@@ -121,7 +118,7 @@ check_parity() {
 }
 check_parity "$control_plane_mod" "$source_dir/modules/$control_plane_mod" "$target_dir"
 check_parity "$node_pool_mod" "$source_dir/modules/$node_pool_mod" "$target_dir/modules/node-pool"
-check_parity "cloud-init" "$source_dir/modules/cloud-init" "$target_dir/modules/cloud-init"
+check_parity "node-bootstrap" "$source_dir/modules/node-bootstrap" "$target_dir/modules/node-bootstrap"
 check_parity "component-versions" "$source_dir/modules/component-versions" "$target_dir/modules/component-versions"
 
 if [[ "$parity_fail" -ne 0 ]]; then

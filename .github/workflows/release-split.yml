@@ -2,7 +2,7 @@
 name: Release split (Proxmox)
 
 # Publishes the Proxmox provider slice of this repo (component-versions,
-# cloud-init, proxmox-control-plane, proxmox-node-pool, LICENSE, NOTICE) to
+# node-bootstrap, proxmox-control-plane, proxmox-node-pool, LICENSE, NOTICE) to
 # the read-only mirror repo terraform-proxmox-kube-compute, but only when
 # that path set actually changed since the last version published there.
 # LICENSE/NOTICE are in the diff-gate's path set (not just copied
@@ -19,7 +19,7 @@ permissions:
 
 env:
   SPLIT_REPO: bbaliyan/terraform-proxmox-kube-compute
-  PATH_SET: "component-versions cloud-init proxmox-control-plane proxmox-node-pool LICENSE NOTICE"
+  PATH_SET: "modules/component-versions modules/node-bootstrap modules/proxmox-control-plane modules/proxmox-node-pool LICENSE NOTICE"
 
 jobs:
   release-split-proxmox:

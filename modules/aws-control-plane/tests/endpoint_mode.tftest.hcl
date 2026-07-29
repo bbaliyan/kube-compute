@@ -13,20 +13,21 @@ mock_provider "aws" {
   }
 }
 
+variables {
+  cluster_name          = "bharat"
+  aws_region            = "eu-west-1"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
+  subnet_id             = "subnet-abc"
+  control_plane_count   = 3
+  control_plane_subnets = {
+    "eu-west-1a" = "subnet-az-a"
+    "eu-west-1b" = "subnet-az-b"
+    "eu-west-1c" = "subnet-az-c"
+  }
+}
+
 run "loadbalancer_is_the_default" {
   command = plan
-  variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
-  }
   assert {
     condition     = length(aws_lb.control_plane) == 1
     error_message = "endpoint_mode defaults to loadbalancer, which must plan the NLB"
@@ -40,16 +41,6 @@ run "loadbalancer_is_the_default" {
 run "dns_mode_plans_multivalue_records_and_health_checks" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
     endpoint_mode  = "dns"
     cluster_domain = "example.internal"
     hosted_zone_id = "Z0123456789"
@@ -87,16 +78,6 @@ run "dns_mode_plans_multivalue_records_and_health_checks" {
 run "dns_mode_requires_domain_and_zone" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
     endpoint_mode  = "dns"
     cluster_domain = "example.internal"
     # hosted_zone_id/hosted_zone_name omitted on purpose: cluster_domain alone is not enough,
@@ -114,16 +95,6 @@ run "dns_mode_requires_domain_and_zone" {
 run "static_mode_creates_nothing_and_uses_the_supplied_address" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
     endpoint_mode               = "static"
     static_registration_address = "my-own-lb.internal.example.test"
   }
@@ -144,16 +115,6 @@ run "static_mode_creates_nothing_and_uses_the_supplied_address" {
 run "static_mode_requires_the_address" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    control_plane_count   = 3
-    control_plane_subnets = {
-      "eu-west-1a" = "subnet-az-a"
-      "eu-west-1b" = "subnet-az-b"
-      "eu-west-1c" = "subnet-az-c"
-    }
     endpoint_mode = "static"
     # static_registration_address omitted on purpose
   }
@@ -163,11 +124,7 @@ run "static_mode_requires_the_address" {
 run "endpoint_mode_rejects_invalid" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-    endpoint_mode         = "vip"
+    endpoint_mode = "vip"
   }
   expect_failures = [var.endpoint_mode]
 }

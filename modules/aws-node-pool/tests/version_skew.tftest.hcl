@@ -5,6 +5,16 @@ mock_provider "aws" {
   }
 }
 
+variables {
+  cluster_name              = "bharat"
+  aws_region                = "eu-west-1"
+  control_plane_k8s_version = "v1.36.2+rke2r1"
+  registration_address      = "10.0.1.5"
+  agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
+  cluster_security_group_id = "sg-cluster123"
+  subnet_id                 = "subnet-worker-a"
+}
+
 run "pool_version_equal_to_control_plane_is_accepted" {
   command = plan
   override_data {
@@ -12,14 +22,7 @@ run "pool_version_equal_to_control_plane_is_accepted" {
     values = { availability_zone = "eu-west-1a", vpc_id = "vpc-mock" }
   }
   variables {
-    cluster_name              = "bharat"
-    aws_region                = "eu-west-1"
-    k8s_version               = "v1.36.2+rke2r1"
-    control_plane_k8s_version = "v1.36.2+rke2r1"
-    registration_address      = "10.0.1.5"
-    agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
-    cluster_security_group_id = "sg-cluster123"
-    subnet_id                 = "subnet-worker-a"
+    k8s_version = "v1.36.2+rke2r1"
   }
   assert {
     condition     = length(aws_instance.worker) >= 1
@@ -34,14 +37,7 @@ run "pool_version_older_than_control_plane_is_accepted" {
     values = { availability_zone = "eu-west-1a", vpc_id = "vpc-mock" }
   }
   variables {
-    cluster_name              = "bharat"
-    aws_region                = "eu-west-1"
-    k8s_version               = "v1.35.5+rke2r1"
-    control_plane_k8s_version = "v1.36.2+rke2r1"
-    registration_address      = "10.0.1.5"
-    agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
-    cluster_security_group_id = "sg-cluster123"
-    subnet_id                 = "subnet-worker-a"
+    k8s_version = "v1.35.5+rke2r1"
   }
   assert {
     condition     = length(aws_instance.worker) >= 1
@@ -56,14 +52,7 @@ run "pool_version_newer_than_control_plane_is_rejected" {
     values = { availability_zone = "eu-west-1a", vpc_id = "vpc-mock" }
   }
   variables {
-    cluster_name              = "bharat"
-    aws_region                = "eu-west-1"
-    k8s_version               = "v1.37.0+rke2r1"
-    control_plane_k8s_version = "v1.36.2+rke2r1"
-    registration_address      = "10.0.1.5"
-    agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
-    cluster_security_group_id = "sg-cluster123"
-    subnet_id                 = "subnet-worker-a"
+    k8s_version = "v1.37.0+rke2r1"
   }
   expect_failures = [aws_instance.worker]
 }

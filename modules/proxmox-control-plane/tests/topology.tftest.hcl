@@ -14,19 +14,20 @@ mock_provider "proxmox" {
   }
 }
 
+variables {
+  cluster_name          = "bharat"
+  k8s_version           = "v1.36.2+rke2r1"
+  proxmox_node          = "pve"
+  vm_cores              = 4
+  vm_memory_mb          = 8192
+  vm_disk_gb            = 50
+  allowed_ingress_cidrs = ["192.168.1.0/24"]
+  os_image_url          = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+  os_image_file_name    = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+}
+
 run "single_node_no_endpoint" {
   command = plan
-  variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    proxmox_node          = "pve"
-    vm_cores              = 4
-    vm_memory_mb          = 8192
-    vm_disk_gb            = 50
-    allowed_ingress_cidrs = ["192.168.1.0/24"]
-    os_image_url          = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name    = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
-  }
 
   assert {
     condition     = output.registration_address == "192.168.1.10"
@@ -41,19 +42,10 @@ run "single_node_no_endpoint" {
 run "invalid_control_plane_count_rejected" {
   command = plan
   variables {
-    cluster_name               = "bharat"
-    k8s_version                = "v1.36.2+rke2r1"
-    proxmox_node               = "pve"
-    vm_cores                   = 4
-    vm_memory_mb               = 8192
-    vm_disk_gb                 = 50
     control_plane_count        = 2
     control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24"]
     cluster_domain             = "example.com"
     vm_gateway                 = "192.168.1.1"
-    allowed_ingress_cidrs      = ["192.168.1.0/24"]
-    os_image_url               = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name         = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
   }
   expect_failures = [var.control_plane_count]
 }
@@ -61,20 +53,11 @@ run "invalid_control_plane_count_rejected" {
 run "ha_control_plane_creates_n_minus_1_additional_vms" {
   command = plan
   variables {
-    cluster_name               = "bharat"
-    k8s_version                = "v1.36.2+rke2r1"
-    proxmox_node               = "pve"
-    vm_cores                   = 4
-    vm_memory_mb               = 8192
-    vm_disk_gb                 = 50
     control_plane_count        = 3
     control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
     cluster_domain             = "example.com"
     cluster_network_cidr       = "192.168.1.0/24"
     vm_gateway                 = "192.168.1.1"
-    allowed_ingress_cidrs      = ["192.168.1.0/24"]
-    os_image_url               = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name         = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
   }
 
   assert {

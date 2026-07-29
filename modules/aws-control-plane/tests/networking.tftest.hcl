@@ -10,15 +10,18 @@ mock_provider "aws" {
   }
 }
 
+variables {
+  aws_region            = "eu-west-1"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
+}
+
 run "explicit_subnet_and_arm64" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-explicit123"
+    cluster_name  = "bharat"
+    k8s_version   = "v1.36.2+rke2r1"
+    instance_type = "m7g.large"
+    subnet_id     = "subnet-explicit123"
   }
   assert {
     condition     = output.node_arch == "arm64"
@@ -37,10 +40,8 @@ run "subnet_name_lookup" {
     values = { id = "subnet-byname456" }
   }
   variables {
-    cluster_name          = "byname"
-    aws_region            = "eu-west-1"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_name           = "my-private-subnet-az1"
+    cluster_name = "byname"
+    subnet_name  = "my-private-subnet-az1"
   }
   assert {
     condition     = output.subnet_id == "subnet-byname456"
@@ -51,11 +52,9 @@ run "subnet_name_lookup" {
 run "default_vpc_fallback" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    cluster_name  = "bharat"
+    k8s_version   = "v1.36.2+rke2r1"
+    instance_type = "m7g.large"
     # subnet_id omitted -> null -> default-VPC fallback
   }
   assert {
@@ -72,12 +71,10 @@ run "x86_64_derivation" {
     values = { supported_architectures = ["x86_64"] }
   }
   variables {
-    cluster_name          = "x86"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7i.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-x"
+    cluster_name  = "x86"
+    k8s_version   = "v1.36.2+rke2r1"
+    instance_type = "m7i.large"
+    subnet_id     = "subnet-x"
   }
   assert {
     condition     = output.node_arch == "x86_64"
@@ -88,13 +85,11 @@ run "x86_64_derivation" {
 run "explicit_ami_overrides_lookup" {
   command = plan
   variables {
-    cluster_name          = "amitest"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-x"
-    os_image_ami_id       = "ami-0explicit123"
+    cluster_name    = "amitest"
+    k8s_version     = "v1.36.2+rke2r1"
+    instance_type   = "m7g.large"
+    subnet_id       = "subnet-x"
+    os_image_ami_id = "ami-0explicit123"
   }
   assert {
     condition     = output.effective_ami_id == "ami-0explicit123"
@@ -108,12 +103,10 @@ run "explicit_ami_overrides_lookup" {
 run "storage_graviton_arm64" {
   command = plan
   variables {
-    cluster_name          = "storage"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "im4gn.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-x"
+    cluster_name  = "storage"
+    k8s_version   = "v1.36.2+rke2r1"
+    instance_type = "im4gn.large"
+    subnet_id     = "subnet-x"
   }
   assert {
     condition     = output.node_arch == "arm64"

@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 mock_provider "aws" {}
 
+variables {
+  cluster_name          = "bharat"
+  k8s_version           = "v1.36.2+rke2r1"
+  aws_region            = "eu-west-1"
+  instance_type         = "m7g.large"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
+  subnet_id             = "subnet-abc"
+}
+
 run "cluster_sg_is_self_referencing" {
   command = plan
-  variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-  }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.cluster_self.referenced_security_group_id == aws_security_group.cluster.id
     error_message = "the cluster SG must allow traffic sourced from itself (every cluster member)"
@@ -27,14 +28,6 @@ run "cluster_sg_is_self_referencing" {
 
 run "etcd_sg_is_control_plane_only" {
   command = plan
-  variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-  }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.etcd_peer.from_port == 2379 && aws_vpc_security_group_ingress_rule.etcd_peer.to_port == 2380
     error_message = "the etcd SG must open exactly 2379-2380"
@@ -51,14 +44,6 @@ run "etcd_sg_is_control_plane_only" {
 
 run "registration_address_and_node_refs" {
   command = plan
-  variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    aws_region            = "eu-west-1"
-    instance_type         = "m7g.large"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
-    subnet_id             = "subnet-abc"
-  }
   assert {
     condition     = output.registration_address == aws_instance.control_plane.private_ip
     error_message = "for control_plane_count=1, registration_address must be the sole control-plane node's private IP"
