@@ -2,10 +2,14 @@
 mock_provider "aws" {}
 
 variables {
-  cluster_name          = "bharat"
-  aws_region            = "eu-west-1"
-  allowed_ingress_cidrs = ["10.0.0.0/8"]
-  subnet_id             = "subnet-abc"
+  cluster_name              = "bharat"
+  k8s_version               = "v1.36.2+rke2r1"
+  aws_region                = "eu-west-1"
+  allowed_ingress_cidrs     = ["10.0.0.0/8"]
+  subnet_id                 = "subnet-abc"
+  cluster_token             = "test-cluster-token-0123456789"
+  cluster_agent_token       = "test-agent-token-0123456789"
+  cluster_security_group_id = "sg-mock-cluster"
 }
 
 run "single_control_plane_default" {

@@ -75,16 +75,6 @@ output "registration_address" {
   value       = local.registration_address != null ? local.registration_address : aws_instance.control_plane.private_ip
 }
 
-output "agent_token_ssm_parameter" {
-  description = "SSM Parameter Store name (SecureString) holding the agent join token. Fetch it at boot via the instance IAM role — never embed it in user_data or a launch template."
-  value       = aws_ssm_parameter.agent_token.name
-}
-
-output "cluster_security_group_id" {
-  description = "Self-referencing security group id shared by every cluster member (control-plane and node pools). Node-pool modules attach to this by id; it is never provided to anything outside the cluster."
-  value       = aws_security_group.cluster.id
-}
-
 output "control_plane_node_refs" {
   description = "Map of control-plane node name -> {instance_id, provider}. The control-plane abstraction (SSM send-command today) targets every node from this map instead of a single node_control_ref."
   value = merge(

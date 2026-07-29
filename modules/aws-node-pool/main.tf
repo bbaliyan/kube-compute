@@ -33,14 +33,6 @@ locals {
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
-  # Version-skew check: kubelet may trail the API server, never lead it. k8s_version is
-  # "vMAJOR.MINOR.PATCH+rke2rN"; only major/minor/patch are compared numerically.
-  version_regex               = "^v(\\d+)\\.(\\d+)\\.(\\d+)\\+"
-  pool_version_parts          = regex(local.version_regex, local.k8s_version)
-  control_plane_version_parts = regex(local.version_regex, var.control_plane_k8s_version)
-  pool_version_num            = tonumber(local.pool_version_parts[0]) * 1000000 + tonumber(local.pool_version_parts[1]) * 1000 + tonumber(local.pool_version_parts[2])
-  control_plane_version_num   = tonumber(local.control_plane_version_parts[0]) * 1000000 + tonumber(local.control_plane_version_parts[1]) * 1000 + tonumber(local.control_plane_version_parts[2])
-
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-compute"
@@ -186,13 +178,6 @@ resource "aws_instance" "worker" {
   }
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-worker-${count.index}" })
-
-  lifecycle {
-    precondition {
-      condition     = local.pool_version_num <= local.control_plane_version_num
-      error_message = "k8s_version (${local.k8s_version}) must not be newer than the control plane's k8s_version (${var.control_plane_k8s_version}) — a kubelet may trail the API server by up to 3 minors, never lead it."
-    }
-  }
 }
 
 # ---- Per-instance Ansible worker join, over SSM (no inbound port) ----

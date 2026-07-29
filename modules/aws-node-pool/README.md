@@ -14,7 +14,7 @@ uses. Because the instances are discrete (not an ASG), each gets a stable node n
 The module provisions **workers and only what is intrinsic to them** — the EC2 instances, their
 IAM role/instance-profile, and the S3 staging bucket the SSM Ansible transport requires. It
 **never creates network fabric** and owns **no
-security group of its own** in this slice: workers attach only the control plane's
+security group of its own** in this slice: workers attach only `aws-cluster-facts`'s
 `cluster_security_group_id` (east-west among cluster members) and accept no traffic from outside
 the cluster. An ingress-facing SG for workers that serve external traffic is a deliberate gap,
 left for whichever later slice wires up an ingress load balancer.
@@ -28,18 +28,19 @@ considered and left out — see the design notes in the control repo.)
 
 ## Version skew
 
-`k8s_version` (this pool) must not be newer than `control_plane_k8s_version` (the cluster's control
-plane) — a kubelet may trail the API server by up to 3 minors, never lead it. A newer pool version
-fails `tofu plan` with a clear error instead of silently joining a skewed node.
+`k8s_version` is expected to match the same `aws-cluster-facts` output the caller passes to
+`aws-control-plane` for this cluster, preventing skew by construction rather than by a runtime
+check comparing two independently-supplied values.
 
 ## Joining the control plane
 
-Three inputs come from the control plane's outputs (wire them via a terragrunt `dependency` block in a
-real consumer repo): `registration_address`, `agent_token_ssm_parameter`,
-`cluster_security_group_id`. The module's IAM role is scoped to `ssm:GetParameter` on that one
-parameter (plus `kms:Decrypt` via the SSM service) — it cannot read any other parameter in the
-account. The agent token is fetched on the node at join time (node-bootstrap runs the SSM
-`get-parameter` command there); it is never rendered into user_data or Terraform state.
+`agent_token_ssm_parameter` and `cluster_security_group_id` come from this cluster's
+`aws-cluster-facts` outputs; `registration_address` still comes from the control plane's own
+output (wire all three via terragrunt `dependency` blocks in a real consumer repo). The module's
+IAM role is scoped to `ssm:GetParameter` on that one parameter (plus `kms:Decrypt` via the SSM
+service) — it cannot read any other parameter in the account. The agent token is fetched on the
+node at join time (node-bootstrap runs the SSM `get-parameter` command there); it is never
+rendered into user_data or Terraform state.
 
 ## AZ label
 

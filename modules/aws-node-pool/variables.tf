@@ -17,7 +17,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version this pool's workers install (an RKE2 release string, e.g. v1.36.1+rke2r1). Must not be newer than control_plane_k8s_version — a kubelet may trail the API server by up to 3 minors, never lead it. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version this pool's workers install (an RKE2 release string, e.g. v1.36.1+rke2r1). The caller is expected to pass the same cluster-facts k8s_version given to aws-control-plane, preventing version skew by construction. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
   default     = null
 }
@@ -41,23 +41,18 @@ variable "aws_region" {
   type        = string
 }
 
-variable "control_plane_k8s_version" {
-  description = "The control plane's k8s_version. Pass the same value given to (or output by) the aws-control-plane module for this cluster; this pool's k8s_version is rejected if it is newer."
-  type        = string
-}
-
 variable "registration_address" {
   description = "The control plane's registration_address output. Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
   type        = string
 }
 
 variable "agent_token_ssm_parameter" {
-  description = "The control plane's agent_token_ssm_parameter output. This module's IAM role is scoped to read only this one SSM parameter."
+  description = "This cluster's cluster-facts agent_token_ssm_parameter output. This module's IAM role is scoped to read only this one SSM parameter."
   type        = string
 }
 
 variable "cluster_security_group_id" {
-  description = "The control plane's cluster_security_group_id output. Attached to every worker instance for east-west cluster access; this module owns no other ingress security group in this slice (workers accept no traffic from outside the cluster yet)."
+  description = "This cluster's cluster-facts cluster_security_group_id output. Attached to every worker instance for east-west cluster access; this module owns no other ingress security group in this slice (workers accept no traffic from outside the cluster yet)."
   type        = string
 }
 

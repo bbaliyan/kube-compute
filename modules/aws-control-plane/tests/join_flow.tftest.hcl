@@ -2,27 +2,29 @@
 mock_provider "aws" {}
 
 variables {
-  cluster_name          = "bharat"
-  k8s_version           = "v1.36.2+rke2r1"
-  aws_region            = "eu-west-1"
-  instance_type         = "m7g.large"
-  allowed_ingress_cidrs = ["10.0.0.0/8"]
-  subnet_id             = "subnet-abc"
+  cluster_name              = "bharat"
+  k8s_version               = "v1.36.2+rke2r1"
+  aws_region                = "eu-west-1"
+  instance_type             = "m7g.large"
+  allowed_ingress_cidrs     = ["10.0.0.0/8"]
+  subnet_id                 = "subnet-abc"
+  cluster_token             = "test-cluster-token-0123456789"
+  cluster_agent_token       = "test-agent-token-0123456789"
+  cluster_security_group_id = "sg-mock-cluster"
 }
 
 run "cluster_sg_is_self_referencing" {
   command = plan
+  # NOTE: the "cluster SG allows traffic sourced from itself" and
+  # "cluster_security_group_id output exposes the cluster SG id" assertions that used
+  # to live here referenced aws_security_group.cluster and the now-removed
+  # cluster_security_group_id output. This task rewired aws-control-plane to consume
+  # the cluster SG as var.cluster_security_group_id instead of creating it — both the
+  # self-referencing-ingress-rule behavior and the SG id are now aws-cluster-facts's
+  # responsibility, tested there instead.
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.cluster_self.referenced_security_group_id == aws_security_group.cluster.id
-    error_message = "the cluster SG must allow traffic sourced from itself (every cluster member)"
-  }
-  assert {
-    condition     = contains(aws_instance.control_plane.vpc_security_group_ids, aws_security_group.cluster.id)
+    condition     = contains(aws_instance.control_plane.vpc_security_group_ids, var.cluster_security_group_id)
     error_message = "the control-plane instance must attach the cluster SG"
-  }
-  assert {
-    condition     = output.cluster_security_group_id == aws_security_group.cluster.id
-    error_message = "cluster_security_group_id output must expose the cluster SG id for node pools to attach"
   }
 }
 

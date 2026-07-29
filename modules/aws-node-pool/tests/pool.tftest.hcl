@@ -15,7 +15,6 @@ run "fixed_pool_is_discrete_instances_on_the_cluster_sg" {
     cluster_name              = "bharat"
     aws_region                = "eu-west-1"
     k8s_version               = "v1.36.2+rke2r1"
-    control_plane_k8s_version = "v1.36.2+rke2r1"
     registration_address      = "10.0.1.5"
     agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
