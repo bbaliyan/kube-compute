@@ -12,6 +12,15 @@ locals {
   cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
   argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
 
+  # nsupdate's `zone` directive requires a fully-qualified (trailing-dot) name, but
+  # callers commonly pass a bare zone (e.g. "lan") the way they would to any other
+  # DNS tool. Normalize here so either form works identically, mirroring the same
+  # precedent in proxmox-control-plane/main.tf's local.dns_zone. Idempotent whether
+  # or not var.dns_self_register_zone already ends in a dot; both null and "" stay
+  # "" so the "no self-registration" no-op path is unaffected either way (the
+  # Ansible gate below checks dns_self_register_zone != "").
+  dns_self_register_zone = var.dns_self_register_zone != null && var.dns_self_register_zone != "" ? "${trimsuffix(var.dns_self_register_zone, ".")}." : ""
+
   # Cilium/Argo CD genesis values, computed as plain Terraform strings and
   # base64-encoded into the runner (decoded with a single `base64 -d`) rather than
   # embedded as a nested bash heredoc, which proved fragile inside the runner's own
@@ -112,6 +121,14 @@ locals {
     platform_extra_helm_parameters = var.platform_extra_helm_parameters
     platform_helm_values_object    = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
     extra_tags                     = var.extra_tags
+    dns_self_register_zone         = local.dns_self_register_zone
+    dns_self_register_record_name  = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
+    dns_self_register_ttl          = var.dns_self_register_ttl
+    dns_server_address             = var.dns_server_address != null ? var.dns_server_address : ""
+    dns_server_port                = var.dns_server_port
+    dns_transport                  = var.dns_transport
+    tsig_key_name                  = var.tsig_key_name != null ? var.tsig_key_name : ""
+    tsig_key_algorithm             = var.tsig_key_algorithm
   })
 
   extra_vars_json = jsonencode(local.extra_vars)
@@ -133,6 +150,7 @@ locals {
     var.node_role == "server-join" ? { CLUSTER_TOKEN = var.cluster_token } : {},
     var.node_role == "worker" ? { AGENT_TOKEN_FETCH_COMMAND = var.agent_token_fetch_command } : {},
     var.trusted_ca_pem != null ? { TRUSTED_CA_PEM = var.trusted_ca_pem } : {},
+    var.tsig_key_secret != null ? { TSIG_KEY_SECRET = var.tsig_key_secret } : {},
   )
 
   is_operator_connect = var.invocation_mode == "operator_connect"
