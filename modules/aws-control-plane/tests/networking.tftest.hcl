@@ -11,8 +11,12 @@ mock_provider "aws" {
 }
 
 variables {
-  aws_region            = "eu-west-1"
-  allowed_ingress_cidrs = ["10.0.0.0/8"]
+  aws_region                = "eu-west-1"
+  allowed_ingress_cidrs     = ["10.0.0.0/8"]
+  k8s_version               = "v1.36.2+rke2r1"
+  cluster_token             = "test-cluster-token-0123456789"
+  cluster_agent_token       = "test-agent-token-0123456789"
+  cluster_security_group_id = "sg-mock-cluster"
 }
 
 run "explicit_subnet_and_arm64" {

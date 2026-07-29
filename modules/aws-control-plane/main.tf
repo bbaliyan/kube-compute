@@ -1,8 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-module "component_versions" {
-  source = "../component-versions"
-}
-
 locals {
   # Connectivity-only user-data replacing cloud-init's full RKE2 payload.
   # AWS's own docs list AlmaLinux among AMIs that "likely" ship the SSM
@@ -22,9 +18,6 @@ locals {
   # infrastructure the Ansible-bootstrap swap needs; nothing in this
   # project used S3-backed SSM file transfer before.
   ansible_ssm_bucket_name = "kube-compute-${var.cluster_name}-ansible-ssm-${data.aws_caller_identity.current.account_id}"
-
-  # Falls back to the platform-wide default when the caller doesn't override k8s_version.
-  k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
   # Arch from AWS's own metadata — covers all present and future instance types.
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
@@ -111,59 +104,6 @@ locals {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-compute"
   })
-}
-
-# ---- Join-token flow: pre-generated so a control plane + pool join in one apply pass ----
-# Two tokens, least privilege: the server token grants joining etcd/control-plane (used
-# starting with the HA control-plane slice); the agent token is all a worker ever receives,
-# so a compromised worker cannot rejoin as a control-plane/etcd member.
-resource "random_password" "server_token" {
-  length  = 48
-  special = false
-}
-
-resource "random_password" "agent_token" {
-  length  = 48
-  special = false
-}
-
-# Delivery is provider-shaped: on AWS, the agent token is mirrored into an SSM SecureString
-# and fetched at boot via the instance's IAM role — it is never rendered into user_data.
-resource "aws_ssm_parameter" "agent_token" {
-  name  = "/kube-compute/${var.cluster_name}/agent-token"
-  type  = "SecureString"
-  value = random_password.agent_token.result
-  tags  = local.common_tags
-}
-
-# ---- Cluster security group: self-referencing, every cluster member (east-west) ----
-# All-protocol among members rather than pinning to today's CNI ports: this SG is meant to
-# outlive a CNI switch (flannel now, Cilium in a later slice) without a security-group edit.
-resource "aws_security_group" "cluster" {
-  name_prefix = "kube-compute-${var.cluster_name}-cluster-"
-  description = "kube-compute ${var.cluster_name}: east-west traffic among cluster members only."
-  vpc_id      = local.module_vpc_id
-  tags        = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster" })
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_vpc_security_group_ingress_rule" "cluster_self" {
-  security_group_id            = aws_security_group.cluster.id
-  description                  = "all traffic among cluster members"
-  ip_protocol                  = "-1"
-  referenced_security_group_id = aws_security_group.cluster.id
-  tags                         = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-self" })
-}
-
-resource "aws_vpc_security_group_egress_rule" "cluster_all" {
-  security_group_id = aws_security_group.cluster.id
-  description       = "all egress"
-  ip_protocol       = "-1"
-  cidr_ipv4         = "0.0.0.0/0"
-  tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-egress-all" })
 }
 
 # ---- etcd security group: control-plane members only, never joined by workers ----
@@ -259,15 +199,15 @@ module "node_bootstrap" {
   ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-1"
-  k8s_version                    = local.k8s_version
+  k8s_version                    = var.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
   cluster_fqdn_suffix            = local.fqdn_suffix
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
   cilium_operator_replicas       = local.effective_cilium_operator_replicas
-  cluster_token                  = random_password.server_token.result
-  cluster_agent_token            = random_password.agent_token.result
+  cluster_token                  = var.cluster_token
+  cluster_agent_token            = var.cluster_agent_token
   registration_address           = local.registration_address
   extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   trusted_ca_pem                 = var.trusted_ca_pem
@@ -321,7 +261,7 @@ module "node_bootstrap_additional" {
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name
   node_name                = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
-  k8s_version              = local.k8s_version
+  k8s_version              = var.k8s_version
   cluster_fqdn             = local.cluster_fqdn
   cluster_fqdn_suffix      = local.fqdn_suffix
   node_role                = "server-join"
@@ -330,7 +270,7 @@ module "node_bootstrap_additional" {
   cilium_operator_replicas = local.effective_cilium_operator_replicas
   registration_address     = local.registration_address
   extra_tls_sans           = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  cluster_token            = random_password.server_token.result
+  cluster_token            = var.cluster_token
   trusted_ca_pem           = var.trusted_ca_pem
   registry_mirror_url      = var.registry_mirror_url
   cert_mode                = var.cert_mode
@@ -354,7 +294,7 @@ resource "aws_instance" "control_plane_additional" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = each.value
-  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
+  vpc_security_group_ids = [aws_security_group.node.id, var.cluster_security_group_id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
   metadata_options {
@@ -577,7 +517,7 @@ resource "aws_instance" "control_plane" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = local.genesis_subnet_id
-  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
+  vpc_security_group_ids = [aws_security_group.node.id, var.cluster_security_group_id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
   metadata_options {
