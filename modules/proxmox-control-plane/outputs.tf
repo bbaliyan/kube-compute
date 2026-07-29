@@ -16,12 +16,12 @@ output "cluster_ip" {
 }
 
 output "cluster_fqdn" {
-  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given. This name is always computed from cluster_domain, whether or not anything actually publishes it to DNS — see dns_registration_enabled before connecting through it. For kubectl/human access only: don't wire this into proxmox-node-pool's registration_address (see that variable's own doc for why worker joins need a single fixed IP instead)."
+  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given. This name is always computed from cluster_domain, whether or not anything actually publishes it to DNS — see dns_registration_enabled before connecting through it. For kubectl/human access only: don't wire this into proxmox-node-pool's registration_address (see that variable's own doc for why worker joins need a single fixed name instead)."
   value       = local.cluster_fqdn
 }
 
 output "dns_registration_enabled" {
-  description = "Whether this control plane actually published cluster_fqdn to a DNS server via dns-registration (true only when dns_server_address was set). Consumers deciding whether to connect via cluster_fqdn rather than registration_address (a raw IP) for kubectl/human access should check this first — cluster_fqdn is a non-null name whenever cluster_domain is set, regardless of whether anything makes it resolve. Does not apply to worker joins, which should always use registration_address regardless of this flag."
+  description = "Whether this control plane actually published cluster_fqdn to a DNS server via dns-registration (true only when dns_server_address was set). Consumers deciding whether to connect via cluster_fqdn rather than a raw IP for kubectl/human access should check this first — cluster_fqdn is a non-null name whenever cluster_domain is set, regardless of whether anything makes it resolve. Does not apply to worker joins, which self-compute their own single-target registration address (proxmox-node-pool's registration_address variable) rather than reading it from this module."
   value       = local.dns_registration_enabled
 }
 
@@ -56,7 +56,7 @@ output "proxmox_node" {
 }
 
 output "k8s_version" {
-  description = "K8s distro version installed on this control plane's control-plane nodes. Wire proxmox-node-pool's control_plane_k8s_version to this output so the version-skew guard is enforced automatically rather than by convention."
+  description = "K8s distro version installed on this control plane's control-plane nodes."
   value       = var.k8s_version
 }
 

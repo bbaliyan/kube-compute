@@ -156,13 +156,13 @@ variable "registration_address" {
 }
 
 variable "cluster_agent_token" {
-  description = "The control plane's cluster_agent_token output. Embedded directly into this pool's cloud-init (no managed secret store on Proxmox). Sensitive."
+  description = "The agent join token, sourced from proxmox-cluster-facts (not the control plane, which no longer outputs it). Embedded directly into this pool's cloud-init (no managed secret store on Proxmox). Sensitive."
   type        = string
   sensitive   = true
 }
 
 variable "cluster_ipset_name" {
-  description = "The control plane's cluster_ipset_name output. Referenced by name ('+<name>') in this pool's own per-VM firewall rules — the pool never creates or owns the ipset itself."
+  description = "Name of the cluster-wide firewall ipset, sourced from proxmox-cluster-facts (not the control plane, which no longer outputs it). Referenced by name ('+<name>') in this pool's own per-VM firewall rules — the pool never creates or owns the ipset itself."
   type        = string
 }
 
