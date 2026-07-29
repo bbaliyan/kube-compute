@@ -17,19 +17,18 @@ mock_provider "proxmox" {
 run "worker_pool_wiring" {
   command = plan
   variables {
-    cluster_name              = "bharat"
-    k8s_version               = "v1.36.2+rke2r1"
-    control_plane_k8s_version = "v1.36.2+rke2r1"
-    proxmox_node              = "pve"
-    vm_cores                  = 2
-    vm_memory_mb              = 4096
-    vm_disk_gb                = 30
-    desired_count             = 2
-    registration_address      = "192.168.1.5"
-    cluster_agent_token       = "agent-secret-abc123"
-    cluster_ipset_name        = "kube-compute-bharat-cluster"
-    os_image_url              = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name        = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+    cluster_name         = "bharat"
+    k8s_version          = "v1.36.2+rke2r1"
+    proxmox_node         = "pve"
+    vm_cores             = 2
+    vm_memory_mb         = 4096
+    vm_disk_gb           = 30
+    desired_count        = 2
+    registration_address = "192.168.1.5"
+    cluster_agent_token  = "agent-secret-abc123"
+    cluster_ipset_name   = "kube-compute-bharat-cluster"
+    os_image_url         = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+    os_image_file_name   = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
   }
 
   # NOTE: two assertions used to live here, checking the now-removed

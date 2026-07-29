@@ -11,17 +11,17 @@ output "instance_id" {
 }
 
 output "cluster_ip" {
-  description = "Genesis control-plane node's IP. For control_plane_count > 1, prefer registration_address."
+  description = "Genesis control-plane node's IP. For control_plane_count > 1, prefer cluster_fqdn (when dns_registration_enabled) for a name that covers every control-plane node, not just genesis."
   value       = local.cp_ips["0"]
 }
 
 output "cluster_fqdn" {
-  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given. This name is always computed from cluster_domain, whether or not anything actually publishes it to DNS — see dns_registration_enabled before connecting through it. For kubectl/human access only: don't wire this into proxmox-node-pool's registration_address (see that variable's own doc for why worker joins need a single fixed IP instead)."
+  description = "API server / kubeconfig FQDN, or null when no cluster_domain was given. This name is always computed from cluster_domain, whether or not anything actually publishes it to DNS — see dns_registration_enabled before connecting through it. For kubectl/human access only: don't wire this into proxmox-node-pool's registration_address (see that variable's own doc for why worker joins need a single fixed name instead)."
   value       = local.cluster_fqdn
 }
 
 output "dns_registration_enabled" {
-  description = "Whether this control plane actually published cluster_fqdn to a DNS server via dns-registration (true only when dns_server_address was set). Consumers deciding whether to connect via cluster_fqdn rather than registration_address (a raw IP) for kubectl/human access should check this first — cluster_fqdn is a non-null name whenever cluster_domain is set, regardless of whether anything makes it resolve. Does not apply to worker joins, which should always use registration_address regardless of this flag."
+  description = "Whether this control plane actually published cluster_fqdn to a DNS server via dns-registration (true only when dns_server_address was set). Consumers deciding whether to connect via cluster_fqdn rather than a raw IP for kubectl/human access should check this first — cluster_fqdn is a non-null name whenever cluster_domain is set, regardless of whether anything makes it resolve. Does not apply to worker joins, which self-compute their own single-target registration address (proxmox-node-pool's registration_address variable) rather than reading it from this module."
   value       = local.dns_registration_enabled
 }
 
@@ -56,25 +56,8 @@ output "proxmox_node" {
 }
 
 output "k8s_version" {
-  description = "K8s distro version installed on this control plane's control-plane nodes. Wire proxmox-node-pool's control_plane_k8s_version to this output so the version-skew guard is enforced automatically rather than by convention."
-  value       = local.k8s_version
-}
-
-# ---- Join flow: consumed by proxmox-node-pool ----
-output "registration_address" {
-  description = "Address workers/joining servers use to reach the cluster API: genesis's raw IP. Proxmox has no load-balancer primitive, so every node (control-plane joiner or worker) dials genesis directly rather than a VIP; cluster_fqdn (when dns_server_address is set) is the DNS-based alternative for clients outside this join flow."
-  value       = local.cp_ips["0"]
-}
-
-output "cluster_agent_token" {
-  description = "The agent join token. Delivered to proxmox-node-pool directly (no managed secret store on Proxmox); embed it in cloud-init only, never log it."
-  value       = random_password.agent_token.result
-  sensitive   = true
-}
-
-output "cluster_ipset_name" {
-  description = "Name of the cluster-wide firewall ipset (see module README for its subnet-CIDR scoping rationale). Node pools reference this by name ('+<name>') in their own per-VM firewall rules — they never create or own this ipset."
-  value       = local.cluster_ipset_name
+  description = "K8s distro version installed on this control plane's control-plane nodes."
+  value       = var.k8s_version
 }
 
 output "control_plane_node_refs" {

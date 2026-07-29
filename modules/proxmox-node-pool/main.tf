@@ -43,11 +43,16 @@ locals {
   # cloud-init snippet (no secret store to fetch from), unlike AWS's SSM fetch command.
   agent_token_fetch_command = "echo '${var.cluster_agent_token}'"
 
-  version_regex               = "^v(\\d+)\\.(\\d+)\\.(\\d+)\\+"
-  pool_version_parts          = regex(local.version_regex, local.k8s_version)
-  control_plane_version_parts = regex(local.version_regex, var.control_plane_k8s_version)
-  pool_version_num            = tonumber(local.pool_version_parts[0]) * 1000000 + tonumber(local.pool_version_parts[1]) * 1000 + tonumber(local.pool_version_parts[2])
-  control_plane_version_num   = tonumber(local.control_plane_version_parts[0]) * 1000000 + tonumber(local.control_plane_version_parts[1]) * 1000 + tonumber(local.control_plane_version_parts[2])
+  # Every unit computes this independently — see proxmox-control-plane's identical
+  # local for the full reasoning. Falls back to var.registration_address verbatim when
+  # the caller passed one explicitly (the no-DNS case). Guards cluster_domain == null
+  # the same way proxmox-control-plane's has_domain/genesis_dns_name locals do, so a
+  # null cluster_domain resolves to null here instead of crashing trimsuffix().
+  genesis_dns_name = var.cluster_domain != null ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+
+  effective_registration_address = var.registration_address != null ? var.registration_address : (
+    var.dns_server_address != null ? local.genesis_dns_name : null
+  )
 
   _dns_list = join(", ", var.dns_servers)
   # "to: 0.0.0.0/0" (not Netplan's own "to: default" shorthand): AlmaLinux 9's
@@ -223,8 +228,8 @@ resource "proxmox_virtual_environment_vm" "worker" {
       error_message = "Set exactly one of os_image_url (download) or os_image_file_id (pre-existing Proxmox file)."
     }
     precondition {
-      condition     = local.pool_version_num <= local.control_plane_version_num
-      error_message = "k8s_version (${local.k8s_version}) must not be newer than the control plane's k8s_version (${var.control_plane_k8s_version})."
+      condition     = local.effective_registration_address != null
+      error_message = "registration_address must be set explicitly when dns_server_address or cluster_domain is null (no DNS configured to self-compute the genesis address from)."
     }
   }
 }
@@ -256,7 +261,7 @@ module "node_bootstrap" {
   node_name                 = "${var.cluster_name}-worker-${each.key}"
   k8s_version               = local.k8s_version
   node_role                 = "worker"
-  registration_address      = var.registration_address
+  registration_address      = local.effective_registration_address
   agent_token_fetch_command = local.agent_token_fetch_command
   node_labels               = var.extra_node_labels
   trusted_ca_pem            = var.trusted_ca_pem

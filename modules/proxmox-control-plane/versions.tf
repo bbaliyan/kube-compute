@@ -6,10 +6,6 @@ terraform {
       source  = "bpg/proxmox"
       version = "~> 0.110"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
-    }
     dns = {
       source  = "hashicorp/dns"
       version = "~> 3.6"
