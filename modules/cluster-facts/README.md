@@ -8,5 +8,6 @@ Vault, etc.) live in that provider's own `{provider}-cluster-facts` wrapper modu
 which calls this module and re-exports its outputs alongside its own.
 
 Applies in seconds. `control-plane` and `node-pool` (via their provider's wrapper) both
-depend on this module and never on each other — see
-`docs/superpowers/specs/2026-07-29-parallelize-multinode-apply-design.md`.
+depend on this module for their join tokens and `k8s_version`, but never on each other —
+letting both apply in parallel instead of node-pool waiting on control-plane's full
+bootstrap to finish first.

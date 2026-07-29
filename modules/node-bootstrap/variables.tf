@@ -205,6 +205,11 @@ variable "dns_self_register_record_name" {
   description = "Record name, relative to dns_self_register_zone (e.g. 'genesis.cluster-3' for zone 'lan.' registers 'genesis.cluster-3.lan.'). Required when dns_self_register_zone is set; ignored otherwise."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.dns_self_register_zone == null || var.dns_self_register_record_name != null
+    error_message = "dns_self_register_record_name is required when dns_self_register_zone is set."
+  }
 }
 
 variable "dns_self_register_ttl" {
@@ -217,6 +222,11 @@ variable "dns_server_address" {
   description = "RFC2136 DNS server address the genesis node sends its nsupdate request to. Required when dns_self_register_zone is set; ignored otherwise."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.dns_self_register_zone == null || var.dns_server_address != null
+    error_message = "dns_server_address is required when dns_self_register_zone is set."
+  }
 }
 
 variable "dns_server_port" {
@@ -226,12 +236,12 @@ variable "dns_server_port" {
 }
 
 variable "dns_transport" {
-  description = "Transport nsupdate uses to reach dns_server_address ('udp' or 'tcp'). Only meaningful when dns_self_register_zone is set."
+  description = "Transport nsupdate uses to reach dns_server_address: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Only meaningful when dns_self_register_zone is set."
   type        = string
   default     = "udp"
   validation {
-    condition     = contains(["udp", "tcp"], var.dns_transport)
-    error_message = "dns_transport must be 'udp' or 'tcp'."
+    condition     = contains(["udp", "tcp", "udp4", "udp6", "tcp4", "tcp6"], var.dns_transport)
+    error_message = "dns_transport must be one of: udp, tcp, udp4, udp6, tcp4, tcp6."
   }
 }
 
@@ -239,6 +249,11 @@ variable "tsig_key_name" {
   description = "TSIG key name authorizing the nsupdate request. Required when dns_self_register_zone is set; ignored otherwise."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.dns_self_register_zone == null || var.tsig_key_name != null
+    error_message = "tsig_key_name is required when dns_self_register_zone is set."
+  }
 }
 
 variable "tsig_key_algorithm" {

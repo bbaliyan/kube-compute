@@ -12,6 +12,14 @@ locals {
   cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
   argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
 
+  # nsupdate's `zone` directive requires a fully-qualified (trailing-dot) name, but
+  # callers commonly pass a bare zone (e.g. "lan") the way they would to any other
+  # DNS tool. Normalize here so either form works identically, mirroring the same
+  # precedent in proxmox-control-plane/main.tf's local.dns_zone. Idempotent whether
+  # or not var.dns_self_register_zone already ends in a dot; null stays null so the
+  # "no self-registration" no-op path is unaffected.
+  dns_self_register_zone = var.dns_self_register_zone != null ? "${trimsuffix(var.dns_self_register_zone, ".")}." : null
+
   # Cilium/Argo CD genesis values, computed as plain Terraform strings and
   # base64-encoded into the runner (decoded with a single `base64 -d`) rather than
   # embedded as a nested bash heredoc, which proved fragile inside the runner's own
@@ -112,7 +120,7 @@ locals {
     platform_extra_helm_parameters = var.platform_extra_helm_parameters
     platform_helm_values_object    = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
     extra_tags                     = var.extra_tags
-    dns_self_register_zone         = var.dns_self_register_zone != null ? var.dns_self_register_zone : ""
+    dns_self_register_zone         = local.dns_self_register_zone != null ? local.dns_self_register_zone : ""
     dns_self_register_record_name  = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
     dns_self_register_ttl          = var.dns_self_register_ttl
     dns_server_address             = var.dns_server_address != null ? var.dns_server_address : ""
