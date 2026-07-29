@@ -194,3 +194,62 @@ variable "extra_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "dns_self_register_zone" {
+  description = "DNS zone (FQDN, trailing dot, e.g. 'lan.') the genesis node self-registers a single-target A record into via RFC2136/nsupdate, as soon as it knows its own IP. Null/empty (the default) disables self-registration entirely — every dns_self_register_*/dns_server_*/tsig_* variable is then ignored. Only meaningful for node_role = 'server-init'; ignored for server-join and worker."
+  type        = string
+  default     = null
+}
+
+variable "dns_self_register_record_name" {
+  description = "Record name, relative to dns_self_register_zone (e.g. 'genesis.cluster-3' for zone 'lan.' registers 'genesis.cluster-3.lan.'). Required when dns_self_register_zone is set; ignored otherwise."
+  type        = string
+  default     = null
+}
+
+variable "dns_self_register_ttl" {
+  description = "TTL in seconds for the self-registered record. Only meaningful when dns_self_register_zone is set."
+  type        = number
+  default     = 300
+}
+
+variable "dns_server_address" {
+  description = "RFC2136 DNS server address the genesis node sends its nsupdate request to. Required when dns_self_register_zone is set; ignored otherwise."
+  type        = string
+  default     = null
+}
+
+variable "dns_server_port" {
+  description = "RFC2136 DNS server port. Only meaningful when dns_self_register_zone is set."
+  type        = number
+  default     = 53
+}
+
+variable "dns_transport" {
+  description = "Transport nsupdate uses to reach dns_server_address ('udp' or 'tcp'). Only meaningful when dns_self_register_zone is set."
+  type        = string
+  default     = "udp"
+  validation {
+    condition     = contains(["udp", "tcp"], var.dns_transport)
+    error_message = "dns_transport must be 'udp' or 'tcp'."
+  }
+}
+
+variable "tsig_key_name" {
+  description = "TSIG key name authorizing the nsupdate request. Required when dns_self_register_zone is set; ignored otherwise."
+  type        = string
+  default     = null
+}
+
+variable "tsig_key_algorithm" {
+  description = "TSIG key algorithm (e.g. 'hmac-sha256'). Only meaningful when dns_self_register_zone is set."
+  type        = string
+  default     = "hmac-sha256"
+}
+
+variable "tsig_key_secret" {
+  description = "Base64-encoded TSIG key secret. Required when dns_self_register_zone is set; ignored otherwise. Sensitive: delivered to the Ansible run via the local-exec environment block, never as an extra-var — same treatment as the join-secret variables above."
+  type        = string
+  default     = null
+  sensitive   = true
+}

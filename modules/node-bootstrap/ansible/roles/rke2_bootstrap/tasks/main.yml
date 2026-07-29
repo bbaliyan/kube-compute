@@ -7,6 +7,7 @@
     resolved_cluster_agent_token: "{{ lookup('env', 'CLUSTER_AGENT_TOKEN') }}"
     resolved_agent_token_fetch_command: "{{ lookup('env', 'AGENT_TOKEN_FETCH_COMMAND') }}"
     resolved_trusted_ca_pem: "{{ lookup('env', 'TRUSTED_CA_PEM') }}"
+    resolved_tsig_key_secret: "{{ lookup('env', 'TSIG_KEY_SECRET') }}"
   no_log: true
 
 # ---- universal OS prep (all roles) ----
@@ -91,6 +92,40 @@
   # Harmless if local-path isn't the chosen provisioner. No `creates:` guard:
   # `semanage fcontext -a` errors on a duplicate rule, so the grep above guards
   # idempotency instead; restorecon is always safe to repeat.
+
+# ---- genesis: self-register a single-target DNS record via RFC2136 ----
+# Runs only when the caller (a provider's control-plane module, on the genesis node
+# only) passed dns_self_register_zone. Every other caller leaves it empty and skips
+# this entirely. Publishes <dns_self_register_record_name>.<dns_self_register_zone> ->
+# this node's own IP, distinct from the existing round-robin api.* record a separate
+# Terraform dns-registration resource may also publish once every control-plane node
+# has joined — this one exists so a joining node/pool never has to wait for that.
+- name: dns-self-register | discover own IP
+  ansible.builtin.shell:
+    cmd: ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}'
+  register: dns_self_register_ip
+  changed_when: false
+  when: node_role == "server-init" and dns_self_register_zone != ""
+
+- name: dns-self-register | install bind-utils (nsupdate)
+  ansible.builtin.dnf:
+    name: bind-utils
+    state: present
+  when: node_role == "server-init" and dns_self_register_zone != ""
+
+- name: dns-self-register | publish the genesis A record
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      nsupdate -y "{{ tsig_key_algorithm }}:{{ tsig_key_name }}:{{ resolved_tsig_key_secret }}" <<EOF
+      server {{ dns_server_address }} {{ dns_server_port }}
+      zone {{ dns_self_register_zone }}
+      update delete {{ dns_self_register_record_name }}.{{ dns_self_register_zone }} A
+      update add {{ dns_self_register_record_name }}.{{ dns_self_register_zone }} {{ dns_self_register_ttl }} A {{ dns_self_register_ip.stdout }}
+      send
+      EOF
+  no_log: true
+  when: node_role == "server-init" and dns_self_register_zone != ""
 
 - name: os-trust | add trusted CA to the OS trust store
   ansible.builtin.copy:

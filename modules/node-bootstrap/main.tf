@@ -112,6 +112,14 @@ locals {
     platform_extra_helm_parameters = var.platform_extra_helm_parameters
     platform_helm_values_object    = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
     extra_tags                     = var.extra_tags
+    dns_self_register_zone         = var.dns_self_register_zone != null ? var.dns_self_register_zone : ""
+    dns_self_register_record_name  = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
+    dns_self_register_ttl          = var.dns_self_register_ttl
+    dns_server_address             = var.dns_server_address != null ? var.dns_server_address : ""
+    dns_server_port                = var.dns_server_port
+    dns_transport                  = var.dns_transport
+    tsig_key_name                  = var.tsig_key_name != null ? var.tsig_key_name : ""
+    tsig_key_algorithm             = var.tsig_key_algorithm
   })
 
   extra_vars_json = jsonencode(local.extra_vars)
@@ -133,6 +141,7 @@ locals {
     var.node_role == "server-join" ? { CLUSTER_TOKEN = var.cluster_token } : {},
     var.node_role == "worker" ? { AGENT_TOKEN_FETCH_COMMAND = var.agent_token_fetch_command } : {},
     var.trusted_ca_pem != null ? { TRUSTED_CA_PEM = var.trusted_ca_pem } : {},
+    var.tsig_key_secret != null ? { TSIG_KEY_SECRET = var.tsig_key_secret } : {},
   )
 
   is_operator_connect = var.invocation_mode == "operator_connect"
