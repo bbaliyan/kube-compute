@@ -45,10 +45,13 @@ locals {
 
   # Every unit computes this independently — see proxmox-control-plane's identical
   # local for the full reasoning. Falls back to var.registration_address verbatim when
-  # the caller passed one explicitly (the no-DNS case).
-  effective_registration_address = coalesce(
-    var.registration_address,
-    var.dns_server_address != null ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+  # the caller passed one explicitly (the no-DNS case). Guards cluster_domain == null
+  # the same way proxmox-control-plane's has_domain/genesis_dns_name locals do, so a
+  # null cluster_domain resolves to null here instead of crashing trimsuffix().
+  genesis_dns_name = var.cluster_domain != null ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+
+  effective_registration_address = var.registration_address != null ? var.registration_address : (
+    var.dns_server_address != null ? local.genesis_dns_name : null
   )
 
   _dns_list = join(", ", var.dns_servers)
@@ -226,7 +229,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
     }
     precondition {
       condition     = local.effective_registration_address != null
-      error_message = "registration_address must be set explicitly when dns_server_address is null (no DNS configured to self-compute the genesis address from)."
+      error_message = "registration_address must be set explicitly when dns_server_address or cluster_domain is null (no DNS configured to self-compute the genesis address from)."
     }
   }
 }
