@@ -106,16 +106,6 @@ security group's self-referencing all-protocol rule already covers every CNI's c
 pod-to-pod traffic; switching `cni` never requires a security-group change, and no per-CNI ingress
 rules are created by this module.
 
-## Durability (etcd snapshots)
-
-`etcd_snapshots_enabled` is `null` by default, which auto-resolves to `true` for
-`control_plane_count > 1` (durability is default-on for HA) and `false` for `control_plane_count =
-1` (optional — set it explicitly to turn it on for a single node too). Snapshots are local by
-default; set `etcd_snapshot_s3_bucket` to also upload them to S3 (the control-plane IAM role is
-granted access scoped to exactly that bucket). **Restoring** a snapshot onto a fresh genesis node
-is an operator/runbook action this module does not automate — it only wires up scheduled creation
-and optional upload.
-
 ## Registration endpoint modes (`endpoint_mode`)
 
 Only relevant once `control_plane_count > 1` — a single control-plane node has no registration

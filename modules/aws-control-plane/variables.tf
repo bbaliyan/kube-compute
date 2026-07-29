@@ -121,48 +121,6 @@ variable "static_registration_address" {
   }
 }
 
-variable "etcd_snapshots_enabled" {
-  description = "Enable RKE2's built-in scheduled etcd snapshots. Null (default) auto-derives to true when control_plane_count > 1 (HA — durability is default-on) and false for control_plane_count = 1 (optional, off by default). Set explicitly to override either default."
-  type        = bool
-  default     = null
-}
-
-variable "etcd_snapshot_schedule_cron" {
-  description = "Cron schedule for etcd snapshots, passed through to node-bootstrap. Only meaningful when etcd_snapshots_enabled resolves to true."
-  type        = string
-  default     = "0 */12 * * *"
-}
-
-variable "etcd_snapshot_retention" {
-  description = "Number of local etcd snapshots to retain, passed through to node-bootstrap. Only meaningful when etcd_snapshots_enabled resolves to true."
-  type        = number
-  default     = 5
-}
-
-variable "etcd_snapshot_s3_bucket" {
-  description = "Optional S3 bucket name for uploading etcd snapshots off-node. Null = local-only snapshots. When set, the control-plane IAM role is granted a scoped S3 policy for exactly this bucket."
-  type        = string
-  default     = null
-}
-
-variable "etcd_snapshot_s3_region" {
-  description = "Region for etcd_snapshot_s3_bucket. Null = defaults to aws_region when a bucket is given."
-  type        = string
-  default     = null
-}
-
-variable "etcd_snapshot_s3_endpoint" {
-  description = "Optional custom S3-compatible endpoint URL, for a non-default-AWS-S3-region object store. Ignored when etcd_snapshot_s3_bucket is null."
-  type        = string
-  default     = null
-}
-
-variable "etcd_snapshot_s3_folder" {
-  description = "Optional folder/prefix within etcd_snapshot_s3_bucket — useful when multiple clusters share one bucket. Ignored when etcd_snapshot_s3_bucket is null."
-  type        = string
-  default     = null
-}
-
 # Networking: the module takes a network HANDLE and never creates fabric (VPC/subnet/IGW/NAT).
 variable "subnet_id" {
   description = <<-EOT

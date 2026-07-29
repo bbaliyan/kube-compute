@@ -36,7 +36,6 @@ locals {
   # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one
   # replica permanently Pending on a genuinely single-node cluster.
   effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
-  effective_etcd_snapshots_enabled   = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
   etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
@@ -247,9 +246,6 @@ module "node_bootstrap" {
   cluster_token                  = random_password.server_token.result
   cluster_agent_token            = random_password.agent_token.result
   extra_tls_sans                 = compact([local.wildcard_name])
-  etcd_snapshot_enabled          = local.effective_etcd_snapshots_enabled
-  etcd_snapshot_schedule_cron    = var.etcd_snapshot_schedule_cron
-  etcd_snapshot_retention        = var.etcd_snapshot_retention
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_root_repo_url           = var.gitops_root_repo_url
@@ -319,16 +315,13 @@ module "node_bootstrap_additional" {
   # forces genesis's Ansible run to finish first (see depends_on below), so
   # this is stable and known by the time a joiner runs. No VIP/load-balancer
   # primitive exists on Proxmox; every joiner dials genesis directly.
-  registration_address        = local.cp_ips["0"]
-  extra_tls_sans              = compact([local.wildcard_name])
-  etcd_snapshot_enabled       = local.effective_etcd_snapshots_enabled
-  etcd_snapshot_schedule_cron = var.etcd_snapshot_schedule_cron
-  etcd_snapshot_retention     = var.etcd_snapshot_retention
-  cluster_token               = random_password.server_token.result
-  trusted_ca_pem              = var.trusted_ca_pem
-  registry_mirror_url         = var.registry_mirror_url
-  cert_mode                   = var.cert_mode
-  extra_tags                  = var.extra_tags
+  registration_address = local.cp_ips["0"]
+  extra_tls_sans       = compact([local.wildcard_name])
+  cluster_token        = random_password.server_token.result
+  trusted_ca_pem       = var.trusted_ca_pem
+  registry_mirror_url  = var.registry_mirror_url
+  cert_mode            = var.cert_mode
+  extra_tags           = var.extra_tags
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
 
   ansible_connection_vars = {

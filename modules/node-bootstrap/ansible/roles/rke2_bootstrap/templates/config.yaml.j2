@@ -47,21 +47,4 @@ disable-kube-proxy: true
 disable:
   - rke2-cilium
 {% endif %}
-{% if etcd_snapshot_enabled %}
-etcd-snapshot-schedule-cron: '{{ etcd_snapshot_schedule_cron }}'
-etcd-snapshot-retention: {{ etcd_snapshot_retention }}
-{% if etcd_snapshot_object_store_bucket %}
-etcd-s3: true
-etcd-s3-bucket: {{ etcd_snapshot_object_store_bucket }}
-{% if etcd_snapshot_object_store_region %}
-etcd-s3-region: {{ etcd_snapshot_object_store_region }}
-{% endif %}
-{% if etcd_snapshot_object_store_endpoint %}
-etcd-s3-endpoint: {{ etcd_snapshot_object_store_endpoint }}
-{% endif %}
-{% if etcd_snapshot_object_store_folder %}
-etcd-s3-folder: {{ etcd_snapshot_object_store_folder }}
-{% endif %}
-{% endif %}
-{% endif %}
 {% endif %}

@@ -39,7 +39,7 @@ git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, doma
   taints control-plane nodes so user workloads run only on node pools.
 - **Datastore** — every cluster, including single-node, runs RKE2 with embedded etcd
   (RKE2 has no SQLite option — etcd is its only supported datastore), for one consistent
-  datastore and uniform snapshot behavior across topologies.
+  datastore across topologies.
 - **Join flow** — a control plane generates a server token, for control-plane nodes joining the
   same control plane, and a separate agent token, handed to node pools (via an SSM `SecureString`
   on AWS, a Key Vault secret on Azure, or cloud-init on Proxmox). A compromised worker can rejoin
@@ -66,11 +66,9 @@ On every provider, a control-plane node probes `registration_address` at boot be
 whether to join the existing quorum or initialize a new one, so replacing the first
 control-plane node is a safe rejoin, not a split-brain risk.
 
-### Durability and endpoint options (AWS)
+### Endpoint options (AWS)
 
-etcd snapshots (RKE2 built-in, default-on for `control_plane_count > 1`) recover cluster state
-after total control-plane loss — orthogonal to HA, which prevents the outage window in the first
-place. `endpoint_mode` picks how joining nodes reach the registration endpoint: `loadbalancer`
+`endpoint_mode` picks how joining nodes reach the registration endpoint: `loadbalancer`
 (the NLB above, default), `dns` (cheaper Route53 multivalue-answer records with
 CloudWatch-alarm-backed health checks), or `static` (bring your own address).
 

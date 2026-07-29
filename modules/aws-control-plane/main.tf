@@ -84,9 +84,6 @@ locals {
     try(aws_lb.control_plane[0].dns_name, null)
   )
 
-  # Durability default-on for HA, optional for single-node — null means "auto".
-  effective_etcd_snapshots_enabled = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
-
   # Cilium is the standard CNI regardless of topology (Canal/flannel's iptables/ipset
   # dataplane is broken on AlmaLinux 10, this project's only supported OS — see
   # node-bootstrap's cni variable). null means "use the default".
@@ -95,12 +92,8 @@ locals {
   # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one replica
   # permanently Pending on a genuinely single-node cluster. Same "node pools are
   # invisible to this module" caveat as control_plane_taint above: a 1-CP-plus-workers
-  # topology still resolves via control_plane_count alone, matching the existing
-  # etcd_snapshots_enabled precedent.
+  # topology still resolves via control_plane_count alone.
   effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
-
-  # A bucket implies a region; default to aws_region so a caller doesn't have to repeat it.
-  effective_etcd_snapshot_s3_region = var.etcd_snapshot_s3_bucket != null ? coalesce(var.etcd_snapshot_s3_region, var.aws_region) : null
 
   # dns mode's shared record name — distinct from cluster_fqdn (api.<...>), which is the
   # kubeconfig/API-cert name; this is the join-time registration name. Null unless a domain is
@@ -263,36 +256,29 @@ resource "aws_iam_role_policy" "ansible_ssm_s3" {
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
-  ansible_playbook_path               = var.ansible_playbook_path
-  cluster_name                        = var.cluster_name
-  node_name                           = "${var.cluster_name}-cp-1"
-  k8s_version                         = local.k8s_version
-  cluster_fqdn                        = local.cluster_fqdn
-  cluster_fqdn_suffix                 = local.fqdn_suffix
-  node_role                           = "server-init"
-  control_plane_taint                 = local.control_plane_taint
-  cni                                 = local.effective_cni
-  cilium_operator_replicas            = local.effective_cilium_operator_replicas
-  cluster_token                       = random_password.server_token.result
-  cluster_agent_token                 = random_password.agent_token.result
-  registration_address                = local.registration_address
-  extra_tls_sans                      = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  etcd_snapshot_enabled               = local.effective_etcd_snapshots_enabled
-  etcd_snapshot_schedule_cron         = var.etcd_snapshot_schedule_cron
-  etcd_snapshot_retention             = var.etcd_snapshot_retention
-  etcd_snapshot_object_store_bucket   = var.etcd_snapshot_s3_bucket
-  etcd_snapshot_object_store_region   = local.effective_etcd_snapshot_s3_region
-  etcd_snapshot_object_store_endpoint = var.etcd_snapshot_s3_endpoint
-  etcd_snapshot_object_store_folder   = var.etcd_snapshot_s3_folder
-  trusted_ca_pem                      = var.trusted_ca_pem
-  registry_mirror_url                 = var.registry_mirror_url
-  gitops_root_repo_url                = var.gitops_root_repo_url
-  gitops_root_revision                = var.gitops_root_revision
-  gitops_root_path                    = var.gitops_root_path
-  cert_mode                           = var.cert_mode
-  platform_extra_helm_parameters      = var.platform_extra_helm_parameters
-  platform_helm_values_object         = var.platform_helm_values_object
-  extra_tags                          = var.extra_tags
+  ansible_playbook_path          = var.ansible_playbook_path
+  cluster_name                   = var.cluster_name
+  node_name                      = "${var.cluster_name}-cp-1"
+  k8s_version                    = local.k8s_version
+  cluster_fqdn                   = local.cluster_fqdn
+  cluster_fqdn_suffix            = local.fqdn_suffix
+  node_role                      = "server-init"
+  control_plane_taint            = local.control_plane_taint
+  cni                            = local.effective_cni
+  cilium_operator_replicas       = local.effective_cilium_operator_replicas
+  cluster_token                  = random_password.server_token.result
+  cluster_agent_token            = random_password.agent_token.result
+  registration_address           = local.registration_address
+  extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  trusted_ca_pem                 = var.trusted_ca_pem
+  registry_mirror_url            = var.registry_mirror_url
+  gitops_root_repo_url           = var.gitops_root_repo_url
+  gitops_root_revision           = var.gitops_root_revision
+  gitops_root_path               = var.gitops_root_path
+  cert_mode                      = var.cert_mode
+  platform_extra_helm_parameters = var.platform_extra_helm_parameters
+  platform_helm_values_object    = var.platform_helm_values_object
+  extra_tags                     = var.extra_tags
 
   ansible_connection_vars = {
     ansible_connection          = "amazon.aws.aws_ssm"
@@ -331,30 +317,23 @@ module "node_bootstrap_additional" {
 
   depends_on = [module.node_bootstrap]
 
-  ansible_playbook_path               = var.ansible_playbook_path
-  cluster_name                        = var.cluster_name
-  node_name                           = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
-  k8s_version                         = local.k8s_version
-  cluster_fqdn                        = local.cluster_fqdn
-  cluster_fqdn_suffix                 = local.fqdn_suffix
-  node_role                           = "server-join"
-  control_plane_taint                 = local.control_plane_taint
-  cni                                 = local.effective_cni
-  cilium_operator_replicas            = local.effective_cilium_operator_replicas
-  registration_address                = local.registration_address
-  extra_tls_sans                      = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  etcd_snapshot_enabled               = local.effective_etcd_snapshots_enabled
-  etcd_snapshot_schedule_cron         = var.etcd_snapshot_schedule_cron
-  etcd_snapshot_retention             = var.etcd_snapshot_retention
-  etcd_snapshot_object_store_bucket   = var.etcd_snapshot_s3_bucket
-  etcd_snapshot_object_store_region   = local.effective_etcd_snapshot_s3_region
-  etcd_snapshot_object_store_endpoint = var.etcd_snapshot_s3_endpoint
-  etcd_snapshot_object_store_folder   = var.etcd_snapshot_s3_folder
-  cluster_token                       = random_password.server_token.result
-  trusted_ca_pem                      = var.trusted_ca_pem
-  registry_mirror_url                 = var.registry_mirror_url
-  cert_mode                           = var.cert_mode
-  extra_tags                          = var.extra_tags
+  ansible_playbook_path    = var.ansible_playbook_path
+  cluster_name             = var.cluster_name
+  node_name                = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
+  k8s_version              = local.k8s_version
+  cluster_fqdn             = local.cluster_fqdn
+  cluster_fqdn_suffix      = local.fqdn_suffix
+  node_role                = "server-join"
+  control_plane_taint      = local.control_plane_taint
+  cni                      = local.effective_cni
+  cilium_operator_replicas = local.effective_cilium_operator_replicas
+  registration_address     = local.registration_address
+  extra_tls_sans           = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  cluster_token            = random_password.server_token.result
+  trusted_ca_pem           = var.trusted_ca_pem
+  registry_mirror_url      = var.registry_mirror_url
+  cert_mode                = var.cert_mode
+  extra_tags               = var.extra_tags
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
   # first server only — node-bootstrap also enforces this at the task level.
 
@@ -588,26 +567,6 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
   role       = aws_iam_role.node.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-}
-
-# ---- Scoped S3 access for etcd snapshot upload (only when a bucket is configured) ----
-resource "aws_iam_role_policy" "etcd_snapshot_s3" {
-  count = var.etcd_snapshot_s3_bucket != null ? 1 : 0
-  name  = "kube-compute-${var.cluster_name}-etcd-snapshot-s3"
-  role  = aws_iam_role.node.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"]
-        Resource = [
-          "arn:aws:s3:::${var.etcd_snapshot_s3_bucket}",
-          "arn:aws:s3:::${var.etcd_snapshot_s3_bucket}/*"
-        ]
-      }
-    ]
-  })
 }
 
 resource "aws_iam_instance_profile" "node" {

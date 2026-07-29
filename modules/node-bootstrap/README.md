@@ -35,8 +35,8 @@ prep (`br_netfilter`/`overlay`, sysctls, SELinux package install — `br_netfilt
 and its `bridge-nf-call-*` sysctls are skipped on AlmaLinux 10, whose kernel
 dropped that legacy module; see `cni` below for the deeper consequence of that
 same kernel change), CA trust (`trusted_ca_pem`), registry mirror
-(`registry_mirror_url`), the Cilium CNI HelmChart manifest, etcd snapshot
-configuration (`etcd_snapshot_*`), node labels (`node_labels`), extra server
+(`registry_mirror_url`), the Cilium CNI HelmChart manifest,
+node labels (`node_labels`), extra server
 manifests (`extra_server_manifests`), and GitOps/Argo CD bootstrap (`gitops_*`,
 `cert_mode`, `platform_*`, `extra_tags` — a distinct post-install step, applied
 via `kubectl` once the cluster reports Ready, server-init only).

@@ -73,24 +73,6 @@ variable "cni" {
   }
 }
 
-variable "etcd_snapshots_enabled" {
-  description = "Enable RKE2's built-in scheduled etcd snapshots (local only — no object-store upload is wired in this module). Null (default) auto-derives to true when control_plane_count > 1 and false for control_plane_count = 1."
-  type        = bool
-  default     = null
-}
-
-variable "etcd_snapshot_schedule_cron" {
-  description = "Cron schedule for etcd snapshots. Only meaningful when etcd_snapshots_enabled resolves to true."
-  type        = string
-  default     = "0 */12 * * *"
-}
-
-variable "etcd_snapshot_retention" {
-  description = "Number of local etcd snapshots to retain. Only meaningful when etcd_snapshots_enabled resolves to true."
-  type        = number
-  default     = 5
-}
-
 variable "cert_mode" {
   description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' (default), 'byo', or 'acme'."
   type        = string

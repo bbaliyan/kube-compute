@@ -89,36 +89,29 @@ locals {
   # through the local-exec `environment` block (operator_connect) or run-command
   # protected parameters (on_node), never the bundle.
   extra_vars = merge(var.ansible_connection_vars, {
-    cluster_name                        = var.cluster_name
-    node_name                           = var.node_name
-    k8s_version                         = var.k8s_version
-    cluster_fqdn                        = var.cluster_fqdn != null ? var.cluster_fqdn : ""
-    cluster_fqdn_suffix                 = var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""
-    node_role                           = var.node_role
-    control_plane_taint                 = var.control_plane_taint
-    registration_address                = var.registration_address != null ? var.registration_address : ""
-    extra_tls_sans                      = var.extra_tls_sans
-    cni                                 = var.cni
-    cilium_version                      = local.cilium_version
-    cilium_operator_replicas            = var.cilium_operator_replicas != null ? var.cilium_operator_replicas : 0
-    registry_mirror_url                 = var.registry_mirror_url != null ? var.registry_mirror_url : ""
-    etcd_snapshot_enabled               = var.etcd_snapshot_enabled
-    etcd_snapshot_schedule_cron         = var.etcd_snapshot_schedule_cron
-    etcd_snapshot_retention             = var.etcd_snapshot_retention
-    etcd_snapshot_object_store_bucket   = var.etcd_snapshot_object_store_bucket != null ? var.etcd_snapshot_object_store_bucket : ""
-    etcd_snapshot_object_store_region   = var.etcd_snapshot_object_store_region != null ? var.etcd_snapshot_object_store_region : ""
-    etcd_snapshot_object_store_endpoint = var.etcd_snapshot_object_store_endpoint != null ? var.etcd_snapshot_object_store_endpoint : ""
-    etcd_snapshot_object_store_folder   = var.etcd_snapshot_object_store_folder != null ? var.etcd_snapshot_object_store_folder : ""
-    node_labels                         = var.node_labels
-    extra_server_manifests              = var.extra_server_manifests
-    gitops_root_repo_url                = var.gitops_root_repo_url != null ? var.gitops_root_repo_url : ""
-    argocd_version                      = local.argocd_version
-    gitops_root_revision                = var.gitops_root_revision
-    gitops_root_path                    = var.gitops_root_path
-    cert_mode                           = var.cert_mode
-    platform_extra_helm_parameters      = var.platform_extra_helm_parameters
-    platform_helm_values_object         = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
-    extra_tags                          = var.extra_tags
+    cluster_name                   = var.cluster_name
+    node_name                      = var.node_name
+    k8s_version                    = var.k8s_version
+    cluster_fqdn                   = var.cluster_fqdn != null ? var.cluster_fqdn : ""
+    cluster_fqdn_suffix            = var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""
+    node_role                      = var.node_role
+    control_plane_taint            = var.control_plane_taint
+    registration_address           = var.registration_address != null ? var.registration_address : ""
+    extra_tls_sans                 = var.extra_tls_sans
+    cni                            = var.cni
+    cilium_version                 = local.cilium_version
+    cilium_operator_replicas       = var.cilium_operator_replicas != null ? var.cilium_operator_replicas : 0
+    registry_mirror_url            = var.registry_mirror_url != null ? var.registry_mirror_url : ""
+    node_labels                    = var.node_labels
+    extra_server_manifests         = var.extra_server_manifests
+    gitops_root_repo_url           = var.gitops_root_repo_url != null ? var.gitops_root_repo_url : ""
+    argocd_version                 = local.argocd_version
+    gitops_root_revision           = var.gitops_root_revision
+    gitops_root_path               = var.gitops_root_path
+    cert_mode                      = var.cert_mode
+    platform_extra_helm_parameters = var.platform_extra_helm_parameters
+    platform_helm_values_object    = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
+    extra_tags                     = var.extra_tags
   })
 
   extra_vars_json = jsonencode(local.extra_vars)

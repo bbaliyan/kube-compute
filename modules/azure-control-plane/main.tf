@@ -20,7 +20,6 @@ locals {
   # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one
   # replica permanently Pending on a genuinely single-node cluster.
   effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
-  effective_etcd_snapshots_enabled   = var.etcd_snapshots_enabled != null ? var.etcd_snapshots_enabled : var.control_plane_count > 1
 
   # Kv name: 24-char Azure limit, globally unique — 18 chars of cluster_name (hyphens
   # stripped; Key Vault names are alphanumeric-and-hyphen but a plain alnum body keeps this
@@ -253,9 +252,6 @@ module "bootstrap" {
   cluster_agent_token            = random_password.agent_token.result
   registration_address           = local.registration_address
   extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  etcd_snapshot_enabled          = local.effective_etcd_snapshots_enabled
-  etcd_snapshot_schedule_cron    = var.etcd_snapshot_schedule_cron
-  etcd_snapshot_retention        = var.etcd_snapshot_retention
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_root_repo_url           = var.gitops_root_repo_url
@@ -313,27 +309,24 @@ module "bootstrap_additional" {
 
   source = "../node-bootstrap"
 
-  invocation_mode             = "on_node"
-  ansible_playbook_path       = var.ansible_playbook_path
-  cluster_name                = var.cluster_name
-  node_name                   = "${var.cluster_name}-cp-${each.key}"
-  k8s_version                 = local.k8s_version
-  cluster_fqdn                = local.cluster_fqdn
-  cluster_fqdn_suffix         = local.fqdn_suffix
-  node_role                   = "server-join"
-  control_plane_taint         = local.control_plane_taint
-  cni                         = local.effective_cni
-  cilium_operator_replicas    = local.effective_cilium_operator_replicas
-  registration_address        = local.registration_address
-  extra_tls_sans              = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  etcd_snapshot_enabled       = local.effective_etcd_snapshots_enabled
-  etcd_snapshot_schedule_cron = var.etcd_snapshot_schedule_cron
-  etcd_snapshot_retention     = var.etcd_snapshot_retention
-  cluster_token               = random_password.server_token.result
-  trusted_ca_pem              = var.trusted_ca_pem
-  registry_mirror_url         = var.registry_mirror_url
-  cert_mode                   = var.cert_mode
-  extra_tags                  = var.extra_tags
+  invocation_mode          = "on_node"
+  ansible_playbook_path    = var.ansible_playbook_path
+  cluster_name             = var.cluster_name
+  node_name                = "${var.cluster_name}-cp-${each.key}"
+  k8s_version              = local.k8s_version
+  cluster_fqdn             = local.cluster_fqdn
+  cluster_fqdn_suffix      = local.fqdn_suffix
+  node_role                = "server-join"
+  control_plane_taint      = local.control_plane_taint
+  cni                      = local.effective_cni
+  cilium_operator_replicas = local.effective_cilium_operator_replicas
+  registration_address     = local.registration_address
+  extra_tls_sans           = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  cluster_token            = random_password.server_token.result
+  trusted_ca_pem           = var.trusted_ca_pem
+  registry_mirror_url      = var.registry_mirror_url
+  cert_mode                = var.cert_mode
+  extra_tags               = var.extra_tags
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
 }
 
