@@ -207,7 +207,7 @@ variable "dns_self_register_record_name" {
   default     = null
 
   validation {
-    condition     = var.dns_self_register_zone == null || var.dns_self_register_record_name != null
+    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.dns_self_register_record_name != null
     error_message = "dns_self_register_record_name is required when dns_self_register_zone is set."
   }
 }
@@ -224,7 +224,7 @@ variable "dns_server_address" {
   default     = null
 
   validation {
-    condition     = var.dns_self_register_zone == null || var.dns_server_address != null
+    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.dns_server_address != null
     error_message = "dns_server_address is required when dns_self_register_zone is set."
   }
 }
@@ -251,7 +251,7 @@ variable "tsig_key_name" {
   default     = null
 
   validation {
-    condition     = var.dns_self_register_zone == null || var.tsig_key_name != null
+    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.tsig_key_name != null
     error_message = "tsig_key_name is required when dns_self_register_zone is set."
   }
 }
@@ -267,4 +267,9 @@ variable "tsig_key_secret" {
   type        = string
   default     = null
   sensitive   = true
+
+  validation {
+    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.tsig_key_secret != null
+    error_message = "tsig_key_secret is required when dns_self_register_zone is set."
+  }
 }

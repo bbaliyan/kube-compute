@@ -137,7 +137,7 @@
       ansible.builtin.shell:
         cmd: |
           set -euo pipefail
-          nsupdate {{ '-v' if dns_transport.startswith('tcp') else '' }} -k /run/dns-self-register-tsig.key <<EOF
+          nsupdate {{ '-v' if dns_transport.startswith('tcp') else '' }}{{ ' -4' if dns_transport.endswith('4') else '' }}{{ ' -6' if dns_transport.endswith('6') else '' }} -k /run/dns-self-register-tsig.key <<EOF
           server {{ dns_server_address }} {{ dns_server_port }}
           zone {{ dns_self_register_zone }}
           update delete {{ dns_self_register_record_name }}.{{ dns_self_register_zone }} A
