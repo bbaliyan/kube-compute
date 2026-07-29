@@ -29,7 +29,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version this pool's workers install. Must not be newer than control_plane_k8s_version. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version this pool's workers install. Should match the control plane's k8s_version — both are expected to come from the same cluster-facts source, so version skew is prevented by construction, not a runtime check. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
   default     = null
 }
@@ -149,14 +149,10 @@ variable "desired_count" {
   }
 }
 
-variable "control_plane_k8s_version" {
-  description = "The control plane's k8s_version. This pool's k8s_version is rejected if it is newer."
-  type        = string
-}
-
 variable "registration_address" {
-  description = "The address workers join through — opaque to this module. Prefer the control plane's registration_address output (genesis's raw IP), not its cluster_fqdn: a real multi-CP apply found that pointing all workers at a DNS name resolving to every control-plane IP causes join hangs lasting 10-20+ minutes per worker — retries land on different control-plane nodes across a round-robin/multi-address record, racing RKE2's own per-node 'orphaned node-password secret' garbage collection (~10 min window), which deletes a still-in-progress join credential signed by a different node than the one now being asked. Pinning every worker to one fixed control-plane IP avoids the race entirely; only kubectl/human access should use cluster_fqdn (unaffected by this issue). Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
+  description = "The address workers join through. Null (the default) self-computes the genesis node's single-target self-registered DNS name (genesis.<cluster_name>.<cluster_domain>) — requires cluster_domain and dns_server_address to both be set. Pass an explicit value only when DNS isn't configured (the operator must then know and pin genesis's actual address themselves, e.g. a literal IP, matching how worker_ip_addresses is already a literal in this same file). Prefer the self-computed DNS name over cluster_fqdn (the round-robin api.* record) — a round-robin record causes 10-20+ minute join hangs that a single-target name does not."
   type        = string
+  default     = null
 }
 
 variable "cluster_agent_token" {
