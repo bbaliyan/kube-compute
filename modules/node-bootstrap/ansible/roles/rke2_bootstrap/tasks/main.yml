@@ -318,23 +318,29 @@
 
 # Additional control-plane nodes join embedded-etcd one at a time — an upstream
 # etcd limit of one non-voting learner at a time
-# (https://etcd.io/docs/v3.4/learning/design-learner/). Stagger by node index and
-# self-heal by wiping local server state and retrying if a collision slips through.
+# (https://etcd.io/docs/v3.4/learning/design-learner/). A fixed per-index sleep
+# here previously modeled "how long the previous node's promotion takes" with a
+# flat guess (NODE_INDEX * 60s) — pure dead time on every apply, since it fires
+# whether or not a previous join is still in flight. The real collision guard is
+# the retry loop below (etcd rejects a second concurrent learner outright, and
+# this wipes local server state and retries), so the presleep only needs to be
+# enough jitter to keep simultaneous `systemctl start` calls from landing in the
+# exact same instant — not to model actual join duration.
 - name: server-join | staggered, self-healing join
   ansible.builtin.shell:
     cmd: |
       set -euo pipefail
       NODE_INDEX="$(echo '{{ node_name }}' | grep -oE '[0-9]+$' || echo 0)"
-      sleep $((NODE_INDEX * 60))
+      sleep $(( (NODE_INDEX * 5) + (RANDOM % 5) ))
 
       systemctl enable rke2-server.service
       JOIN_ATTEMPT=0
       until systemctl start rke2-server.service && timeout 90 bash -c 'until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
         JOIN_ATTEMPT=$((JOIN_ATTEMPT + 1))
-        [ "$JOIN_ATTEMPT" -ge 3 ] && { echo "join-race exhausted after 3 attempts" >&2; exit 1; }
+        [ "$JOIN_ATTEMPT" -ge 6 ] && { echo "join-race exhausted after 6 attempts" >&2; exit 1; }
         systemctl stop rke2-server 2>/dev/null || true
         rm -rf /var/lib/rancher/rke2/server/tls /var/lib/rancher/rke2/server/cred /var/lib/rancher/rke2/server/db
-        sleep 15
+        sleep 10
       done
   when: node_role == "server-join"
 
