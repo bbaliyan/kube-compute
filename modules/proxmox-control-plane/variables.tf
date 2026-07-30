@@ -68,20 +68,38 @@ variable "registry_mirror_url" {
   default     = null
 }
 
-variable "gitops_root_repo_url" {
-  description = "Optional Argo CD root Application source repo — an app-of-apps wrapping the platform and this cluster's workloads. Null = skip Argo CD wiring."
+variable "gitops_platform_enabled" {
+  description = "Whether to bootstrap kube-platform at all. false = a bare RKE2+Cilium cluster, no Argo CD/platform Application. Sourced from this cluster's cluster-facts unit."
+  type        = bool
+  default     = true
+}
+
+variable "gitops_platform_repo_url_override" {
+  description = "Override for kube-platform's repo URL. Null (the default) passes through to node-bootstrap, which falls back to its own pinned default — this module is not the source of truth for the pin. Sourced from this cluster's cluster-facts unit."
   type        = string
   default     = null
 }
 
-variable "gitops_root_revision" {
-  description = "Branch/tag/SHA the root Application tracks."
+variable "gitops_platform_revision_override" {
+  description = "Override for the branch/tag/SHA the platform Application tracks. Null (the default) passes through to node-bootstrap's own pinned default. Sourced from this cluster's cluster-facts unit."
+  type        = string
+  default     = null
+}
+
+variable "gitops_workloads_repo_url" {
+  description = "Optional user-defined workloads Application source repo, independent of the platform Application (no shared ordering). Null (the default) = no workloads Application. Sourced from this cluster's cluster-facts unit."
+  type        = string
+  default     = null
+}
+
+variable "gitops_workloads_revision" {
+  description = "Branch/tag/SHA the workloads Application tracks. Only meaningful when gitops_workloads_repo_url is set."
   type        = string
   default     = "main"
 }
 
-variable "gitops_root_path" {
-  description = "Path within the root repo Argo CD renders as the app-of-apps (a Helm chart directory)."
+variable "gitops_workloads_path" {
+  description = "Path within the workloads repo Argo CD applies. Only meaningful when gitops_workloads_repo_url is set."
   type        = string
   default     = "."
 }

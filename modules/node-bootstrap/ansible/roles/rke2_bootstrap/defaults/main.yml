@@ -11,10 +11,12 @@ cilium_operator_replicas: 0
 registry_mirror_url: ""
 node_labels: {}
 extra_server_manifests: {}
-gitops_root_repo_url: ""
+gitops_platform_repo_url: ""
 argocd_version: ""
-gitops_root_revision: "main"
-gitops_root_path: "."
+gitops_platform_revision: "main"
+gitops_workloads_repo_url: ""
+gitops_workloads_revision: "main"
+gitops_workloads_path: "."
 cert_mode: "selfsigned"
 platform_extra_helm_parameters: {}
 platform_helm_values_object: {}

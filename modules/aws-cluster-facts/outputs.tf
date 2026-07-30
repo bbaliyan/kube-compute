@@ -25,3 +25,33 @@ output "agent_token_ssm_parameter" {
   description = "SSM Parameter Store name (SecureString) holding the agent join token. aws-node-pool's workers fetch it at boot via their own instance IAM role — never embedded in user_data."
   value       = aws_ssm_parameter.agent_token.name
 }
+
+output "platform_enabled" {
+  description = "Whether the genesis node should bootstrap kube-platform at all. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.platform_enabled
+}
+
+output "platform_repo_url_override" {
+  description = "Consumer override for kube-platform's repo URL, or null to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.platform_repo_url_override
+}
+
+output "platform_revision_override" {
+  description = "Consumer override for the platform Application's tracked revision, or null to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.platform_revision_override
+}
+
+output "workloads_repo_url" {
+  description = "Optional user-defined workloads Application source repo, or null for no workloads Application. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.workloads_repo_url
+}
+
+output "workloads_revision" {
+  description = "Branch/tag/SHA the workloads Application tracks. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.workloads_revision
+}
+
+output "workloads_path" {
+  description = "Path within the workloads repo Argo CD applies. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.workloads_path
+}

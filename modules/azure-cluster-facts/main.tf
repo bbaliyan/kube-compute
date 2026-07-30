@@ -3,6 +3,13 @@ module "cluster_facts" {
   source = "../cluster-facts"
 
   k8s_version = var.k8s_version
+
+  platform_enabled           = var.platform_enabled
+  platform_repo_url_override = var.platform_repo_url_override
+  platform_revision_override = var.platform_revision_override
+  workloads_repo_url         = var.workloads_repo_url
+  workloads_revision         = var.workloads_revision
+  workloads_path             = var.workloads_path
 }
 
 data "azurerm_client_config" "current" {}

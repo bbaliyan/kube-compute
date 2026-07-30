@@ -67,7 +67,7 @@ echo "${cilium_values_b64}" | base64 -d >"$CILIUM_VALUES"
 "$HELM" template cilium cilium --repo https://helm.cilium.io/ --version "${cilium_version}" --namespace kube-system --include-crds -f "$CILIUM_VALUES" >"/tmp/kube-compute-cilium-manifest-${node_name}.yaml"
 rm -f "$CILIUM_VALUES"
 %{ endif ~}
-%{ if gitops_root_repo_url != "" && node_role == "server-init" ~}
+%{ if argocd_needed != "" && node_role == "server-init" ~}
 ARGOCD_VALUES="$(mktemp)"
 echo "${argocd_values_b64}" | base64 -d >"$ARGOCD_VALUES"
 {

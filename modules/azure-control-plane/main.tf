@@ -184,9 +184,12 @@ module "bootstrap" {
   extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
-  gitops_root_repo_url           = var.gitops_root_repo_url
-  gitops_root_revision           = var.gitops_root_revision
-  gitops_root_path               = var.gitops_root_path
+  gitops_platform_enabled        = var.gitops_platform_enabled
+  gitops_platform_repo_url       = var.gitops_platform_repo_url_override
+  gitops_platform_revision       = var.gitops_platform_revision_override
+  gitops_workloads_repo_url      = var.gitops_workloads_repo_url
+  gitops_workloads_revision      = var.gitops_workloads_revision
+  gitops_workloads_path          = var.gitops_workloads_path
   cert_mode                      = var.cert_mode
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
   platform_helm_values_object    = var.platform_helm_values_object

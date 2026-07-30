@@ -143,26 +143,44 @@ variable "extra_server_manifests" {
   default     = {}
 }
 
-variable "gitops_root_repo_url" {
-  description = "Optional Argo CD root Application source repo — an app-of-apps that wraps the platform bootstrap and this cluster's workloads. Null = skip all Argo CD wiring. Only meaningful for node_role = server-init — Argo/root bootstrap never runs on server-join or worker."
+variable "gitops_platform_enabled" {
+  description = "Whether to bootstrap kube-platform at all. false = skip Argo CD and the platform Application entirely (a bare RKE2+Cilium cluster) regardless of gitops_platform_repo_url/_revision. Only meaningful for node_role = server-init."
+  type        = bool
+  default     = true
+}
+
+variable "gitops_platform_repo_url" {
+  description = "Argo CD platform Application source repo (kube-platform or a fork). Defaults to this project's own kube-platform repo — override to point at a fork. Only takes effect when gitops_platform_enabled is true, and only meaningful for node_role = server-init."
   type        = string
-  default     = null
+  default     = "https://github.com/bbaliyan/kube-platform.git"
+}
+
+variable "gitops_platform_revision" {
+  description = "Branch/tag/SHA the platform Application tracks. Defaults to a pinned commit SHA, not a floating branch — kube-platform is an actively developed repo, and this project's example clusters are only ever tested against one specific revision at a time. Bump deliberately (alongside re-testing the example clusters), don't let it float to main. Override for a fork or to track a different revision."
+  type        = string
+  default     = "5f07c871fa84b903a930ae3f61280d79d008c5ae"
 }
 
 variable "argocd_version" {
-  description = "Argo CD Helm chart version. Only meaningful when gitops_root_repo_url is set."
+  description = "Argo CD Helm chart version. Only meaningful when gitops_platform_enabled is true or gitops_workloads_repo_url is set (either one needs Argo CD installed)."
   type        = string
   default     = null
 }
 
-variable "gitops_root_revision" {
-  description = "Branch/tag/SHA the root Application tracks."
+variable "gitops_workloads_repo_url" {
+  description = "Optional user-defined workloads Application source repo, fully independent of the platform Application — no shared app-of-apps parent, no enforced ordering (Argo CD's own automated selfHeal/retry converges a workload that depends on something platform provides, once platform catches up). Null/empty (the default) = no workloads Application at all. Only meaningful for node_role = server-init."
+  type        = string
+  default     = null
+}
+
+variable "gitops_workloads_revision" {
+  description = "Branch/tag/SHA the workloads Application tracks. Only meaningful when gitops_workloads_repo_url is set."
   type        = string
   default     = "main"
 }
 
-variable "gitops_root_path" {
-  description = "Path within the root repo Argo CD renders as the app-of-apps — a Helm chart directory that creates the platform and workload Applications."
+variable "gitops_workloads_path" {
+  description = "Path within the workloads repo Argo CD applies. Only meaningful when gitops_workloads_repo_url is set."
   type        = string
   default     = "."
 }

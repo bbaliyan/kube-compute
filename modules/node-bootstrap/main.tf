@@ -12,6 +12,12 @@ locals {
   cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
   argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
 
+  # gitops_platform_enabled = false clears the repo URL to "" regardless of the pin,
+  # so every gate downstream (this module's own tasks, plus the bootstrap-runner
+  # template's Argo CD render) can keep testing "repo_url non-empty" as the single
+  # signal, matching gitops_workloads_repo_url's existing null-means-skip shape.
+  effective_gitops_platform_repo_url = var.gitops_platform_enabled ? var.gitops_platform_repo_url : ""
+
   # nsupdate's `zone` directive requires a fully-qualified (trailing-dot) name, but
   # callers commonly pass a bare zone (e.g. "lan") the way they would to any other
   # DNS tool. Normalize here so either form works identically, mirroring the same
@@ -113,10 +119,12 @@ locals {
     registry_mirror_url            = var.registry_mirror_url != null ? var.registry_mirror_url : ""
     node_labels                    = var.node_labels
     extra_server_manifests         = var.extra_server_manifests
-    gitops_root_repo_url           = var.gitops_root_repo_url != null ? var.gitops_root_repo_url : ""
+    gitops_platform_repo_url       = local.effective_gitops_platform_repo_url
     argocd_version                 = local.argocd_version
-    gitops_root_revision           = var.gitops_root_revision
-    gitops_root_path               = var.gitops_root_path
+    gitops_platform_revision       = var.gitops_platform_revision
+    gitops_workloads_repo_url      = var.gitops_workloads_repo_url != null ? var.gitops_workloads_repo_url : ""
+    gitops_workloads_revision      = var.gitops_workloads_revision
+    gitops_workloads_path          = var.gitops_workloads_path
     cert_mode                      = var.cert_mode
     platform_extra_helm_parameters = var.platform_extra_helm_parameters
     platform_helm_values_object    = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
@@ -161,11 +169,14 @@ locals {
   # keys are always present — empty where a mode doesn't use them — so
   # templatefile() never fails on a missing key inside a not-taken branch.
   runner_vars = {
-    mode                    = var.invocation_mode
-    node_name               = var.node_name
-    cni                     = var.cni
-    node_role               = var.node_role
-    gitops_root_repo_url    = var.gitops_root_repo_url != null ? var.gitops_root_repo_url : ""
+    mode      = var.invocation_mode
+    node_name = var.node_name
+    cni       = var.cni
+    node_role = var.node_role
+    # Gates the bootstrap-runner template's Argo CD helm-template render — needed
+    # if either the platform or the workloads Application is going to be applied,
+    # not just platform, so a non-empty sentinel covers both.
+    argocd_needed           = local.effective_gitops_platform_repo_url != "" || (var.gitops_workloads_repo_url != null && var.gitops_workloads_repo_url != "") ? "true" : ""
     cilium_version          = local.cilium_version
     argocd_version          = local.argocd_version
     cilium_values_b64       = base64encode(local.cilium_values_yaml)

@@ -36,7 +36,7 @@ run "on_node_server_init_renders_self_contained_bundle" {
     node_role            = "server-init"
     cluster_token        = "SUPERSECRETTOKEN123"
     cluster_agent_token  = "SUPERSECRETAGENT456"
-    gitops_root_repo_url = "https://example.test/root.git"
+    gitops_platform_repo_url = "https://example.test/platform.git"
   }
 
   # self-contained + on-node execution

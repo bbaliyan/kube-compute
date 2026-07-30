@@ -24,3 +24,42 @@ variable "extra_tags" {
   type        = map(string)
   default     = {}
 }
+
+# ---- GitOps config surface: pass-through to the shared cluster-facts core (see
+# its variables.tf for the full description of each) ----
+
+variable "platform_enabled" {
+  description = "Whether to bootstrap kube-platform at all. Passed straight through to cluster-facts."
+  type        = bool
+  default     = true
+}
+
+variable "platform_repo_url_override" {
+  description = "Override for kube-platform's repo URL. Null means: use node-bootstrap's own pinned default. Passed straight through to cluster-facts."
+  type        = string
+  default     = null
+}
+
+variable "platform_revision_override" {
+  description = "Override for the branch/tag/SHA the platform Application tracks. Null means: use node-bootstrap's own pinned default. Passed straight through to cluster-facts."
+  type        = string
+  default     = null
+}
+
+variable "workloads_repo_url" {
+  description = "Optional user-defined workloads Application source repo. Null (the default) = no workloads Application. Passed straight through to cluster-facts."
+  type        = string
+  default     = null
+}
+
+variable "workloads_revision" {
+  description = "Branch/tag/SHA the workloads Application tracks. Only meaningful when workloads_repo_url is set. Passed straight through to cluster-facts."
+  type        = string
+  default     = "main"
+}
+
+variable "workloads_path" {
+  description = "Path within the workloads repo Argo CD applies. Only meaningful when workloads_repo_url is set. Passed straight through to cluster-facts."
+  type        = string
+  default     = "."
+}

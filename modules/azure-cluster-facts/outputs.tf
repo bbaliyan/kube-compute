@@ -35,3 +35,33 @@ output "cluster_asg_id" {
   description = "ID of the cluster-wide Application Security Group. Both azure-control-plane's own NICs and azure-node-pool's worker NICs join this by id."
   value       = azurerm_application_security_group.cluster.id
 }
+
+output "platform_enabled" {
+  description = "Whether the genesis node should bootstrap kube-platform at all. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.platform_enabled
+}
+
+output "platform_repo_url_override" {
+  description = "Consumer override for kube-platform's repo URL, or null to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.platform_repo_url_override
+}
+
+output "platform_revision_override" {
+  description = "Consumer override for the platform Application's tracked revision, or null to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.platform_revision_override
+}
+
+output "workloads_repo_url" {
+  description = "Optional user-defined workloads Application source repo, or null for no workloads Application. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.workloads_repo_url
+}
+
+output "workloads_revision" {
+  description = "Branch/tag/SHA the workloads Application tracks. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.workloads_revision
+}
+
+output "workloads_path" {
+  description = "Path within the workloads repo Argo CD applies. Re-exported from the shared cluster-facts core."
+  value       = module.cluster_facts.workloads_path
+}

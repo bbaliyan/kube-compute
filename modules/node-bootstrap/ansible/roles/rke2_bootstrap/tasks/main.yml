@@ -411,12 +411,20 @@
   when: node_role == "worker"
 
 # ---- GitOps/Argo CD bootstrap: server-init only, after the node is Ready ----
+# Two independent Applications, platform and workloads — no shared app-of-apps
+# parent, no enforced ordering between them (see workloads-app.yaml.j2). platform
+# defaults on (gitops_platform_repo_url defaults to the pinned kube-platform
+# coordinates in node-bootstrap's variables); workloads defaults off (opt-in only).
+# Argo CD itself only needs installing when at least one of the two is going to be
+# applied.
 - name: gitops | ensure the manifests directory exists
   ansible.builtin.file:
     path: /etc/kube-compute/manifests
     state: directory
     mode: "0755"
-  when: node_role == "server-init" and gitops_root_repo_url | length > 0
+  when: >-
+    node_role == "server-init" and
+    (gitops_platform_repo_url | length > 0 or gitops_workloads_repo_url | length > 0)
 
 # Rendered via `helm template` in main.tf's wrapping shell script, not a
 # `delegate_to: localhost` task — same reason as Cilium's genesis install above.
@@ -428,15 +436,24 @@
     src: "/tmp/kube-compute-argocd-manifest-{{ node_name }}.yaml"
     dest: /etc/kube-compute/manifests/00-argocd.yaml
     mode: "0644"
-  when: node_role == "server-init" and gitops_root_repo_url | length > 0
+  when: >-
+    node_role == "server-init" and
+    (gitops_platform_repo_url | length > 0 or gitops_workloads_repo_url | length > 0)
 
-- name: gitops | render the root Application manifest
+- name: gitops | render the platform Application manifest
   ansible.builtin.template:
-    src: root-app.yaml.j2
-    dest: /etc/kube-compute/manifests/10-root-app.yaml
+    src: platform-app.yaml.j2
+    dest: /etc/kube-compute/manifests/10-platform-app.yaml
     mode: "0644"
-  when: node_role == "server-init" and gitops_root_repo_url | length > 0
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
   no_log: true
+
+- name: gitops | render the workloads Application manifest
+  ansible.builtin.template:
+    src: workloads-app.yaml.j2
+    dest: /etc/kube-compute/manifests/11-workloads-app.yaml
+    mode: "0644"
+  when: node_role == "server-init" and gitops_workloads_repo_url | length > 0
 
 - name: gitops | apply the Argo CD manifest
   # --server-side is required: a client-side apply stores the previous config in a
@@ -446,7 +463,9 @@
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
     apply --server-side -f /etc/kube-compute/manifests/00-argocd.yaml
-  when: node_role == "server-init" and gitops_root_repo_url | length > 0
+  when: >-
+    node_role == "server-init" and
+    (gitops_platform_repo_url | length > 0 or gitops_workloads_repo_url | length > 0)
 
 - name: gitops | wait for the Argo CD Application CRD to be established
   # NOT a health wait — only blocks until the API server serves the Application
@@ -458,10 +477,18 @@
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
     wait --for=condition=established --timeout=120s crd/applications.argoproj.io
   changed_when: false
-  when: node_role == "server-init" and gitops_root_repo_url | length > 0
+  when: >-
+    node_role == "server-init" and
+    (gitops_platform_repo_url | length > 0 or gitops_workloads_repo_url | length > 0)
 
-- name: gitops | apply the root Application manifest
+- name: gitops | apply the platform Application manifest
   ansible.builtin.command: >-
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
-    apply -f /etc/kube-compute/manifests/10-root-app.yaml
-  when: node_role == "server-init" and gitops_root_repo_url | length > 0
+    apply -f /etc/kube-compute/manifests/10-platform-app.yaml
+  when: node_role == "server-init" and gitops_platform_repo_url | length > 0
+
+- name: gitops | apply the workloads Application manifest
+  ansible.builtin.command: >-
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    apply -f /etc/kube-compute/manifests/11-workloads-app.yaml
+  when: node_role == "server-init" and gitops_workloads_repo_url | length > 0
