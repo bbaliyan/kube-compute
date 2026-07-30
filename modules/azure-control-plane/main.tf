@@ -329,10 +329,16 @@ resource "azurerm_virtual_machine_run_command" "genesis" {
   }
 }
 
-# Additional servers join one at a time after genesis is up — node-bootstrap's own
-# staggered join-race retry orders them among themselves; this depends_on ensures
-# genesis's run-command has finished first (the first server must exist before any
-# server-join can reach the registration endpoint).
+# Deliberately NOT depends_on azurerm_virtual_machine_run_command.genesis: that forced
+# every additional server's run-command (OS-prep/RKE2-install, delivered via the same
+# on_node bundle as genesis) to wait for genesis's entire bootstrap script, including
+# genesis's post-Ready GitOps/Argo CD bootstrap — unrelated to etcd join safety. Mirrors
+# aws-node-pool's established no-depends_on precedent: RKE2's server process retries
+# its `server:` line the same way its agent process retries a worker's join target, so
+# a sibling's run-command executing concurrently with genesis's just waits out
+# genesis's install via that connection retry. Ordering *among* the additional nodes
+# themselves (one non-voting etcd learner at a time) remains handled by node-bootstrap's
+# own staggered, self-healing join-race retry.
 resource "azurerm_virtual_machine_run_command" "additional" {
   for_each = module.bootstrap_additional
 
@@ -351,8 +357,6 @@ resource "azurerm_virtual_machine_run_command" "additional" {
       value = each.value.on_node_secret_env[protected_parameter.value]
     }
   }
-
-  depends_on = [azurerm_virtual_machine_run_command.genesis]
 }
 
 # ---- Internal Standard LB fronting the control plane on 6443 (control_plane_count > 1) ----

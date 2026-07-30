@@ -240,23 +240,22 @@ module "node_bootstrap" {
 }
 
 # ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
-# Explicitly depends_on the genesis node's node-bootstrap run (not just its instance) —
-# the first server must actually finish installing/starting RKE2 before any additional
-# server can join it. This is a stricter requirement than cloud-init had: cloud-init ran
-# at each instance's own boot time independently, so genesis's install was reliably well
-# underway before staggered siblings' delayed retry attempts landed; Ansible's
-# local-exec has no such implicit head start — without this depends_on, Terraform could
-# run every node's Ansible install concurrently, and server-join siblings would race
-# genesis's own install, not just each other.
-# Ordering *among* the additional nodes themselves remains handled by node-bootstrap's own
-# staggered, self-healing join-race retry (see modules/node-bootstrap/ansible/roles/
-# rke2_bootstrap/tasks/main.yml's "server-join | staggered, self-healing join" task).
+# Deliberately NOT depends_on module.node_bootstrap: that previously forced every
+# additional server's OS-prep/RKE2-install to wait for genesis's entire Ansible run —
+# including genesis's post-Ready GitOps/Argo CD bootstrap, which has nothing to do
+# with etcd join safety — adding minutes of pure dead time before a sibling's install
+# even started. Mirrors aws-node-pool's already-established pattern: RKE2's server
+# process natively retries against the `server:` line the same way its agent process
+# does against a worker's join target, so a sibling starting concurrently with genesis
+# just waits out genesis's install via its own connection retry, not a Terraform-level
+# barrier. Ordering *among* the additional nodes themselves (the real constraint — one
+# non-voting etcd learner at a time) remains handled by node-bootstrap's own staggered,
+# self-healing join-race retry (see modules/node-bootstrap/ansible/roles/rke2_bootstrap/
+# tasks/main.yml's "server-join | staggered, self-healing join" task).
 module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
   source = "../node-bootstrap"
-
-  depends_on = [module.node_bootstrap]
 
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name

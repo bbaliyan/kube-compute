@@ -292,17 +292,25 @@ module "node_bootstrap" {
   }
 }
 
-# depends_on the genesis node's node-bootstrap run (not just its VM/IP) — see
-# aws-control-plane's identical comment on module.node_bootstrap_additional
-# for the full reasoning: Ansible's local-exec model has no implicit
-# ordering across independent resources the way cloud-init's boot-time
-# model did, so this must be explicit here too.
+# Deliberately NOT depends_on module.node_bootstrap — see aws-control-plane's identical
+# comment on module.node_bootstrap_additional: that dependency forced every additional
+# server's OS-prep/install to wait for genesis's entire Ansible run, including its
+# post-Ready GitOps bootstrap, which has nothing to do with etcd join safety. RKE2's
+# server process retries its `server:` line the same way its agent process retries a
+# worker's join target (see aws-node-pool's established no-depends_on precedent), so a
+# sibling starting concurrently with genesis just waits out genesis's install via that
+# connection retry. The one genuine ordering requirement — genesis's dns-self-register
+# task (node_role == "server-init", gated on dns_self_register_zone) publishing
+# genesis_dns_name before a sibling resolves registration_address — self-resolves
+# without an explicit dependency: that task runs during genesis's OS-prep, well before
+# genesis's own RKE2 install, so it's very likely already published by the time a
+# concurrently-bootstrapping sibling reaches its own join attempt; if it isn't yet, the
+# sibling's join-race retry loop below (which already tolerates a not-yet-reachable
+# target) absorbs the wait via its ordinary wipe-and-retry cycle.
 module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
   source = "../node-bootstrap"
-
-  depends_on = [module.node_bootstrap]
 
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name
@@ -315,12 +323,11 @@ module "node_bootstrap_additional" {
   cni                      = local.effective_cni
   cilium_operator_replicas = local.effective_cilium_operator_replicas
   # local.registration_address (genesis's self-registered DNS name when DNS is
-  # configured, its raw IP otherwise) — the module's node-bootstrap dependency already
-  # forces genesis's Ansible run to finish first (see depends_on below), and genesis's
-  # own dns-self-register task (gated on node_role == "server-init", wired in
-  # module.node_bootstrap below) runs early in that same run, well before this
-  # staggered joiner's own sleep-then-join task fires. No round-robin race here (see
-  # cluster_fqdn's own doc) — this is always a single target.
+  # configured, its raw IP otherwise) — see the no-depends_on comment above
+  # module.node_bootstrap_additional for why genesis's dns-self-register task
+  # publishing this name before a sibling resolves it doesn't need an explicit
+  # Terraform dependency. No round-robin race here (see cluster_fqdn's own doc)
+  # — this is always a single target.
   registration_address = local.registration_address
   extra_tls_sans       = compact([local.wildcard_name, local.genesis_dns_name])
   cluster_token        = var.cluster_token

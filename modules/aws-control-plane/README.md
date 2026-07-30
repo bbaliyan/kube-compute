@@ -96,9 +96,12 @@ VPC (used for its security groups and the NLB target group) is derived from
 could disagree with where the instances actually launch.
 
 The genesis node (the same `server-init` node used for `control_plane_count = 1`) is unchanged in
-shape. Additional control-plane nodes (`server-join`) `depends_on` it and join via the NLB;
-Argo/platform GitOps inputs are only ever passed to the genesis node's `node-bootstrap` call, so
-platform bootstrap manifests are never applied — and never race — on more than one server.
+shape. Additional control-plane nodes (`server-join`) bootstrap concurrently with it and join via
+the NLB, retrying against the registration endpoint the same way a worker retries its join target
+until genesis is up; node-bootstrap's own staggered, self-healing retry handles the one genuine
+etcd constraint (one non-voting learner at a time) among the joining siblings. Argo/platform GitOps
+inputs are only ever passed to the genesis node's `node-bootstrap` call, so platform bootstrap
+manifests are never applied — and never race — on more than one server.
 
 ## Container Network Interface (CNI)
 
