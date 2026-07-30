@@ -1,12 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-module "component_versions" {
-  source = "../component-versions"
-}
-
 locals {
-  # Falls back to the platform-wide default when the caller doesn't override k8s_version.
-  k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
-
   network_rg = coalesce(var.network_resource_group_name, var.resource_group_name)
 
   has_domain    = var.cluster_domain != null
@@ -20,11 +13,6 @@ locals {
   # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one
   # replica permanently Pending on a genuinely single-node cluster.
   effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
-
-  # Kv name: 24-char Azure limit, globally unique — 18 chars of cluster_name (hyphens
-  # stripped; Key Vault names are alphanumeric-and-hyphen but a plain alnum body keeps this
-  # simple) + a 6-char random suffix = 24 exactly.
-  kv_name = "${substr("kv${replace(var.cluster_name, "-", "")}", 0, 18)}${random_string.kv_suffix.result}"
 
   # OS image: split a user-provided URN (Publisher:Offer:SKU:Version) or default to
   # AlmaLinux 10 gen2, same convention as node-azure.
@@ -44,68 +32,10 @@ locals {
   })
 }
 
-# ---- Join-token flow: pre-generated so a control plane + pool join in one apply pass ----
-# Two tokens, least privilege: the server token grants joining etcd/control-plane (delivered
-# directly to this control plane's own nodes as a run-command protected parameter —
-# control-plane nodes never fetch anything from Key Vault); the agent token is all a worker
-# ever receives, delivered via
-# Key Vault + managed identity so a compromised worker cannot
-# rejoin as a control-plane/etcd member.
-resource "random_password" "server_token" {
-  length  = 48
-  special = false
-}
-
-resource "random_password" "agent_token" {
-  length  = 48
-  special = false
-}
-
-resource "random_string" "kv_suffix" {
-  length  = 6
-  special = false
-  upper   = false
-}
-
-# ---- Key Vault: RBAC authorization, agent token only ----
-resource "azurerm_key_vault" "cluster" {
-  name                       = local.kv_name
-  resource_group_name        = var.resource_group_name
-  location                   = var.location
-  tenant_id                  = data.azurerm_client_config.current.tenant_id
-  sku_name                   = "standard"
-  rbac_authorization_enabled = true
-  tags                       = local.common_tags
-}
-
-# RBAC authorization grants nothing implicitly — the executing principal needs an explicit
-# role to write the secret below. NOTE: Azure role assignments are eventually consistent
-# (documented propagation delay of up to a few minutes); a first `tofu apply` immediately
-# after vault creation may need to be re-run if the secret write races this assignment. See
-# README for the operator-facing version of this note.
-resource "azurerm_role_assignment" "kv_admin_self" {
-  scope                = azurerm_key_vault.cluster.id
-  role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
-
-resource "azurerm_key_vault_secret" "agent_token" {
-  name         = "agent-token"
-  value        = random_password.agent_token.result
-  key_vault_id = azurerm_key_vault.cluster.id
-  tags         = local.common_tags
-
-  depends_on = [azurerm_role_assignment.kv_admin_self]
-}
-
 # ---- Application Security Groups: the Azure equivalent of AWS's self-referencing SG ----
-resource "azurerm_application_security_group" "cluster" {
-  name                = "asg-${var.cluster_name}-cluster"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  tags                = local.common_tags
-}
-
+# The cluster-wide ASG (var.cluster_asg_id) now lives in azure-cluster-facts — both this
+# module's own NICs and azure-node-pool's worker NICs join it by id. Only the etcd ASG,
+# which azure-node-pool never joins, stays owned here.
 resource "azurerm_application_security_group" "etcd" {
   name                = "asg-${var.cluster_name}-etcd"
   resource_group_name = var.resource_group_name
@@ -151,8 +81,8 @@ resource "azurerm_network_security_rule" "cluster_self" {
   protocol                                   = "*"
   source_port_range                          = "*"
   destination_port_range                     = "*"
-  source_application_security_group_ids      = [azurerm_application_security_group.cluster.id]
-  destination_application_security_group_ids = [azurerm_application_security_group.cluster.id]
+  source_application_security_group_ids      = [var.cluster_asg_id]
+  destination_application_security_group_ids = [var.cluster_asg_id]
 }
 
 # etcd (2379-2380) is control-plane-to-control-plane only, via the separate etcd ASG that
@@ -220,7 +150,7 @@ resource "azurerm_network_interface_application_security_group_association" "clu
   for_each = azurerm_network_interface.control_plane
 
   network_interface_id          = each.value.id
-  application_security_group_id = azurerm_application_security_group.cluster.id
+  application_security_group_id = var.cluster_asg_id
 }
 
 resource "azurerm_network_interface_application_security_group_association" "etcd" {
@@ -241,15 +171,15 @@ module "bootstrap" {
   ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
-  k8s_version                    = local.k8s_version
+  k8s_version                    = var.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
   cluster_fqdn_suffix            = local.fqdn_suffix
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
   cilium_operator_replicas       = local.effective_cilium_operator_replicas
-  cluster_token                  = random_password.server_token.result
-  cluster_agent_token            = random_password.agent_token.result
+  cluster_token                  = var.cluster_token
+  cluster_agent_token            = var.cluster_agent_token
   registration_address           = local.registration_address
   extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   trusted_ca_pem                 = var.trusted_ca_pem
@@ -313,7 +243,7 @@ module "bootstrap_additional" {
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name
   node_name                = "${var.cluster_name}-cp-${each.key}"
-  k8s_version              = local.k8s_version
+  k8s_version              = var.k8s_version
   cluster_fqdn             = local.cluster_fqdn
   cluster_fqdn_suffix      = local.fqdn_suffix
   node_role                = "server-join"
@@ -322,7 +252,7 @@ module "bootstrap_additional" {
   cilium_operator_replicas = local.effective_cilium_operator_replicas
   registration_address     = local.registration_address
   extra_tls_sans           = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  cluster_token            = random_password.server_token.result
+  cluster_token            = var.cluster_token
   trusted_ca_pem           = var.trusted_ca_pem
   registry_mirror_url      = var.registry_mirror_url
   cert_mode                = var.cert_mode

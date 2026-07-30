@@ -17,9 +17,35 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Sourced from this cluster's cluster-facts unit — both control-plane and node-pool consume the same resolved value, so version-skew between them is prevented by construction rather than checked at runtime."
   type        = string
-  default     = null
+}
+
+variable "cluster_token" {
+  description = "Join token from this cluster's cluster-facts unit. Passed straight through to every node-bootstrap call (server-init and server-join alike)."
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_agent_token" {
+  description = "Agent token from this cluster's cluster-facts unit. Passed to the genesis (server-init) node-bootstrap call only, which needs the raw value; azure-node-pool never needs it directly, since workers read it via their own Key Vault role assignment."
+  type        = string
+  sensitive   = true
+}
+
+variable "key_vault_id" {
+  description = "Resource ID of the Key Vault holding the agent join token, from this cluster's cluster-facts unit."
+  type        = string
+}
+
+variable "agent_token_secret_name" {
+  description = "Name of the Key Vault secret holding the agent join token, from this cluster's cluster-facts unit."
+  type        = string
+}
+
+variable "cluster_asg_id" {
+  description = "ID of the cluster-wide Application Security Group, from this cluster's cluster-facts unit. This module's own NICs join it by id, same as azure-node-pool's workers."
+  type        = string
 }
 
 variable "trusted_ca_pem" {

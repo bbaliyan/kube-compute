@@ -6,11 +6,8 @@ mock_provider "azurerm" {
   mock_data "azurerm_subnet" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-main/subnets/snet-k8s" }
   }
-  mock_resource "azurerm_key_vault" {
-    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.KeyVault/vaults/kvbharat123456" }
-  }
   mock_resource "azurerm_application_security_group" {
-    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster" }
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-etcd" }
   }
   mock_resource "azurerm_network_security_group" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/networkSecurityGroups/nsg-bharat-cp" }
@@ -29,15 +26,20 @@ mock_provider "azurerm" {
 run "cluster_firewall_uses_asg_membership_not_cidr" {
   command = plan
   variables {
-    cluster_name          = "bharat"
-    k8s_version           = "v1.36.2+rke2r1"
-    resource_group_name   = "rg-k8s"
-    location              = "eastus"
-    vnet_name             = "vnet-main"
-    subnet_name           = "snet-k8s"
-    vm_size               = "Standard_D4s_v3"
-    admin_ssh_public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-compute-test"
-    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    cluster_name             = "bharat"
+    k8s_version              = "v1.36.2+rke2r1"
+    resource_group_name      = "rg-k8s"
+    location                 = "eastus"
+    vnet_name                = "vnet-main"
+    subnet_name               = "snet-k8s"
+    vm_size                  = "Standard_D4s_v3"
+    admin_ssh_public_key     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-compute-test"
+    allowed_ingress_cidrs   = ["10.0.0.0/8"]
+    cluster_token           = "mock-server-token"
+    cluster_agent_token     = "mock-agent-token"
+    key_vault_id            = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.KeyVault/vaults/kvbharat123456"
+    agent_token_secret_name = "agent-token"
+    cluster_asg_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster"
   }
   assert {
     condition     = azurerm_network_security_rule.deny_ssh.access == "Deny"
@@ -48,11 +50,11 @@ run "cluster_firewall_uses_asg_membership_not_cidr" {
     error_message = "deny_ssh must be priority 100, the highest precedence"
   }
   assert {
-    condition     = tolist(azurerm_network_security_rule.cluster_self.source_application_security_group_ids)[0] == azurerm_application_security_group.cluster.id
+    condition     = tolist(azurerm_network_security_rule.cluster_self.source_application_security_group_ids)[0] == var.cluster_asg_id
     error_message = "the cluster-wide rule must reference the cluster ASG as both source and destination"
   }
   assert {
-    condition     = tolist(azurerm_network_security_rule.cluster_self.destination_application_security_group_ids)[0] == azurerm_application_security_group.cluster.id
+    condition     = tolist(azurerm_network_security_rule.cluster_self.destination_application_security_group_ids)[0] == var.cluster_asg_id
     error_message = "the cluster-wide rule must reference the cluster ASG as both source and destination"
   }
   assert {

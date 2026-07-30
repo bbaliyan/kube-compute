@@ -55,34 +55,14 @@ output "location" {
 }
 
 output "k8s_version" {
-  description = "K8s distro version installed on this control plane's control-plane nodes. Wire azure-node-pool's control_plane_k8s_version to this output so the version-skew guard is enforced automatically."
-  value       = local.k8s_version
+  description = "K8s distro version installed on this control plane's control-plane nodes. Sourced from the same cluster-facts unit azure-node-pool also consumes, so version-skew between them is prevented by construction."
+  value       = var.k8s_version
 }
 
 # ---- Join flow: consumed by azure-node-pool ----
 output "registration_address" {
   description = "Address workers/joining servers use to reach the cluster API: null for control_plane_count = 1 (no endpoint at all), the internal Standard LB's frontend private IP otherwise."
   value       = local.registration_address
-}
-
-output "key_vault_id" {
-  description = "Resource ID of the Key Vault holding the agent join token. azure-node-pool's role assignment is scoped under this vault at the individual-secret level."
-  value       = azurerm_key_vault.cluster.id
-}
-
-output "key_vault_name" {
-  description = "Name of the Key Vault holding the agent join token (used to build the vault URI in azure-node-pool's agent_token_fetch_command)."
-  value       = azurerm_key_vault.cluster.name
-}
-
-output "agent_token_secret_name" {
-  description = "Name of the Key Vault secret holding the agent join token ('agent-token'). azure-node-pool's managed identity is granted read access scoped to exactly this secret."
-  value       = azurerm_key_vault_secret.agent_token.name
-}
-
-output "cluster_asg_id" {
-  description = "ID of the cluster-wide Application Security Group. azure-node-pool's VM Scale Set NICs join this ASG by id — it never creates or owns the ASG itself."
-  value       = azurerm_application_security_group.cluster.id
 }
 
 output "control_plane_node_refs" {
