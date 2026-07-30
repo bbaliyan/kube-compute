@@ -69,8 +69,10 @@ locals {
   # block below always has a syntactically valid value.
   tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
 
-  # One IP per control-plane node; index 0 is genesis. DHCP only when control_plane_count = 1
-  # and control_plane_ip_addresses was left null (parity with node-proxmox's existing default).
+  # One IP per control-plane node; index 0 is genesis. DHCP (control_plane_ip_addresses left
+  # null) works at any control_plane_count — every additional control-plane VM shares the
+  # same network_data_dhcp[0] content (see control_plane_additional's initialization block
+  # below), resolved individually post-apply via the Proxmox guest agent same as genesis.
   static_ips  = var.control_plane_ip_addresses != null
   cp_ip_cidrs = local.static_ips ? var.control_plane_ip_addresses : []
 
@@ -526,10 +528,14 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
   }
 
   initialization {
-    datastore_id         = var.disk_datastore_id
-    user_data_file_id    = proxmox_virtual_environment_file.hostname_init_additional[each.key].id
-    vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
-    network_data_file_id = proxmox_virtual_environment_file.network_data[each.key].id
+    datastore_id        = var.disk_datastore_id
+    user_data_file_id   = proxmox_virtual_environment_file.hostname_init_additional[each.key].id
+    vendor_data_file_id = proxmox_virtual_environment_file.vendor_data.id
+    # Same static/DHCP branch as the primary control_plane resource above
+    # (network_data is empty when static_ips is false — a DHCP HA cluster has
+    # no per-index entries there, just the one shared network_data_dhcp[0]
+    # content, identical for every control-plane node).
+    network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data[each.key].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
   }
 
   depends_on = [proxmox_virtual_environment_vm.control_plane]

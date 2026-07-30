@@ -98,3 +98,25 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
     error_message = "control_plane_node_refs must have one entry per control-plane node"
   }
 }
+
+run "ha_control_plane_over_dhcp" {
+  command = plan
+  variables {
+    control_plane_count  = 3
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
+    # control_plane_ip_addresses / vm_gateway left unset: DHCP for every node,
+    # including the additional (non-genesis) control-plane VMs — regression
+    # coverage for the "Invalid index" plan-time crash this combination
+    # previously hit (control_plane_additional indexed the static-only
+    # network_data map unconditionally, which is empty under DHCP).
+  }
+
+  assert {
+    condition     = length(proxmox_virtual_environment_vm.control_plane_additional) == 2
+    error_message = "control_plane_count = 3 over DHCP must still create exactly 2 additional control-plane VMs"
+  }
+}

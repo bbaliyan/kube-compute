@@ -13,4 +13,8 @@ run "ipset_names_follow_the_naming_convention" {
     condition     = output.etcd_ipset_name == "kube-compute-bharat-etcd"
     error_message = "etcd_ipset_name must follow the kube-compute-<cluster_name>-etcd convention that proxmox-control-plane and proxmox-node-pool both depend on"
   }
+  assert {
+    condition     = output.cluster_name == "bharat"
+    error_message = "cluster_name must be re-exported unchanged — it's the single source of truth control-plane/node-pool units source their own cluster_name from"
+  }
 }

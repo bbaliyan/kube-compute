@@ -1,4 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+output "cluster_name" {
+  description = "Cluster identity, as passed in. The single source of truth for this cluster's name — control-plane and node-pool units source it from here instead of each re-deriving or re-hardcoding it."
+  value       = var.cluster_name
+}
+
 output "server_token" {
   description = "Shared secret used to join a server to the cluster. Re-exported from the shared cluster-facts core."
   value       = module.cluster_facts.server_token
