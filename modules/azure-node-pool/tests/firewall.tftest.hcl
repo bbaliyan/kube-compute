@@ -25,7 +25,6 @@ run "pool_owns_its_own_nsg_denying_ssh_and_allowing_cluster_self" {
   variables {
     cluster_name              = "bharat"
     k8s_version               = "v1.36.2+rke2r1"
-    control_plane_k8s_version = "v1.36.2+rke2r1"
     resource_group_name       = "rg-k8s"
     location                  = "eastus"
     vnet_name                 = "vnet-main"

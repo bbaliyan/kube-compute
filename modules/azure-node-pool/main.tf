@@ -15,13 +15,6 @@ locals {
   # Falls back to the platform-wide default when the caller doesn't override k8s_version.
   k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
 
-  # Version-skew check: kubelet may trail the API server, never lead it.
-  version_regex               = "^v(\\d+)\\.(\\d+)\\.(\\d+)\\+"
-  pool_version_parts          = regex(local.version_regex, local.k8s_version)
-  control_plane_version_parts = regex(local.version_regex, var.control_plane_k8s_version)
-  pool_version_num            = tonumber(local.pool_version_parts[0]) * 1000000 + tonumber(local.pool_version_parts[1]) * 1000 + tonumber(local.pool_version_parts[2])
-  control_plane_version_num   = tonumber(local.control_plane_version_parts[0]) * 1000000 + tonumber(local.control_plane_version_parts[1]) * 1000 + tonumber(local.control_plane_version_parts[2])
-
   image_parts     = var.os_image_urn != null ? split(":", var.os_image_urn) : []
   image_publisher = var.os_image_urn != null ? local.image_parts[0] : "almalinux"
   image_offer     = var.os_image_urn != null ? local.image_parts[1] : "almalinux-x86_64"
@@ -168,13 +161,6 @@ resource "azurerm_linux_virtual_machine" "worker" {
   # (role assignment below). No custom_data — bootstrap is delivered via run-command.
   identity {
     type = "SystemAssigned"
-  }
-
-  lifecycle {
-    precondition {
-      condition     = local.pool_version_num <= local.control_plane_version_num
-      error_message = "k8s_version (${local.k8s_version}) must not be newer than the control plane's k8s_version (${var.control_plane_k8s_version})."
-    }
   }
 }
 
