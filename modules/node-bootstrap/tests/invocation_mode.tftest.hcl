@@ -32,10 +32,10 @@ run "on_node_server_init_renders_self_contained_bundle" {
   command = plan
 
   variables {
-    invocation_mode      = "on_node"
-    node_role            = "server-init"
-    cluster_token        = "SUPERSECRETTOKEN123"
-    cluster_agent_token  = "SUPERSECRETAGENT456"
+    invocation_mode          = "on_node"
+    node_role                = "server-init"
+    cluster_token            = "SUPERSECRETTOKEN123"
+    cluster_agent_token      = "SUPERSECRETAGENT456"
     gitops_platform_repo_url = "https://example.test/platform.git"
   }
 

@@ -15,10 +15,10 @@ variables {
   node_name    = "test-cp-0"
   k8s_version  = "v1.36.2+rke2r1"
 
-  invocation_mode      = "on_node"
-  node_role            = "server-init"
-  cluster_token        = "tok"
-  cluster_agent_token  = "agenttok"
+  invocation_mode     = "on_node"
+  node_role           = "server-init"
+  cluster_token       = "tok"
+  cluster_agent_token = "agenttok"
 }
 
 run "null_repo_url_falls_back_to_the_pin" {
