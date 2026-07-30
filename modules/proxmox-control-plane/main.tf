@@ -234,7 +234,7 @@ module "node_bootstrap" {
   cilium_operator_replicas       = local.effective_cilium_operator_replicas
   cluster_token                  = var.cluster_token
   cluster_agent_token            = var.cluster_agent_token
-  extra_tls_sans                 = compact([local.wildcard_name])
+  extra_tls_sans                 = compact([local.wildcard_name, local.genesis_dns_name])
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_root_repo_url           = var.gitops_root_repo_url
@@ -320,7 +320,7 @@ module "node_bootstrap_additional" {
   # staggered joiner's own sleep-then-join task fires. No round-robin race here (see
   # cluster_fqdn's own doc) — this is always a single target.
   registration_address = local.registration_address
-  extra_tls_sans       = compact([local.wildcard_name])
+  extra_tls_sans       = compact([local.wildcard_name, local.genesis_dns_name])
   cluster_token        = var.cluster_token
   trusted_ca_pem       = var.trusted_ca_pem
   registry_mirror_url  = var.registry_mirror_url
