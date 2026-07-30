@@ -242,6 +242,13 @@ locals {
       [for ip in flatten(vm.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
     )
   }
+
+  # Projected down to vm_id only, same pattern proxmox-control-plane's all_cp_vm_ids
+  # uses: for_each-ing the full proxmox_virtual_environment_vm object carries every
+  # attribute (including deprecated ones like timeout_move_disk) into the consuming
+  # resource, which is what surfaces the provider's "derived from a deprecated
+  # source" warning even though only vm_id is ever used below.
+  worker_vm_ids = { for k, vm in proxmox_virtual_environment_vm.worker : k => vm.vm_id }
 }
 
 # Workers don't need to wait on each other the way server-join siblings do
@@ -319,10 +326,10 @@ module "dns_registration" {
 }
 
 resource "proxmox_virtual_environment_firewall_options" "worker" {
-  for_each = proxmox_virtual_environment_vm.worker
+  for_each = local.worker_vm_ids
 
   node_name     = var.proxmox_node
-  vm_id         = each.value.vm_id
+  vm_id         = each.value
   enabled       = true
   dhcp          = !local.static_ips
   input_policy  = "DROP"
@@ -330,10 +337,10 @@ resource "proxmox_virtual_environment_firewall_options" "worker" {
 }
 
 resource "proxmox_virtual_environment_firewall_rules" "worker" {
-  for_each = proxmox_virtual_environment_vm.worker
+  for_each = local.worker_vm_ids
 
   node_name = var.proxmox_node
-  vm_id     = each.value.vm_id
+  vm_id     = each.value
 
   rule {
     type    = "in"
