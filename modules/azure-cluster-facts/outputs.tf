@@ -42,17 +42,17 @@ output "platform_enabled" {
 }
 
 output "platform_repo_url_override" {
-  description = "Consumer override for kube-platform's repo URL, or null to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core."
+  description = "Consumer override for kube-platform's repo URL, or \"\" to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core (see its output description for why \"\" and not null)."
   value       = module.cluster_facts.platform_repo_url_override
 }
 
 output "platform_revision_override" {
-  description = "Consumer override for the platform Application's tracked revision, or null to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core."
+  description = "Consumer override for the platform Application's tracked revision, or \"\" to use node-bootstrap's own pinned default. Re-exported from the shared cluster-facts core."
   value       = module.cluster_facts.platform_revision_override
 }
 
 output "workloads_repo_url" {
-  description = "Optional user-defined workloads Application source repo, or null for no workloads Application. Re-exported from the shared cluster-facts core."
+  description = "Optional user-defined workloads Application source repo, or \"\" for no workloads Application. Re-exported from the shared cluster-facts core."
   value       = module.cluster_facts.workloads_repo_url
 }
 

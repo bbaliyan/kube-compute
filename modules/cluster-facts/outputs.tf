@@ -22,18 +22,18 @@ output "platform_enabled" {
 }
 
 output "platform_repo_url_override" {
-  description = "Consumer override for kube-platform's repo URL, or null to use node-bootstrap's own pinned default. Re-exported verbatim."
-  value       = var.platform_repo_url_override
+  description = "Consumer override for kube-platform's repo URL, or \"\" to use node-bootstrap's own pinned default. \"\" rather than null: OpenTofu drops null-valued root outputs from state entirely, which breaks any Terragrunt dependency block referencing this attribute the moment its value is null (the common case) — \"empty means unset\" is this codebase's established idiom for exactly this reason (see e.g. node-bootstrap's own cluster_fqdn/registration_address handling)."
+  value       = var.platform_repo_url_override != null ? var.platform_repo_url_override : ""
 }
 
 output "platform_revision_override" {
-  description = "Consumer override for the platform Application's tracked revision, or null to use node-bootstrap's own pinned default. Re-exported verbatim."
-  value       = var.platform_revision_override
+  description = "Consumer override for the platform Application's tracked revision, or \"\" to use node-bootstrap's own pinned default. See platform_repo_url_override's description for why this is \"\" and not null."
+  value       = var.platform_revision_override != null ? var.platform_revision_override : ""
 }
 
 output "workloads_repo_url" {
-  description = "Optional user-defined workloads Application source repo, or null for no workloads Application. Re-exported verbatim."
-  value       = var.workloads_repo_url
+  description = "Optional user-defined workloads Application source repo, or \"\" for no workloads Application. See platform_repo_url_override's description for why this is \"\" and not null."
+  value       = var.workloads_repo_url != null ? var.workloads_repo_url : ""
 }
 
 output "workloads_revision" {
