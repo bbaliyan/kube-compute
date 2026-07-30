@@ -150,15 +150,15 @@ variable "gitops_platform_enabled" {
 }
 
 variable "gitops_platform_repo_url" {
-  description = "Argo CD platform Application source repo (kube-platform or a fork). Defaults to this project's own kube-platform repo — override to point at a fork. Only takes effect when gitops_platform_enabled is true, and only meaningful for node_role = server-init."
+  description = "Argo CD platform Application source repo (kube-platform or a fork). Null/\"\" (the default) falls back to local.pinned_platform_repo_url — see that local for why the pin lives there rather than as this variable's default. Only takes effect when gitops_platform_enabled is true, and only meaningful for node_role = server-init."
   type        = string
-  default     = "https://github.com/bbaliyan/kube-platform.git"
+  default     = null
 }
 
 variable "gitops_platform_revision" {
-  description = "Branch/tag/SHA the platform Application tracks. Defaults to a pinned commit SHA, not a floating branch — kube-platform is an actively developed repo, and this project's example clusters are only ever tested against one specific revision at a time. Bump deliberately (alongside re-testing the example clusters), don't let it float to main. Override for a fork or to track a different revision."
+  description = "Branch/tag/SHA the platform Application tracks. Null/\"\" (the default) falls back to local.pinned_platform_revision — see that local for why the pin lives there rather than as this variable's default. Override for a fork or to track a different revision."
   type        = string
-  default     = "5f07c871fa84b903a930ae3f61280d79d008c5ae"
+  default     = null
 }
 
 variable "argocd_version" {

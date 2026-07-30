@@ -1,15 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  # cluster-facts re-exports these overrides as "" rather than null (OpenTofu
-  # drops null-valued root outputs from state entirely, breaking any
-  # Terragrunt dependency block referencing them the moment the value is
-  # actually null — the common, default case here). node-bootstrap's own
-  # pinned-default fallback relies on receiving a genuine Terraform `null`
-  # for this module argument (passing "" would set an empty repo URL instead
-  # of falling back to the pin), so convert back at this boundary.
-  effective_gitops_platform_repo_url_override = var.gitops_platform_repo_url_override != "" ? var.gitops_platform_repo_url_override : null
-  effective_gitops_platform_revision_override = var.gitops_platform_revision_override != "" ? var.gitops_platform_revision_override : null
-
   # Connectivity-only user-data replacing cloud-init's full RKE2 payload.
   # AWS's own docs list AlmaLinux among AMIs that "likely" ship the SSM
   # Agent pre-installed (Community/Marketplace AMIs, not AWS-guaranteed, can
@@ -223,8 +213,8 @@ module "node_bootstrap" {
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
   gitops_platform_enabled        = var.gitops_platform_enabled
-  gitops_platform_repo_url       = local.effective_gitops_platform_repo_url_override
-  gitops_platform_revision       = local.effective_gitops_platform_revision_override
+  gitops_platform_repo_url       = var.gitops_platform_repo_url_override
+  gitops_platform_revision       = var.gitops_platform_revision_override
   gitops_workloads_repo_url      = var.gitops_workloads_repo_url
   gitops_workloads_revision      = var.gitops_workloads_revision
   gitops_workloads_path          = var.gitops_workloads_path

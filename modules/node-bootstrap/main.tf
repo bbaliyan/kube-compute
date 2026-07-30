@@ -12,11 +12,24 @@ locals {
   cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
   argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
 
+  # Single source of truth for the kube-platform pin. NOT the gitops_platform_repo_url/
+  # _revision variables' own defaults: a caller (a *-control-plane module) passing an
+  # explicit null/"" to override-back-to-the-pin does NOT fall through to a variable's
+  # own default the way an omitted argument would — that "explicit null uses the
+  # callee's default" convenience is specific to optional() object-type attributes,
+  # not plain string variables passed through a module call. Verified the hard way: a
+  # real apply, and a regression test below, both showed a literal null reaching
+  # Ansible's extra-vars (crashing the `| length > 0` gate) instead of the pin.
+  # coalesce() is the actual fix — it treats both null and "" as "not set" uniformly.
+  pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
+  pinned_platform_revision = "5f07c871fa84b903a930ae3f61280d79d008c5ae"
+
   # gitops_platform_enabled = false clears the repo URL to "" regardless of the pin,
   # so every gate downstream (this module's own tasks, plus the bootstrap-runner
   # template's Argo CD render) can keep testing "repo_url non-empty" as the single
   # signal, matching gitops_workloads_repo_url's existing null-means-skip shape.
-  effective_gitops_platform_repo_url = var.gitops_platform_enabled ? var.gitops_platform_repo_url : ""
+  effective_gitops_platform_repo_url = var.gitops_platform_enabled ? coalesce(var.gitops_platform_repo_url, local.pinned_platform_repo_url) : ""
+  effective_gitops_platform_revision = coalesce(var.gitops_platform_revision, local.pinned_platform_revision)
 
   # nsupdate's `zone` directive requires a fully-qualified (trailing-dot) name, but
   # callers commonly pass a bare zone (e.g. "lan") the way they would to any other
@@ -121,7 +134,7 @@ locals {
     extra_server_manifests         = var.extra_server_manifests
     gitops_platform_repo_url       = local.effective_gitops_platform_repo_url
     argocd_version                 = local.argocd_version
-    gitops_platform_revision       = var.gitops_platform_revision
+    gitops_platform_revision       = local.effective_gitops_platform_revision
     gitops_workloads_repo_url      = var.gitops_workloads_repo_url != null ? var.gitops_workloads_repo_url : ""
     gitops_workloads_revision      = var.gitops_workloads_revision
     gitops_workloads_path          = var.gitops_workloads_path
