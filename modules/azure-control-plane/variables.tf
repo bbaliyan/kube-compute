@@ -33,16 +33,6 @@ variable "cluster_agent_token" {
   sensitive   = true
 }
 
-variable "key_vault_id" {
-  description = "Resource ID of the Key Vault holding the agent join token, from this cluster's cluster-facts unit."
-  type        = string
-}
-
-variable "agent_token_secret_name" {
-  description = "Name of the Key Vault secret holding the agent join token, from this cluster's cluster-facts unit."
-  type        = string
-}
-
 variable "cluster_asg_id" {
   description = "ID of the cluster-wide Application Security Group, from this cluster's cluster-facts unit. This module's own NICs join it by id, same as azure-node-pool's workers."
   type        = string
