@@ -23,22 +23,21 @@ mock_provider "azurerm" {
 run "workers_are_discrete_vms_joining_via_run_command_and_key_vault" {
   command = apply
   variables {
-    cluster_name              = "bharat"
-    k8s_version               = "v1.36.2+rke2r1"
-    control_plane_k8s_version = "v1.36.2+rke2r1"
-    resource_group_name       = "rg-k8s"
-    location                  = "eastus"
-    vnet_name                 = "vnet-main"
-    subnet_name               = "snet-k8s"
-    vm_size                   = "Standard_D2s_v3"
-    admin_ssh_public_key      = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-compute-test"
-    zone                      = "1"
-    desired_count             = 2
-    registration_address      = "10.0.1.100"
-    key_vault_id              = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.KeyVault/vaults/kvbharat123456"
-    key_vault_name            = "kvbharat123456"
-    agent_token_secret_name   = "agent-token"
-    cluster_asg_id            = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster"
+    cluster_name            = "bharat"
+    k8s_version             = "v1.36.2+rke2r1"
+    resource_group_name     = "rg-k8s"
+    location                = "eastus"
+    vnet_name               = "vnet-main"
+    subnet_name             = "snet-k8s"
+    vm_size                 = "Standard_D2s_v3"
+    admin_ssh_public_key    = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOF9Xy9WCQuyo/3og15+j5Ss+TmRR2ZvyK7fMy6jm707lpCAWUUSObF5ASCdyCmOkEN4+AffIB9evB4Jl+InhAglVSxYo+BTkUPraqzUU/CWTK/uecwCHsa497QCGmdUFaCQTt67WNFxFXJgvoDkKg0bWErs6W0zrEjj4z063GnN4Mj8bChd7GnQ+J8Lu6DryBtJRAIq4V7Nu7V4U91dhcffiX07k9OHLQDRReFCBGeXBK+HcQKFopoD1F5uVKlq8igF7U0HKTFup6IeE11+iRu7X2l6HbOda98Jgbu/PFue57yBdHgla9QFWvC0kyaw5V0DTJ6gG4Dpw35cLwiHct ci@kube-compute-test"
+    zone                    = "1"
+    desired_count           = 2
+    registration_address    = "10.0.1.100"
+    key_vault_id            = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.KeyVault/vaults/kvbharat123456"
+    key_vault_name          = "kvbharat123456"
+    agent_token_secret_name = "agent-token"
+    cluster_asg_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-k8s/providers/Microsoft.Network/applicationSecurityGroups/asg-bharat-cluster"
   }
   # Discrete VMs, not a VMSS.
   assert {

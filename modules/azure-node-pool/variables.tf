@@ -17,7 +17,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version this pool's workers install. Must not be newer than control_plane_k8s_version. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version this pool's workers install. Sourced from the same cluster-facts unit azure-control-plane also consumes, so version-skew between them is prevented by construction. Null uses the platform default (module.component_versions.k8s_version)."
   type        = string
   default     = null
 }
@@ -117,33 +117,28 @@ variable "desired_count" {
   }
 }
 
-variable "control_plane_k8s_version" {
-  description = "The control plane's k8s_version output. This pool's k8s_version is rejected if it is newer."
-  type        = string
-}
-
 variable "registration_address" {
   description = "The control plane's registration_address output. Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
   type        = string
 }
 
 variable "key_vault_id" {
-  description = "The control plane's key_vault_id output. This pool's role assignment is scoped under this vault at the individual-secret level (key_vault_id + /secrets/ + agent_token_secret_name)."
+  description = "This cluster's cluster-facts key_vault_id output. This pool's role assignment is scoped under this vault at the individual-secret level (key_vault_id + /secrets/ + agent_token_secret_name)."
   type        = string
 }
 
 variable "key_vault_name" {
-  description = "The control plane's key_vault_name output. Used to build the vault URI in the agent token fetch command."
+  description = "This cluster's cluster-facts key_vault_name output. Used to build the vault URI in the agent token fetch command."
   type        = string
 }
 
 variable "agent_token_secret_name" {
-  description = "The control plane's agent_token_secret_name output. This pool's managed identity is granted read access scoped to exactly this one secret."
+  description = "This cluster's cluster-facts agent_token_secret_name output. This pool's managed identity is granted read access scoped to exactly this one secret."
   type        = string
 }
 
 variable "cluster_asg_id" {
-  description = "The control plane's cluster_asg_id output. Every worker NIC joins this Application Security Group for east-west cluster access; this module owns no other ASG."
+  description = "This cluster's cluster-facts cluster_asg_id output. Every worker NIC joins this Application Security Group for east-west cluster access; this module owns no other ASG."
   type        = string
 }
 
