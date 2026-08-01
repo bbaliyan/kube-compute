@@ -55,6 +55,16 @@ output "proxmox_node" {
   value       = var.proxmox_node
 }
 
+output "ansible_ssh_user" {
+  description = "SSH user Ansible connects as for guest access (os-patch and any other ops tooling) — same account node-bootstrap itself connects as."
+  value       = var.ansible_ssh_user
+}
+
+output "ansible_ssh_private_key_file" {
+  description = "Path to the SSH private key for guest access — same key node-bootstrap itself connects with. Not marked sensitive: a path, not the key material itself."
+  value       = var.ansible_ssh_private_key_file
+}
+
 output "k8s_version" {
   description = "K8s distro version installed on this control plane's control-plane nodes."
   value       = var.k8s_version

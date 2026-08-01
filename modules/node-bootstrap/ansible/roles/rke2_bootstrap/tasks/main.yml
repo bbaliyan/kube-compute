@@ -39,6 +39,25 @@
     dest: /etc/udev/rules.d/80-hotplug-cpu-online.rules
     mode: "0644"
 
+# Precautionary hygiene, not a confirmed fix for any one incident: PackageKit
+# and dnf-makecache.timer can both hold the rpm lock in the background,
+# causing a concurrent/later dnf call to fail with "cannot open Packages
+# database" / "rpmdb open failed". Disabling both, permanently, costs
+# nothing on a single-purpose node and removes two real (if not fully
+# diagnosed as causal — see os-patch/README.md's transport history)
+# candidates before the *first* dnf call in this file.
+- name: os-prep | permanently quiesce background dnf/rpm-lock holders
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - packagekit
+    - packagekit.socket
+    - dnf-makecache.timer
+    - dnf-makecache.service
+  failed_when: false
+
 # Full OS currency, run before anything kernel-version-sensitive below (the
 # kernel-modules-extra-matched install right after this needs to target
 # whatever kernel is *actually* running post-update, not the one baked into
@@ -116,22 +135,27 @@
       sysctl --system
     creates: /etc/modules-load.d/rke2.conf
 
-- name: os-prep | enable qemu-guest-agent guest-exec (Proxmox node access, no SSH)
-  # guest-exec is the only non-SSH way to run commands inside a Proxmox VM (`qm
-  # guest exec`, per this project's zero-inbound-port constraint) — but RHEL-family
-  # guests ship it disabled by default via a blacklist in /etc/sysconfig/qemu-ga.
-  # Harmless/no-op on AWS/Azure: qemu-guest-agent isn't installed there and this
-  # file path doesn't exist, but the task must still succeed on every provider, so
-  # it's gated on the package actually being present rather than assuming Proxmox.
-  ansible.builtin.shell:
-    cmd: |
-      set -euo pipefail
-      dnf install -y qemu-guest-agent
-      if [ -f /etc/sysconfig/qemu-ga ]; then
-        sed -i 's/^BLACKLIST_RPC=.*/BLACKLIST_RPC=/' /etc/sysconfig/qemu-ga
-      fi
-      systemctl enable --now qemu-guest-agent
-      systemctl restart qemu-guest-agent
+- name: os-prep | install and enable qemu-guest-agent (Proxmox lifecycle integration)
+  # Standard Proxmox integration: clean guest shutdown/reboot, IP reporting in
+  # the PVE UI, filesystem freeze/thaw for backup consistency. Does NOT enable
+  # guest-exec — os-patch's ongoing lifecycle management connects over SSH
+  # instead (kube-claude wayfinder map #26: the guest-agent API transport was
+  # tried and abandoned after proving unworkable live — persistent, never
+  # fully explained rpmdb access failures specific to that transport, not
+  # reproducible over SSH; see os-patch/README.md). Harmless/no-op on
+  # AWS/Azure: qemu-guest-agent isn't installed there, but the task must still
+  # succeed on every provider, so it's gated on virtualization_type rather
+  # than assuming Proxmox.
+  ansible.builtin.dnf:
+    name: qemu-guest-agent
+    state: present
+  when: ansible_facts['virtualization_type'] | default('') == 'kvm'
+
+- name: os-prep | enable qemu-guest-agent
+  ansible.builtin.systemd:
+    name: qemu-guest-agent
+    state: started
+    enabled: true
   when: ansible_facts['virtualization_type'] | default('') == 'kvm'
 
 - name: os-prep | label the local-path-provisioner directory for container write access
@@ -235,15 +259,6 @@
     mode: "0644"
   when: registry_mirror_url | length > 0
 
-- name: selinux-prep | quiesce packagekit (holds the rpm lock intermittently)
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: stopped
-  loop:
-    - packagekit
-    - packagekit.socket
-  failed_when: false
-
 - name: selinux-prep | add the rancher-rke2-common repo
   ansible.builtin.yum_repository:
     name: rancher-rke2-common-stable
@@ -265,6 +280,9 @@
 - name: selinux-prep | install rke2-selinux (retry + self-heal on lock contention)
   # No `creates:` guard — rke2-selinux writes no stable marker file. `dnf install`
   # on an already-installed package is a fast no-op, so re-running is safe.
+  # Same retry+pkill shape mirrored in kube-examples' os-patch/tasks/patch.yml
+  # for its own `dnf update -y` — not shared/extracted since these are two
+  # independent public repos; if a third copy shows up, extract then.
   ansible.builtin.shell:
     cmd: |
       set -euo pipefail
