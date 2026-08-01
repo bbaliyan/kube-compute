@@ -23,18 +23,27 @@ echo "kube-compute: bootstrap log for ${node_name} -> $BOOTSTRAP_LOG"
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 # Ansible's default ssh_args keeps a ControlMaster (connection-multiplexing)
-# process alive for 60s after the last connection to a host closes. That
-# master is a background process which inherits this script's stdout/stderr
-# (the tee above) — so even after ansible-playbook itself exits cleanly, the
-# lingering master can keep those pipes open for up to a minute more. This
-# provisioner's own runner (Terraform/OpenTofu's local-exec) gives up waiting
-# for EOF on those pipes well before that and fails the whole node with
-# "exec: WaitDelay expired before I/O complete" — a false failure; the
-# bootstrap itself already succeeded. Overriding ControlPersist to 0s keeps
-# the multiplexing speedup within a single playbook run (many tasks reuse one
-# master) but closes it the moment the last connection to that host ends,
-# instead of lingering past this script's own exit.
-export ANSIBLE_SSH_ARGS="-C -o ControlMaster=auto -o ControlPersist=0s"
+# process alive in the BACKGROUND after the last connection to a host closes
+# (60s by default). That master is a background process which inherits this
+# script's stdout/stderr (the tee above) — so even after ansible-playbook
+# itself exits cleanly, the lingering master can keep those pipes open well
+# past that. This provisioner's own runner (Terraform/OpenTofu's local-exec)
+# gives up waiting for EOF on those pipes before the master times out and
+# fails the whole node with "exec: WaitDelay expired before I/O complete" — a
+# false failure; the bootstrap itself already succeeded.
+#
+# ControlPersist=0s does NOT mean "don't background it" — empirically
+# verified (a plain `ssh -o ControlPersist=0s ... true` still leaves its mux
+# process running well after the client exits) it still backgrounds the
+# master, just with an ineffective timeout. ControlPersist=no is the value
+# that actually means "don't background at all": the master only lives while
+# its own originating client session is open and exits the moment that
+# session closes, verified to leave no lingering process. The cost is losing
+# connection-reuse across this one node's ~30-40 tasks (a fresh handshake per
+# task instead of one shared master) — worth it to eliminate this failure
+# mode entirely; the extra handshakes are noise next to the multi-minute
+# dnf-update step elsewhere in this same playbook.
+export ANSIBLE_SSH_ARGS="-C -o ControlMaster=auto -o ControlPersist=no"
 # Collections/Python deps are playbook-specific, not baked into kube-devenv.
 # Both are no-ops once the pinned version is present. Every node in the
 # cluster runs this same local-exec CONCURRENTLY on this one operator
