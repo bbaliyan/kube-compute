@@ -12,12 +12,15 @@ locals {
   cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
   argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
 
-  # Single source of truth for the kube-platform pin. NOT the gitops_platform_repo_url/
-  # _revision variables' own defaults: a caller (a *-control-plane module) passing an
-  # explicit null/"" to override-back-to-the-pin does NOT fall through to a variable's
-  # own default the way an omitted argument would — that "explicit null uses the
-  # callee's default" convenience is specific to optional() object-type attributes,
-  # not plain string variables passed through a module call. Verified the hard way: a
+  # Single source of truth for the kube-platform pin is component-versions
+  # (shared with cluster-facts, which needs the same pin for its own
+  # k8s_version-from-platform-versions.yaml fetch) — NOT the
+  # gitops_platform_repo_url/_revision variables' own defaults: a caller (a
+  # *-control-plane module) passing an explicit null/"" to override-back-to-
+  # the-pin does NOT fall through to a variable's own default the way an
+  # omitted argument would — that "explicit null uses the callee's default"
+  # convenience is specific to optional() object-type attributes, not plain
+  # string variables passed through a module call. Verified the hard way: a
   # real apply, and a regression test below, both showed a literal null reaching
   # Ansible's extra-vars (crashing the `| length > 0` gate) instead of the pin.
   # coalesce() is the actual fix — it treats both null and "" as "not set" uniformly.
@@ -27,8 +30,8 @@ locals {
   # RKE2 version, via platform/platform-versions/values.yaml — stay continuously
   # current without a terragrunt apply per change." Branch protection is the safeguard
   # replacing the reproducibility guarantee the SHA pin used to provide.
-  pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
-  pinned_platform_revision = "main"
+  pinned_platform_repo_url = module.component_versions.pinned_platform_repo_url
+  pinned_platform_revision = module.component_versions.pinned_platform_revision
 
   # gitops_platform_enabled = false clears the repo URL to "" regardless of the pin,
   # so every gate downstream (this module's own tasks, plus the bootstrap-runner

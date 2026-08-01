@@ -14,4 +14,14 @@ locals {
 
   # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
   argocd_version = "10.1.3"
+
+  # Single source of truth for the kube-platform pin — every module that needs
+  # it (node-bootstrap for the Argo CD Application's repo/revision,
+  # cluster-facts for its live k8s_version fetch from platform-versions.yaml)
+  # reads it from here instead of keeping its own copy. Tracks kube-platform's
+  # protected `main` branch (required PR review before merge), not a pinned
+  # commit SHA — see node-bootstrap's use of this for the reproducibility/
+  # currency tradeoff that implies.
+  pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
+  pinned_platform_revision = "main"
 }
