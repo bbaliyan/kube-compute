@@ -1,0 +1,77 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# Cross-node OS-patch orchestrator (kube-claude wayfinder map #30, ticket #34 —
+# generalized from kube-examples' original ops/upgrade-os.yml, kube-claude
+# map #14 ticket #20).
+#
+# Takes node topology as extra-vars (this module's own outputs.tf computes
+# them from control_plane_node_refs/worker_node_refs — ordinary Terraform
+# module composition, no terragrunt/Terraform state read from inside Ansible)
+# and drives the shared os_patch role one control-plane node at a time, then
+# workers. The one-CP-at-a-time invariant (etcd tolerates losing at most one
+# control-plane node at once — kube-claude#16) falls out of Ansible loops
+# running sequentially by default: the role's patch-and-reboot task doesn't
+# return for a node until its own wait-for-RKE2-healthy gate is satisfied, so
+# the next loop iteration never starts against a still-recovering node. No
+# separate etcd-health check is needed on top of that.
+#
+# Workers use the same sequential loop for simplicity — safe to parallelize
+# later (workers hold no quorum state) but not required for correctness.
+#
+# An all_in_one cluster shape (no separate worker pool) is the degenerate
+# case: worker_node_refs is {} (this module's own default), so worker_nodes
+# is empty and the worker loop is skipped entirely — same playbook, no
+# special-casing.
+#
+# Usage: ansible-playbook <orchestrator_playbook_path> -e "$(tofu output -raw orchestrator_extra_vars_json)"
+
+- name: Upgrade OS across a cluster's nodes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: assert required extra-vars were given
+      ansible.builtin.assert:
+        that:
+          - control_plane_node_refs is defined
+          - ansible_ssh_user is defined
+          - ansible_ssh_private_key_file is defined
+        fail_msg: >-
+          Missing extra-vars — pass this module's own orchestrator_extra_vars_json
+          output verbatim rather than assembling extra-vars by hand.
+
+    - name: parse control-plane node refs
+      ansible.builtin.set_fact:
+        control_plane_nodes: "{{ control_plane_node_refs.values() | list }}"
+
+    - name: parse worker node refs
+      ansible.builtin.set_fact:
+        worker_nodes: "{{ (worker_node_refs | default({})).values() | list }}"
+
+    - name: patch and (conditionally) reboot each control-plane node, one at a time
+      ansible.builtin.include_role:
+        name: os_patch
+        tasks_from: patch-and-reboot
+      loop: "{{ control_plane_nodes }}"
+      loop_control:
+        loop_var: current_node
+      vars:
+        os_patch_ansible_host: "{{ current_node.ip }}"
+        os_patch_ansible_user: "{{ ansible_ssh_user }}"
+        os_patch_ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file }}"
+        os_patch_rke2_service: "{{ rke2_server_service | default('rke2-server') }}"
+
+    - name: patch and (conditionally) reboot each worker node
+      ansible.builtin.include_role:
+        name: os_patch
+        tasks_from: patch-and-reboot
+      loop: "{{ worker_nodes }}"
+      loop_control:
+        loop_var: current_node
+      vars:
+        os_patch_ansible_host: "{{ current_node.ip }}"
+        os_patch_ansible_user: "{{ ansible_ssh_user }}"
+        os_patch_ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file }}"
+        os_patch_rke2_service: "{{ rke2_agent_service | default('rke2-agent') }}"
+      when: worker_nodes | length > 0
