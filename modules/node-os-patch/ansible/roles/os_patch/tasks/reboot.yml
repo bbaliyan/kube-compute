@@ -11,14 +11,20 @@
     - name: os-patch | reboot the node and wait for it to come back
       # The operator's ansible-playbook process stays alive across the
       # reboot and reconnects on its own over SSH — no manual ping/poll loop
-      # needed. Only valid for a persistent operator-side connection
-      # (ansible_connection != "local"); on_node-style transports (Ansible
-      # running as the node being rebooted) can't survive this and aren't
-      # wired to this role yet — see the README's transport notes.
+      # needed. Only valid for a persistent operator-side connection:
+      # on_node-style transports (Ansible running as the node being
+      # rebooted, e.g. node-bootstrap's Azure run-command mode) can't
+      # survive a mid-play reboot without a cross-boot resume mechanism this
+      # project doesn't have yet, so this is skipped there rather than
+      # hanging/failing the run.
       ansible.builtin.reboot:
         reboot_timeout: 600
+      when: ansible_connection != "local"
 
     - name: os-patch | wait for the node's RKE2 service to report active
+      # Skipped when the caller doesn't supply os_patch_rke2_service —
+      # node-bootstrap's own stage-0 call (this role's first-boot caller,
+      # before RKE2 is even installed) has no service to wait on yet.
       ansible.builtin.command: "systemctl is-active {{ os_patch_rke2_service }}"
       register: os_patch_rke2_status
       until: os_patch_rke2_status.rc == 0
@@ -28,3 +34,7 @@
       # within the wait window, just move on.
       failed_when: false
       changed_when: false
+      when:
+        - ansible_connection != "local"
+        - os_patch_rke2_service is defined
+        - os_patch_rke2_service | length > 0

@@ -63,40 +63,22 @@
 # whatever kernel is *actually* running post-update, not the one baked into
 # the base image). Resolved in kube-claude#7/#15: this is the same in-place
 # update mechanism the ongoing upgrade lifecycle uses, run once more here at
-# first boot rather than as a separate one-off — see kube-claude#18.
-- name: os-prep | full OS update
-  ansible.builtin.dnf:
-    name: "*"
-    state: latest
-    update_cache: true
-  register: os_update_result
+# first boot rather than as a separate one-off — see kube-claude#18. Calls
+# the shared os_patch role (kube-claude#30/#35) rather than carrying an
+# independent copy of the same dnf-update/reboot logic — os_patch is reached
+# via the ../os_patch symlink into node-os-patch's module, not a separate
+# collection dependency. No os_patch_rke2_service is passed: RKE2 isn't
+# installed yet at this point in first boot, so reboot.yml's
+# wait-for-service-active step is skipped (see its own `when`).
+- name: os-prep | run the shared OS-patch primitive (dnf update)
+  ansible.builtin.include_role:
+    name: os_patch
+    tasks_from: patch
 
-- name: os-prep | install dnf-utils (needs-restarting)
-  ansible.builtin.dnf:
-    name: dnf-utils
-    state: present
-
-- name: os-prep | check whether the OS update requires a reboot
-  # dnf needs-restarting -r: exit 0 = no reboot needed, exit 1 = needed —
-  # inverted from the usual convention, so this is never a task failure.
-  ansible.builtin.command: dnf needs-restarting -r
-  register: os_reboot_check
-  failed_when: false
-  changed_when: false
-
-# Only possible when Ansible connects externally (operator_connect mode —
-# ssh for Proxmox, aws_ssm for AWS): the operator's ansible-playbook process
-# stays alive across the target's reboot and reconnects on its own. on_node
-# mode (Azure today) runs Ansible *as* the node being rebooted, which can't
-# survive a mid-play reboot without a cross-boot resume mechanism this
-# project doesn't have yet — out of scope here since this map (kube-claude#14)
-# is Proxmox-only; on_node support is future work if/when Azure is picked up.
-- name: os-prep | reboot if the OS update requires it
-  ansible.builtin.reboot:
-    reboot_timeout: 600
-  when:
-    - os_reboot_check.rc == 1
-    - ansible_connection != "local"
+- name: os-prep | reboot if the OS update requires it (shared os_patch primitive)
+  ansible.builtin.include_role:
+    name: os_patch
+    tasks_from: reboot
 
 - name: os-prep | install ca-certificates and curl, load br_netfilter/overlay
   # cmd: (not free-form `shell: |`) — free-form invocation runs the whole script

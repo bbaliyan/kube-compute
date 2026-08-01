@@ -25,6 +25,11 @@
       done
   changed_when: true
 
+- name: os-patch | ensure dnf-utils is installed (needs-restarting)
+  ansible.builtin.dnf:
+    name: dnf-utils
+    state: present
+
 - name: os-patch | check whether a reboot is needed
   ansible.builtin.command: dnf needs-restarting -r
   register: os_patch_reboot_check
