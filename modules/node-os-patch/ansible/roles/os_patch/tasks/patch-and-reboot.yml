@@ -1,0 +1,30 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# Combines patch.yml + reboot.yml for one node. The cross-node orchestrator
+# loops over this per node — kept as a single include so os_patch_reboot_needed
+# (set inside patch.yml) is read fresh on the same iteration it was set,
+# before reboot.yml's `when` gate, rather than only reflecting whichever node
+# happened to run last.
+#
+# SSH connection vars live here, once, rather than duplicated in both
+# patch.yml and reboot.yml — Ansible scopes block-level vars to every task
+# nested inside, including through include_tasks.
+
+- name: os-patch | patch and reboot this node
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ os_patch_ansible_host }}"
+    ansible_user: "{{ os_patch_ansible_user }}"
+    ansible_ssh_private_key_file: "{{ os_patch_ansible_ssh_private_key_file }}"
+    ansible_become: true
+    # Disposable-cluster environment: the same IP can be reassigned to a
+    # different node's host key over time (VM recreation). Matches
+    # node-bootstrap's own connection vars exactly (proxmox-control-plane's
+    # main.tf) — blank known_hosts per connection, accept whatever key is
+    # currently there instead of comparing against a stale entry.
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
+  block:
+    - ansible.builtin.include_tasks: patch.yml
+
+    - ansible.builtin.include_tasks: reboot.yml
+      when: os_patch_reboot_needed

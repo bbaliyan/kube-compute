@@ -1,0 +1,30 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# Reboot step — only meaningful when patch.yml reported os_patch_reboot_needed:
+# true. The block below is also gated on it as a safety net against being
+# called directly. Connection vars come from the caller's block, not repeated
+# here. See ../../../../README.md for background.
+
+- name: os-patch | reboot and verify recovery
+  when: os_patch_reboot_needed | default(false)
+  block:
+    - name: os-patch | reboot the node and wait for it to come back
+      # The operator's ansible-playbook process stays alive across the
+      # reboot and reconnects on its own over SSH — no manual ping/poll loop
+      # needed. Only valid for a persistent operator-side connection
+      # (ansible_connection != "local"); on_node-style transports (Ansible
+      # running as the node being rebooted) can't survive this and aren't
+      # wired to this role yet — see the README's transport notes.
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+
+    - name: os-patch | wait for the node's RKE2 service to report active
+      ansible.builtin.command: "systemctl is-active {{ os_patch_rke2_service }}"
+      register: os_patch_rke2_status
+      until: os_patch_rke2_status.rc == 0
+      retries: 30
+      delay: 10
+      # Don't fail the whole orchestrator run if RKE2 doesn't report active
+      # within the wait window, just move on.
+      failed_when: false
+      changed_when: false
