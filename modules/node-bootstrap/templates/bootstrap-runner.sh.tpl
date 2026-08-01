@@ -22,6 +22,19 @@ echo "kube-compute: bootstrap log for ${node_name} -> $BOOTSTRAP_LOG"
 # calling shell forwards in.
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
+# Ansible's default ssh_args keeps a ControlMaster (connection-multiplexing)
+# process alive for 60s after the last connection to a host closes. That
+# master is a background process which inherits this script's stdout/stderr
+# (the tee above) — so even after ansible-playbook itself exits cleanly, the
+# lingering master can keep those pipes open for up to a minute more. This
+# provisioner's own runner (Terraform/OpenTofu's local-exec) gives up waiting
+# for EOF on those pipes well before that and fails the whole node with
+# "exec: WaitDelay expired before I/O complete" — a false failure; the
+# bootstrap itself already succeeded. Overriding ControlPersist to 0s keeps
+# the multiplexing speedup within a single playbook run (many tasks reuse one
+# master) but closes it the moment the last connection to that host ends,
+# instead of lingering past this script's own exit.
+export ANSIBLE_SSH_ARGS="-C -o ControlMaster=auto -o ControlPersist=0s"
 # Collections/Python deps are playbook-specific, not baked into kube-devenv.
 # Both are no-ops once the pinned version is present. Every node in the
 # cluster runs this same local-exec CONCURRENTLY on this one operator
