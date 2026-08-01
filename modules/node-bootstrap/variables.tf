@@ -156,7 +156,7 @@ variable "gitops_platform_repo_url" {
 }
 
 variable "gitops_platform_revision" {
-  description = "Branch/tag/SHA the platform Application tracks. Null/\"\" (the default) falls back to local.pinned_platform_revision — see that local for why the pin lives there rather than as this variable's default. Override for a fork or to track a different revision."
+  description = "Branch/tag/SHA the platform Application tracks. Null/\"\" (the default) falls back to local.pinned_platform_revision — kube-platform's protected `main` branch, not a fixed commit — see that local for why. Override for a fork or to pin a specific revision instead."
   type        = string
   default     = null
 }

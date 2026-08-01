@@ -21,8 +21,14 @@ locals {
   # real apply, and a regression test below, both showed a literal null reaching
   # Ansible's extra-vars (crashing the `| length > 0` gate) instead of the pin.
   # coalesce() is the actual fix — it treats both null and "" as "not set" uniformly.
+  # Tracks kube-platform's protected `main` branch (required PR review before merge),
+  # not a pinned commit SHA. This trades "a freshly-provisioned node always bootstraps
+  # against a fixed, previously-audited commit" for "platform components — including
+  # RKE2 version, via platform/platform-versions/values.yaml — stay continuously
+  # current without a terragrunt apply per change." Branch protection is the safeguard
+  # replacing the reproducibility guarantee the SHA pin used to provide.
   pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
-  pinned_platform_revision = "5f07c871fa84b903a930ae3f61280d79d008c5ae"
+  pinned_platform_revision = "main"
 
   # gitops_platform_enabled = false clears the repo URL to "" regardless of the pin,
   # so every gate downstream (this module's own tasks, plus the bootstrap-runner
