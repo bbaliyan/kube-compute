@@ -23,9 +23,23 @@ echo "kube-compute: bootstrap log for ${node_name} -> $BOOTSTRAP_LOG"
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 # Collections/Python deps are playbook-specific, not baked into kube-devenv.
-# Both are no-ops once the pinned version is present.
-ansible-galaxy collection install -r "${requirements_yml}"
-pip3 install --quiet --break-system-packages -r "${requirements_txt}"
+# Both are no-ops once the pinned version is present. Every node in the
+# cluster runs this same local-exec CONCURRENTLY on this one operator
+# machine, all against the one shared system Python (--break-system-packages
+# has no per-process isolation, unlike a venv) — an unlocked
+# ansible-galaxy/pip install there races: two installers can unlink/rewrite
+# the same already-"installed" package's files at once, so a process reads a
+# file mid-swap and fails with ENOENT even though nothing about ITS install
+# was wrong. flock serializes this setup step across all concurrent
+# bootstraps (a fixed, cluster-independent lock path is fine — worst case
+# under a still-rare multi-cluster simultaneous-apply is one process
+# harmlessly waiting its turn); the actual ansible-playbook run below stays
+# unlocked and parallel per node.
+(
+  flock -x 200
+  ansible-galaxy collection install -r "${requirements_yml}"
+  pip3 install --quiet --break-system-packages -r "${requirements_txt}"
+) 200>/tmp/kube-compute-bootstrap-setup.lock
 PLAYBOOK="${playbook_path}"
 HELM="helm"
 INVENTORY_ARGS=(-i '${node_name},')
