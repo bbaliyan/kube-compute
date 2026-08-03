@@ -112,6 +112,7 @@ module "bootstrap" {
 
   source = "../node-bootstrap"
 
+  node_provider             = "azure"
   invocation_mode           = "on_node"
   ansible_playbook_path     = var.ansible_playbook_path
   cluster_name              = var.cluster_name

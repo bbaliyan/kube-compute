@@ -224,6 +224,7 @@ resource "proxmox_virtual_environment_file" "hostname_init_additional" {
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
+  node_provider                  = "proxmox"
   ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
@@ -315,6 +316,7 @@ module "node_bootstrap_additional" {
 
   source = "../node-bootstrap"
 
+  node_provider            = "proxmox"
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name
   node_name                = "${var.cluster_name}-cp-${each.key}"

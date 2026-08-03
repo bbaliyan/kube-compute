@@ -65,6 +65,11 @@
         # node-bootstrap's own connection vars exactly.
         ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
         ansible_become: true
+        # This orchestrator is Proxmox-only today (see ../README.md's
+        # Transport section) — os_patch's reboot.yml branches on node_provider,
+        # so it must be set here explicitly rather than relying on a Terraform
+        # extra-var this playbook never receives.
+        node_provider: proxmox
         os_patch_rke2_service: "{{ rke2_server_service | default('rke2-server') }}"
       loop: "{{ control_plane_node_refs | dict2items }}"
 
@@ -78,6 +83,7 @@
         ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
         ansible_become: true
+        node_provider: proxmox
         os_patch_rke2_service: "{{ rke2_agent_service | default('rke2-agent') }}"
       loop: "{{ (worker_node_refs | default({})) | dict2items }}"
 

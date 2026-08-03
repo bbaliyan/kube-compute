@@ -34,16 +34,17 @@
 
 - name: os-prep | hot-added vCPU online rule (Proxmox/KVM guests only)
   # Proxmox is the only provider that ever hot-adds a vCPU to a running
-  # guest; AWS/Azure don't. ansible_connection == "ssh" means Proxmox today
-  # (the only provider node-bootstrap reaches over SSH — AWS uses
-  # amazon.aws.aws_ssm, Azure's on_node mode uses local — see
-  # ../../../../node-os-patch/README.md's Transport section for the same
-  # distinction used elsewhere in this role).
+  # guest; AWS/Azure don't. Gated on node_provider — an explicit extra-var
+  # every provider module passes into node-bootstrap — rather than
+  # ansible_connection/virtualization_type: both are artifacts of today's
+  # transport/hypervisor choices, not a guarantee (AWS's own Nitro hypervisor
+  # also reports virtualization_type kvm, and a future transport change for
+  # any provider must not silently flip this).
   ansible.builtin.copy:
     src: 80-hotplug-cpu-online.rules
     dest: /etc/udev/rules.d/80-hotplug-cpu-online.rules
     mode: "0644"
-  when: ansible_connection == "ssh"
+  when: node_provider == "proxmox"
 
 # Precautionary hygiene, not a confirmed fix for any one incident: PackageKit
 # and dnf-makecache.timer can both hold the rpm lock in the background,
@@ -131,24 +132,24 @@
   # failures specific to that transport, not reproducible over SSH; see
   # os-patch/README.md).
   #
-  # Gated on ansible_connection == "ssh" (Proxmox today — see the hot-vCPU
-  # task above), not ansible_facts['virtualization_type'] == 'kvm' as
-  # previously: AWS's own Nitro hypervisor also reports virtualization_type
-  # kvm, so that condition isn't actually Proxmox-specific — confirmed live
-  # when this exact task ran on an AWS control-plane node and failed outright
-  # (qemu-guest-agent.service has no virtio-serial channel to attach to
-  # there, so systemd's dependency job for it fails, not a harmless no-op).
+  # Gated on node_provider == "proxmox" (see the hot-vCPU task above for why
+  # this uses that instead of ansible_connection or virtualization_type) —
+  # confirmed live that virtualization_type == 'kvm' isn't actually
+  # Proxmox-specific (AWS's own Nitro hypervisor also reports it): this exact
+  # task ran on an AWS control-plane node when gated that way and failed
+  # outright (qemu-guest-agent.service has no virtio-serial channel to attach
+  # to there, so systemd's dependency job for it fails, not a harmless no-op).
   ansible.builtin.dnf:
     name: qemu-guest-agent
     state: present
-  when: ansible_connection == "ssh"
+  when: node_provider == "proxmox"
 
 - name: os-prep | enable qemu-guest-agent
   ansible.builtin.systemd:
     name: qemu-guest-agent
     state: started
     enabled: true
-  when: ansible_connection == "ssh"
+  when: node_provider == "proxmox"
 
 - name: os-prep | label the local-path-provisioner directory for container write access
   ansible.builtin.shell:

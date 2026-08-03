@@ -126,6 +126,7 @@ locals {
   # through the local-exec `environment` block (operator_connect) or run-command
   # protected parameters (on_node), never the bundle.
   extra_vars = merge(var.ansible_connection_vars, {
+    node_provider                  = var.node_provider
     cluster_name                   = var.cluster_name
     node_name                      = var.node_name
     k8s_version                    = var.k8s_version

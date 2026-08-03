@@ -21,6 +21,15 @@ variable "ansible_connection_vars" {
   default     = {}
 }
 
+variable "node_provider" {
+  description = "Which provider module is calling ('aws', 'azure', or 'proxmox') — a stable identity fact, forwarded to Ansible as an extra-var for the shared role tasks to gate provider-specific behavior on (e.g. Proxmox-only qemu-guest-agent setup). Deliberately NOT inferred from ansible_connection/invocation_mode: today ssh happens to mean Proxmox and amazon.aws.aws_ssm happens to mean AWS, but that's an artifact of current transport choices, not a guarantee — a future transport change for any provider must not silently change which provider-specific tasks run."
+  type        = string
+  validation {
+    condition     = contains(["aws", "azure", "proxmox"], var.node_provider)
+    error_message = "node_provider must be 'aws', 'azure', or 'proxmox'."
+  }
+}
+
 variable "cluster_name" {
   description = "Cluster name. Drives the kubeconfig server SAN."
   type        = string

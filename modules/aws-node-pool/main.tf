@@ -190,6 +190,7 @@ module "node_bootstrap" {
 
   source = "../node-bootstrap"
 
+  node_provider             = "aws"
   ansible_playbook_path     = var.ansible_playbook_path
   cluster_name              = var.cluster_name
   node_name                 = "${var.cluster_name}-worker-${each.key}"

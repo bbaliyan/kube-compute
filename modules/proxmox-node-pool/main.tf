@@ -263,6 +263,7 @@ module "node_bootstrap" {
 
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
+  node_provider             = "proxmox"
   ansible_playbook_path     = var.ansible_playbook_path
   cluster_name              = var.cluster_name
   node_name                 = "${var.cluster_name}-worker-${each.key}"

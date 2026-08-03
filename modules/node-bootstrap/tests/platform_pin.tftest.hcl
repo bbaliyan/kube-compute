@@ -11,9 +11,10 @@
 # actual fix; this test locks it in.
 
 variables {
-  cluster_name = "test"
-  node_name    = "test-cp-0"
-  k8s_version  = "v1.36.2+rke2r1"
+  node_provider = "azure"
+  cluster_name  = "test"
+  node_name     = "test-cp-0"
+  k8s_version   = "v1.36.2+rke2r1"
 
   invocation_mode     = "on_node"
   node_role           = "server-init"

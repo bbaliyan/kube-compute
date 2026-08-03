@@ -4,21 +4,29 @@
 # true. The block below is also gated on it as a safety net against being
 # called directly. Connection vars come from the caller's block, not repeated
 # here. See ../../../../README.md for background.
+#
+# Branches on node_provider (an explicit extra-var every provider module
+# passes into node-bootstrap), not on ansible_connection/invocation_mode:
+# today ssh happens to mean Proxmox and amazon.aws.aws_ssm happens to mean
+# AWS, but that's an artifact of current transport choices — a future
+# transport change for any provider (e.g. AWS moving to SSH) must not
+# silently change which of these tasks run.
 
 - name: os-patch | reboot and verify recovery
   when: os_patch_reboot_needed | default(false)
   block:
-    - name: os-patch | reboot the node and wait for it to come back (ssh)
+    - name: os-patch | reboot the node and wait for it to come back (proxmox)
       # ansible.builtin.reboot's reconnect-detection is built around SSH's
       # connect/disconnect semantics (its docs list ssh/paramiko/psrp/winrm as
-      # supported) — the operator's ansible-playbook process stays alive
+      # supported) — Proxmox is the only provider node-bootstrap reaches over
+      # SSH today, so the operator's ansible-playbook process stays alive
       # across the reboot and reconnects on its own. Verified live against
       # Proxmox (see ../../../../README.md).
       ansible.builtin.reboot:
         reboot_timeout: 600
-      when: ansible_connection == "ssh"
+      when: node_provider == "proxmox"
 
-    # ---- Non-SSH transports (amazon.aws.aws_ssm today) ------------------------
+    # ---- Non-SSH-reboot providers (AWS today, over amazon.aws.aws_ssm) --------
     # ansible.builtin.reboot's reconnect loop doesn't reliably detect recovery
     # over the aws_ssm connection plugin — confirmed live against a real AWS
     # control-plane node: the instance rebooted and SSM reported the agent
@@ -32,29 +40,32 @@
     # so calling it before the instance had actually gone down raised an
     # unhandled AnsibleError. `meta: reset_connection` also silently ignores
     # `when:` (Ansible warns "reset_connection task does not support when
-    # conditional"), so it can't even be scoped to only the non-ssh case.
+    # conditional"), so it can't even be scoped by connection type alone.
     #
     # ansible.builtin.wait_for_connection is the correct primitive instead:
     # its action plugin calls that exact same connection.reset() internally,
     # but wrapped in try/except inside its own retry loop — a reset attempt
     # against a still-down instance is just a normal retry there, not a
-    # crash.
-    - name: os-patch | capture the pre-reboot boot id (non-ssh)
+    # crash. Written generically (excludes proxmox and azure rather than
+    # naming aws specifically) so it also covers any future provider that
+    # isn't Proxmox and isn't Azure's on_node mode, without needing a new
+    # branch here.
+    - name: os-patch | capture the pre-reboot boot id (non-proxmox, non-azure)
       ansible.builtin.command: cat /proc/sys/kernel/random/boot_id
       register: os_patch_boot_id_before
       changed_when: false
-      when: ansible_connection not in ["ssh", "local"]
+      when: node_provider not in ["proxmox", "azure"]
 
-    - name: os-patch | trigger the reboot without waiting for it (non-ssh)
+    - name: os-patch | trigger the reboot without waiting for it (non-proxmox, non-azure)
       # Fire-and-forget: the connection dying mid-command is the expected,
       # desired outcome here, not a failure to react to.
       ansible.builtin.shell: sleep 2 && reboot
       async: 1
       poll: 0
       ignore_errors: true
-      when: ansible_connection not in ["ssh", "local"]
+      when: node_provider not in ["proxmox", "azure"]
 
-    - name: os-patch | wait for a working connection again (non-ssh)
+    - name: os-patch | wait for a working connection again (non-proxmox, non-azure)
       # delay gives the instance a grace period to actually start going down
       # before the first reset attempt — not required for correctness (each
       # attempt is retried safely regardless), just avoids spending the early
@@ -63,9 +74,9 @@
         delay: 20
         sleep: 10
         timeout: 600
-      when: ansible_connection not in ["ssh", "local"]
+      when: node_provider not in ["proxmox", "azure"]
 
-    - name: os-patch | confirm the reconnect is actually a new boot, not a fluke (non-ssh)
+    - name: os-patch | confirm the reconnect is actually a new boot, not a fluke (non-proxmox, non-azure)
       ansible.builtin.command: cat /proc/sys/kernel/random/boot_id
       register: os_patch_boot_id_after
       until: >-
@@ -75,12 +86,15 @@
       delay: 10
       ignore_unreachable: true
       changed_when: false
-      when: ansible_connection not in ["ssh", "local"]
+      when: node_provider not in ["proxmox", "azure"]
 
     - name: os-patch | wait for the node's RKE2 service to report active
       # Skipped when the caller doesn't supply os_patch_rke2_service —
       # node-bootstrap's own stage-0 call (this role's first-boot caller,
-      # before RKE2 is even installed) has no service to wait on yet.
+      # before RKE2 is even installed) has no service to wait on yet. Also
+      # skipped entirely for Azure's on_node mode (node_provider == "azure"):
+      # that transport can't survive a mid-play reboot at all, so nothing
+      # above this point ran either.
       ansible.builtin.command: "systemctl is-active {{ os_patch_rke2_service }}"
       register: os_patch_rke2_status
       until: os_patch_rke2_status.rc == 0
@@ -91,6 +105,6 @@
       failed_when: false
       changed_when: false
       when:
-        - ansible_connection != "local"
+        - node_provider != "azure"
         - os_patch_rke2_service is defined
         - os_patch_rke2_service | length > 0

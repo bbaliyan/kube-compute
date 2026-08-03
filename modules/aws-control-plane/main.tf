@@ -196,6 +196,7 @@ resource "aws_iam_role_policy" "ansible_ssm_s3" {
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
+  node_provider                  = "aws"
   ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-1"
@@ -260,6 +261,7 @@ module "node_bootstrap_additional" {
 
   source = "../node-bootstrap"
 
+  node_provider            = "aws"
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name
   node_name                = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"

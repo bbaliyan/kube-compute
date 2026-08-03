@@ -167,6 +167,7 @@ resource "azurerm_network_interface_application_security_group_association" "etc
 module "bootstrap" {
   source = "../node-bootstrap"
 
+  node_provider                  = "azure"
   invocation_mode                = "on_node"
   ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
@@ -242,6 +243,7 @@ module "bootstrap_additional" {
 
   source = "../node-bootstrap"
 
+  node_provider            = "azure"
   invocation_mode          = "on_node"
   ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name

@@ -6,10 +6,11 @@ terraform {
 module "server_init" {
   source = "../../.."
 
-  cluster_name = "test-cluster"
-  node_name    = "test-cluster-cp-1"
-  k8s_version  = "v1.36.1+rke2r1"
-  node_role    = "server-init"
+  node_provider = "aws"
+  cluster_name  = "test-cluster"
+  node_name     = "test-cluster-cp-1"
+  k8s_version   = "v1.36.1+rke2r1"
+  node_role     = "server-init"
 
   cluster_token        = "dummy-token"
   cluster_agent_token  = "dummy-agent-token"
@@ -28,10 +29,11 @@ module "server_init" {
 module "worker" {
   source = "../../.."
 
-  cluster_name = "test-cluster"
-  node_name    = "test-cluster-worker-1"
-  k8s_version  = "v1.36.1+rke2r1"
-  node_role    = "worker"
+  node_provider = "proxmox"
+  cluster_name  = "test-cluster"
+  node_name     = "test-cluster-worker-1"
+  k8s_version   = "v1.36.1+rke2r1"
+  node_role     = "worker"
 
   registration_address      = "10.0.1.1"
   agent_token_fetch_command = "echo 'dummy-fetched-token'"
