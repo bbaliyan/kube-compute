@@ -1,10 +1,10 @@
 ---
 # SPDX-License-Identifier: Apache-2.0
-# Runs `dnf update -y` on the target node over SSH — connection vars
-# (ansible_connection/host/user/ssh_private_key_file/ssh_common_args) come
-# from the caller's block, not repeated here. See ../../../../README.md for
-# background. Never reboots by itself; sets os_patch_reboot_needed for the
-# caller to act on separately via reboot.yml.
+# Runs `dnf update -y` on the target node — transport-agnostic (SSH or AWS
+# SSM; see ../../../../README.md for how reboot.yml's handling differs
+# between them). Connection vars come from the caller's block, not repeated
+# here. Never reboots by itself; sets os_patch_reboot_needed for the caller to
+# act on separately via reboot.yml.
 
 - name: os-patch | run dnf update -y on the node (retry + self-heal on lock contention)
   # Transient dnf/rpm lock contention from background processes is a real,
