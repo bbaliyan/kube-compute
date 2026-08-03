@@ -21,13 +21,12 @@ below for how `reboot.yml` handles each). This is the **single shared implementa
   `os_patch_reboot_needed: true|false` as a fact the caller branches on.
   Transport-agnostic — no special handling per connection type.
 - **`tasks/reboot.yml`** — only does anything when `os_patch_reboot_needed` is true
-  and `ansible_connection != "local"` (on_node-style transports, e.g. node-bootstrap's
-  Azure mode, can't survive a mid-play reboot): reboots the node and waits for it to
-  come back — the exact mechanism depends on the connection type, see "Transport"
-  below — then, if `os_patch_rke2_service` was supplied, waits for that systemd unit to
-  report active before considering the step done. `os_patch_rke2_service` is omitted by
-  node-bootstrap's stage-0 call (RKE2 isn't installed yet at first boot), so that wait
-  is skipped there.
+  and `node_provider != "azure"` (Azure's on_node mode can't survive a mid-play reboot):
+  reboots the node and waits for it to come back — the exact mechanism depends on
+  `node_provider`, see "Transport" below — then, if `os_patch_rke2_service` was
+  supplied, waits for that systemd unit to report active before considering the step
+  done. `os_patch_rke2_service` is omitted by node-bootstrap's stage-0 call (RKE2 isn't
+  installed yet at first boot), so that wait is skipped there.
 
 `ansible/upgrade-os.yml` — the generalized cross-node orchestrator: registers each
 node from `control_plane_node_refs`/`worker_node_refs` as a **real, named Ansible
@@ -58,18 +57,25 @@ SSH (Proxmox) and AWS SSM (`amazon.aws.aws_ssm`), reusing `node-bootstrap`'s own
 already-working connection either way — chosen after a Proxmox guest-agent API
 transport (`community.proxmox.proxmox_qemu_api`) was tried and hit an unresolved
 `rpmdb open failed` error specific to that transport. Azure's fundamentally different
-`on_node`/run-command mode can't survive a mid-run
-reboot at all — `reboot.yml` skips its whole block there (`ansible_connection ==
-"local"`) rather than hanging or failing.
+`on_node`/run-command mode can't survive a mid-run reboot at all — `reboot.yml` skips
+its whole block there rather than hanging or failing.
+
+`reboot.yml` branches on `node_provider` (an explicit extra-var every provider module
+passes into node-bootstrap), not on `ansible_connection`/`invocation_mode` directly:
+today `ssh` happens to mean Proxmox and `amazon.aws.aws_ssm` happens to mean AWS, but
+that's an artifact of current transport choices, not a guarantee — a future transport
+change for any provider (e.g. AWS moving to SSH) must not silently change which of
+these tasks run.
 
 `patch.yml` (the `dnf update`/reboot-needed check) is transport-agnostic and needs no
-special handling. `reboot.yml` branches by connection type: SSH uses
+special handling. `reboot.yml`, for `node_provider == "proxmox"`, uses
 `ansible.builtin.reboot` directly (its reconnect-detection is built around SSH's
-connect/disconnect semantics — verified live against Proxmox, see below). SSM does
-**not** use that module — confirmed live against a real AWS control-plane node that
-`ansible.builtin.reboot`'s polling loop doesn't reliably detect recovery over an SSM
-session (the instance rebooted and SSM reported the agent back Online well inside the
-configured `reboot_timeout`, but the task never noticed and hung indefinitely).
+connect/disconnect semantics — verified live against Proxmox, see below). Every other
+non-Azure provider (AWS today, over `amazon.aws.aws_ssm`) does **not** use that module —
+confirmed live against a real AWS control-plane node that `ansible.builtin.reboot`'s
+polling loop doesn't reliably detect recovery over an SSM session (the instance
+rebooted and SSM reported the agent back Online well inside the configured
+`reboot_timeout`, but the task never noticed and hung indefinitely).
 
 SSM instead: fires the reboot async/fire-and-forget, then uses
 `ansible.builtin.wait_for_connection` to detect recovery. A first attempt at this used a
