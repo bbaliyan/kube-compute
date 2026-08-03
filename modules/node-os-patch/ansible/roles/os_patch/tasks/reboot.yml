@@ -20,20 +20,25 @@
 
     # ---- Non-SSH transports (amazon.aws.aws_ssm today) ------------------------
     # ansible.builtin.reboot's reconnect loop doesn't reliably detect recovery
-    # over the aws_ssm connection plugin: an SSM session doesn't close the way
-    # an SSH connection does when the node reboots, so the module's internal
-    # polling can outlive its own reboot_timeout without ever resolving —
-    # confirmed live against a real AWS control-plane node: the instance
-    # rebooted and SSM reported the agent back Online well inside the 600s
-    # window, but the reboot task never noticed and the run hung
-    # indefinitely. Handled manually instead:
-    # trigger the reboot without waiting for the module to observe it, force a
-    # fresh connection, then poll a real boot marker (not just "can we
-    # connect") until it changes — ignore_unreachable is required on the poll
-    # task specifically because Ansible otherwise drops a host that goes
-    # UNREACHABLE for the rest of the whole play, not just this task, which
-    # would abort mid-reboot-window on the very first connection attempt that
-    # catches the node still coming back up.
+    # over the aws_ssm connection plugin — confirmed live against a real AWS
+    # control-plane node: the instance rebooted and SSM reported the agent
+    # back Online well inside the 600s window, but the reboot task never
+    # noticed and the run hung indefinitely (see ../../../../README.md).
+    #
+    # A hand-rolled `meta: reset_connection` fired right after triggering the
+    # reboot was tried next and ALSO failed live — worse, it crashed the
+    # whole run rather than just hanging: amazon.aws.aws_ssm's own reset()
+    # calls start_session() with no retry or exception-handling of its own,
+    # so calling it before the instance had actually gone down raised an
+    # unhandled AnsibleError. `meta: reset_connection` also silently ignores
+    # `when:` (Ansible warns "reset_connection task does not support when
+    # conditional"), so it can't even be scoped to only the non-ssh case.
+    #
+    # ansible.builtin.wait_for_connection is the correct primitive instead:
+    # its action plugin calls that exact same connection.reset() internally,
+    # but wrapped in try/except inside its own retry loop — a reset attempt
+    # against a still-down instance is just a normal retry there, not a
+    # crash.
     - name: os-patch | capture the pre-reboot boot id (non-ssh)
       ansible.builtin.command: cat /proc/sys/kernel/random/boot_id
       register: os_patch_boot_id_before
@@ -49,19 +54,24 @@
       ignore_errors: true
       when: ansible_connection not in ["ssh", "local"]
 
-    - name: os-patch | drop the now-stale connection (non-ssh)
-      # Forces the next task to establish a brand new SSM session rather than
-      # reusing a cached one that may still reference the pre-reboot instance.
-      ansible.builtin.meta: reset_connection
+    - name: os-patch | wait for a working connection again (non-ssh)
+      # delay gives the instance a grace period to actually start going down
+      # before the first reset attempt — not required for correctness (each
+      # attempt is retried safely regardless), just avoids spending the early
+      # retry budget on attempts almost certain to fail.
+      ansible.builtin.wait_for_connection:
+        delay: 20
+        sleep: 10
+        timeout: 600
       when: ansible_connection not in ["ssh", "local"]
 
-    - name: os-patch | wait for the node to come back with a new boot id (non-ssh)
+    - name: os-patch | confirm the reconnect is actually a new boot, not a fluke (non-ssh)
       ansible.builtin.command: cat /proc/sys/kernel/random/boot_id
       register: os_patch_boot_id_after
       until: >-
         os_patch_boot_id_after.stdout is defined and
         os_patch_boot_id_after.stdout != os_patch_boot_id_before.stdout
-      retries: 60
+      retries: 6
       delay: 10
       ignore_unreachable: true
       changed_when: false

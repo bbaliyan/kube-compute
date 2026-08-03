@@ -68,15 +68,25 @@ special handling. `reboot.yml` branches by connection type: SSH uses
 connect/disconnect semantics — verified live against Proxmox, see below). SSM does
 **not** use that module — confirmed live against a real AWS control-plane node that
 `ansible.builtin.reboot`'s polling loop doesn't reliably detect recovery over an SSM
-session (the instance rebooted and SSM reported
-the agent back Online well inside the configured `reboot_timeout`, but the task never
-noticed and hung indefinitely). SSM instead: fires the reboot async/fire-and-forget,
-force-drops the now-stale connection (`meta: reset_connection`), then polls a real boot
-marker (`/proc/sys/kernel/random/boot_id`) until it changes, with
-`ignore_unreachable: true` on the poll task — required because Ansible otherwise drops
-a host that goes UNREACHABLE for the rest of the *whole play*, not just that task, which
-would abort on the very first connection attempt that catches the node still coming
-back up.
+session (the instance rebooted and SSM reported the agent back Online well inside the
+configured `reboot_timeout`, but the task never noticed and hung indefinitely).
+
+SSM instead: fires the reboot async/fire-and-forget, then uses
+`ansible.builtin.wait_for_connection` to detect recovery. A first attempt at this used a
+hand-rolled `meta: reset_connection` right after triggering the reboot instead — also
+tried live, and it failed worse: `amazon.aws.aws_ssm`'s own `reset()` calls
+`start_session()` with no retry or exception-handling of its own, so calling it before
+the instance had actually gone down raised an unhandled `AnsibleError` and crashed the
+whole run rather than one task. `meta: reset_connection` also silently ignores `when:`
+(Ansible warns "reset_connection task does not support when conditional"), so it
+couldn't even be scoped to the non-SSH case alone. `wait_for_connection` calls that exact
+same `connection.reset()` internally, but wrapped in `try/except` inside its own retry
+loop — a reset attempt against a still-down instance is just a normal retry there, not a
+crash. Once a working connection is confirmed, a real boot marker
+(`/proc/sys/kernel/random/boot_id`) is compared against its pre-reboot value to confirm
+the reconnect is an actual new boot, not a fluke — with `ignore_unreachable: true` on
+that check too, since Ansible otherwise drops a host that goes UNREACHABLE for the rest
+of the *whole play*, not just that task.
 
 ## Verified live
 
@@ -87,8 +97,11 @@ per-node primitive works against a real AlmaLinux target — but surfaced the
 sequencing (one-CP-at-a-time, then workers, with the `add_host`-based rewrite) not yet
 re-verified live after that fix.
 
-The SSM reboot-handling rewrite above (boot-id polling + `ignore_unreachable`) is
-**not yet verified live** — it was written directly from the AWS control-plane hang
-this section describes, syntax-checked and logic-tested locally (no AWS/SSM access
-from the environment that wrote it), but has not yet completed a real reboot cycle
-against an actual EC2 instance. Confirm it end-to-end before relying on it elsewhere.
+The SSM reboot-handling logic above (`wait_for_connection` + boot-id confirmation) is
+**not yet verified live**. It's the second iteration: the first (`meta: reset_connection`
++ boot-id polling) was tried against a real AWS control-plane node and crashed the whole
+run, as described above. This second version was written directly from that crash,
+syntax-checked and logic-tested locally (no AWS/SSM access from the environment that
+wrote it), but has not yet completed a real reboot cycle against an actual EC2 instance.
+Confirm it end-to-end before relying on it elsewhere — and if it fails live again, that's
+real signal this mechanism needs rethinking further, not just another patch.
