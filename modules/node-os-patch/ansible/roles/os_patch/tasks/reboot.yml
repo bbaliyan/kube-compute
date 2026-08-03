@@ -23,10 +23,10 @@
     # over the aws_ssm connection plugin: an SSM session doesn't close the way
     # an SSH connection does when the node reboots, so the module's internal
     # polling can outlive its own reboot_timeout without ever resolving —
-    # confirmed live against cluster-1's AWS control-plane node (kube-claude
-    # kube-devclusters-migration map): the instance rebooted and SSM reported
-    # the agent back Online well inside the 600s window, but the reboot task
-    # never noticed and the run hung indefinitely. Handled manually instead:
+    # confirmed live against a real AWS control-plane node: the instance
+    # rebooted and SSM reported the agent back Online well inside the 600s
+    # window, but the reboot task never noticed and the run hung
+    # indefinitely. Handled manually instead:
     # trigger the reboot without waiting for the module to observe it, force a
     # fresh connection, then poll a real boot marker (not just "can we
     # connect") until it changes — ignore_unreachable is required on the poll

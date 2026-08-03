@@ -64,7 +64,7 @@ find "$target_dir" -mindepth 1 -maxdepth 1 \
 # cp -a (not rsync, to avoid an extra tool dependency in the CI image) copies
 # everything including local tofu-init artifacts (.terraform/); those are
 # stripped in a single cleanup pass below. .terraform.lock.hcl IS kept
-# (committed per CLAUDE.md).
+# (this project always commits lock files).
 mkdir -p "$target_dir"
 cp -a "$source_dir/modules/$control_plane_mod/." "$target_dir/"
 

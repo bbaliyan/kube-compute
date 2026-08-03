@@ -61,10 +61,9 @@
 # Full OS currency, run before anything kernel-version-sensitive below (the
 # kernel-modules-extra-matched install right after this needs to target
 # whatever kernel is *actually* running post-update, not the one baked into
-# the base image). Resolved in kube-claude#7/#15: this is the same in-place
-# update mechanism the ongoing upgrade lifecycle uses, run once more here at
-# first boot rather than as a separate one-off — see kube-claude#18. Calls
-# the shared os_patch role (kube-claude#30/#35) rather than carrying an
+# the base image). This is the same in-place update mechanism the ongoing
+# upgrade lifecycle uses, run once more here at first boot rather than as a
+# separate one-off. Calls the shared os_patch role rather than carrying an
 # independent copy of the same dnf-update/reboot logic — os_patch is reached
 # via the ../os_patch symlink into node-os-patch's module, not a separate
 # collection dependency. No os_patch_rke2_service is passed: RKE2 isn't
@@ -121,10 +120,10 @@
   # Standard Proxmox integration: clean guest shutdown/reboot, IP reporting in
   # the PVE UI, filesystem freeze/thaw for backup consistency. Does NOT enable
   # guest-exec — os-patch's ongoing lifecycle management connects over SSH
-  # instead (kube-claude wayfinder map #26: the guest-agent API transport was
-  # tried and abandoned after proving unworkable live — persistent, never
-  # fully explained rpmdb access failures specific to that transport, not
-  # reproducible over SSH; see os-patch/README.md). Harmless/no-op on
+  # instead (the guest-agent API transport was tried and abandoned after
+  # proving unworkable live — persistent, never fully explained rpmdb access
+  # failures specific to that transport, not reproducible over SSH; see
+  # os-patch/README.md). Harmless/no-op on
   # AWS/Azure: qemu-guest-agent isn't installed there, but the task must still
   # succeed on every provider, so it's gated on virtualization_type rather
   # than assuming Proxmox.

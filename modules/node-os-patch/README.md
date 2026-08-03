@@ -2,20 +2,18 @@
 
 OS-upgrade tooling for already-provisioned RKE2 nodes, shipped as part of kube-compute
 so any consumer of these modules gets it without re-writing it themselves. Moved here
-from the private kube-examples consumer repo (kube-claude wayfinder map
-[#30](https://github.com/bbaliyan/kube-claude/issues/30)), which originally held it
-deliberately (kube-claude map #14's ticket #19) before this module existed.
+from the kube-examples consumer repo, which originally held it deliberately before this
+module existed.
 
 ## What's here
 
 `ansible/roles/os_patch/` — the per-node patch/reboot primitive, invoked over the same
 connection `node-bootstrap` itself already established (SSH on Proxmox — the same
-account/key node-bootstrap connects with, a deliberate, evidenced exception to
-CLAUDE.md's no-SSH constraint, see kube-claude map #14's notes and map #26 — or AWS SSM
-via `amazon.aws.aws_ssm`; see "Transport" below for how `reboot.yml` handles each). This
-is the **single shared implementation**: `node-bootstrap`'s own stage-0 first-boot OS
-update reaches it via a relative symlink (`node-bootstrap/ansible/roles/os_patch` ->
-`../../../node-os-patch/ansible/roles/os_patch`).
+account/key node-bootstrap connects with, a deliberate, evidenced exception to this
+project's usual no-SSH stance — or AWS SSM via `amazon.aws.aws_ssm`; see "Transport"
+below for how `reboot.yml` handles each). This is the **single shared implementation**:
+`node-bootstrap`'s own stage-0 first-boot OS update reaches it via a relative symlink
+(`node-bootstrap/ansible/roles/os_patch` -> `../../../node-os-patch/ansible/roles/os_patch`).
 
 - **`tasks/patch.yml`** — runs `dnf update -y` on the target node (retry + self-heal
   on transient dnf/rpm lock contention), then checks whether a reboot is actually
@@ -59,8 +57,8 @@ along with `tasks/patch-and-reboot.yml` once `upgrade-os.yml` moved to `add_host
 SSH (Proxmox) and AWS SSM (`amazon.aws.aws_ssm`), reusing `node-bootstrap`'s own
 already-working connection either way — chosen after a Proxmox guest-agent API
 transport (`community.proxmox.proxmox_qemu_api`) was tried and hit an unresolved
-`rpmdb open failed` error specific to that transport (kube-claude issues #26-#29).
-Azure's fundamentally different `on_node`/run-command mode can't survive a mid-run
+`rpmdb open failed` error specific to that transport. Azure's fundamentally different
+`on_node`/run-command mode can't survive a mid-run
 reboot at all — `reboot.yml` skips its whole block there (`ansible_connection ==
 "local"`) rather than hanging or failing.
 
@@ -68,9 +66,9 @@ reboot at all — `reboot.yml` skips its whole block there (`ansible_connection 
 special handling. `reboot.yml` branches by connection type: SSH uses
 `ansible.builtin.reboot` directly (its reconnect-detection is built around SSH's
 connect/disconnect semantics — verified live against Proxmox, see below). SSM does
-**not** use that module — confirmed live against an AWS control-plane node (kube-claude
-`kube-devclusters-migration` map) that `ansible.builtin.reboot`'s polling loop doesn't
-reliably detect recovery over an SSM session (the instance rebooted and SSM reported
+**not** use that module — confirmed live against a real AWS control-plane node that
+`ansible.builtin.reboot`'s polling loop doesn't reliably detect recovery over an SSM
+session (the instance rebooted and SSM reported
 the agent back Online well inside the configured `reboot_timeout`, but the task never
 noticed and hung indefinitely). SSM instead: fires the reboot async/fire-and-forget,
 force-drops the now-stale connection (`meta: reset_connection`), then polls a real boot
@@ -82,7 +80,7 @@ back up.
 
 ## Verified live
 
-Ran end-to-end against cluster-3's real control-plane nodes (kube-claude issue #37):
+Ran end-to-end against cluster-3's real control-plane nodes:
 `dnf update -y` executed successfully over the SSH connection-override, confirming the
 per-node primitive works against a real AlmaLinux target — but surfaced the
 `[localhost]`-labeling problem above, fixed by moving to `add_host`. Full multi-node

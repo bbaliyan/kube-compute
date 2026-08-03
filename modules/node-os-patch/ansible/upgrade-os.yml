@@ -1,8 +1,7 @@
 ---
 # SPDX-License-Identifier: Apache-2.0
-# Cross-node OS-patch orchestrator (kube-claude wayfinder map #30, ticket #34 —
-# generalized from kube-examples' original ops/upgrade-os.yml, kube-claude
-# map #14 ticket #20).
+# Cross-node OS-patch orchestrator, generalized from kube-examples' original
+# ops/upgrade-os.yml.
 #
 # Takes node topology as extra-vars (this module's own outputs.tf computes
 # them from control_plane_node_refs/worker_node_refs — ordinary Terraform
@@ -21,7 +20,7 @@
 # "changed: [cluster-3-worker-3]", etc.
 #
 # The one-CP-at-a-time invariant (etcd tolerates losing at most one
-# control-plane node at once — kube-claude#16) comes from `serial: 1` on the
+# control-plane node at once) comes from `serial: 1` on the
 # control-plane play: Ansible runs the whole play (patch, then conditional
 # reboot, then the wait-for-RKE2-healthy gate) against one host before moving
 # to the next, so the next node's play never starts against a still-recovering

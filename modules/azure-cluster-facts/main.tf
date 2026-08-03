@@ -37,7 +37,7 @@ resource "random_string" "kv_suffix" {
 # (already correct, unchanged — see this plan's architecture note) is scoped under this
 # vault at the individual-secret level, which needs the vault and secret to already
 # exist — the same "real resource ID, not a name" hard-dependency shape as AWS's
-# security group (ticket 03 of the parallelize-multinode-apply wayfinder map).
+# security group.
 resource "azurerm_key_vault" "cluster" {
   name                       = local.kv_name
   resource_group_name        = var.resource_group_name

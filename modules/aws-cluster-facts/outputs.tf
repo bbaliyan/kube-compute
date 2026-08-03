@@ -3,9 +3,10 @@
 # (cluster_token, gitops_platform_enabled, etc.) rather than the neutral names
 # the shared cluster-facts core uses internally — so a caller's Terragrunt
 # `inputs` block can pass `dependency.cluster_facts.outputs` straight through
-# via merge() instead of remapping every key by hand. See kube-claude's
-# design notes on this module for why the core stays neutral while this
-# wrapper (and its Proxmox/Azure siblings) rename on the way out.
+# via merge() instead of remapping every key by hand. The shared core stays
+# provider-neutral by design (one implementation serving AWS/Proxmox/Azure
+# alike); this wrapper (and its Proxmox/Azure siblings) does the renaming on
+# the way out instead.
 output "cluster_name" {
   description = "Cluster identity, as passed in. Re-exported verbatim so control-plane/node-pool source it from here instead of re-deriving or re-hardcoding it."
   value       = var.cluster_name
