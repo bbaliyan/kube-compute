@@ -164,10 +164,15 @@ resource "aws_instance" "worker" {
   vpc_security_group_ids = [var.cluster_security_group_id]
   user_data              = local.connectivity_user_data
 
+  # hop_limit 3: confirmed live on aws-control-plane's node that 2 isn't
+  # enough for a pod's IMDSv2 token PUT to get its response back through
+  # Cilium (TCP handshake completes, response dropped as TTL-exceeded one hop
+  # short) — see aws-control-plane/main.tf's genesis instance for the detail.
+  # Applied here too since worker nodes run the same CNI/pod-network path.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 2
+    http_put_response_hop_limit = 3
   }
 
   root_block_device {

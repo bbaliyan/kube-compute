@@ -301,10 +301,14 @@ resource "aws_instance" "control_plane_additional" {
   vpc_security_group_ids = [aws_security_group.node.id, var.cluster_security_group_id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
+  # hop_limit 3, not AWS's generally-documented 2: confirmed live that 2 isn't
+  # enough for a pod (not just the host) to complete an IMDSv2 token PUT
+  # through Cilium — see the genesis instance's metadata_options below for the
+  # full story.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 2
+    http_put_response_hop_limit = 3
   }
 
   root_block_device {
@@ -524,10 +528,22 @@ resource "aws_instance" "control_plane" {
   vpc_security_group_ids = [aws_security_group.node.id, var.cluster_security_group_id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
+  # hop_limit 3, not the commonly-documented 2 (AWS's own docs say 2 is enough
+  # for "containerized applications" generally). Confirmed live on this
+  # cluster: with hop_limit 2, a pod's IMDSv2 token PUT completes its TCP
+  # handshake fine (proving basic pod<->host routing works — this isn't a
+  # masquerade/connectivity problem) but the token response itself never
+  # arrives ("Operation timed out ... 0 bytes received"). IMDSv2 deliberately
+  # caps that response's IP TTL to the configured hop_limit as an anti-SSRF
+  # control, and it's getting dropped as TTL-exceeded one hop short — Cilium's
+  # own veth + internal routing between a pod's netns and the host evidently
+  # costs 2 hops here, not the 1 hop AWS's generic guidance assumes for
+  # "a container". Mutable in place (not ForceNew on aws_instance) — no
+  # replacement needed to pick this up.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 2 # lets pods reach IMDS for instance-profile auth
+    http_put_response_hop_limit = 3
   }
 
   root_block_device {
