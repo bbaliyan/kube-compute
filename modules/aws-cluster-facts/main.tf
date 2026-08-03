@@ -17,6 +17,8 @@ locals {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-compute"
   })
+
+  effective_vpc_id = var.vpc_id != null ? var.vpc_id : one(data.aws_vpc.named[*].id)
 }
 
 # ---- Delivery: the agent token is mirrored into an SSM SecureString and fetched at
@@ -41,7 +43,7 @@ resource "aws_ssm_parameter" "agent_token" {
 resource "aws_security_group" "cluster" {
   name_prefix = "kube-compute-${var.cluster_name}-cluster-"
   description = "kube-compute ${var.cluster_name}: east-west traffic among cluster members only."
-  vpc_id      = var.vpc_id
+  vpc_id      = local.effective_vpc_id
   tags        = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster" })
 
   lifecycle {
