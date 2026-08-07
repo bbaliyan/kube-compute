@@ -4,7 +4,7 @@ Provisions the control-plane node(s) for a single-cluster RKE2 deployment on Pro
 
 ## Operational note: SSH connection bursts on apply
 
-The `proxmox_virtual_environment_file` resources here (`vendor_data`, `hostname_init`,
+The `proxmox_virtual_environment_file` resources here (`vendor_data`, `node_init`,
 `network_data`) upload cloud-init snippets via SSH — this is how the `bpg/proxmox`
 provider handles snippet uploads, not something this module controls. Each upload opens
 its own SSH connection to the Proxmox node, and OpenTofu's default per-unit resource
@@ -34,3 +34,17 @@ Two independent mitigations, not mutually exclusive:
 
 Consumers that apply multiple Proxmox units concurrently (e.g. via a `run --all`-style
 orchestrator) should expect to need the host-side change.
+
+### Booting from a kube-image template
+
+Set `proxmox_template_vm_id` to a pre-baked kube-image VM template's ID instead
+of `os_image_url`/`os_image_file_id`. Nodes are **full**-cloned from it, so they
+never depend on the template surviving. The template carries OS prep, the RKE2
+binaries (both the server and agent units — the role is chosen at launch), the
+SELinux policy, the kernel modules, and the guest agent; this module supplies
+only per-cluster identity, secrets, and join logic, as a cloud-init payload
+rendered by `node-bootstrap`. Bootstrap runs asynchronously on the node after
+`tofu apply` returns — tail `/var/log/kube-compute-bootstrap.log` on the node
+to watch it. No compatibility check is made between the template's contents and
+`k8s_version`/`cilium_version`/`argocd_version`; the template's self-describing
+name is the documentation.

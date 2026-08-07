@@ -1,12 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ---- Common inputs (pass through to node-bootstrap) ----
-variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 10 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
-  type        = string
-  default     = null
-}
-
 variable "ansible_ssh_private_key_file" {
   description = "Path to the SSH private key Ansible uses to reach the node (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
   type        = string
@@ -222,6 +216,12 @@ variable "os_image_file_name" {
 variable "os_image_file_id" {
   description = "ID of an image already present on Proxmox storage, to share one downloaded image across many clusters. Set exactly one of os_image_url or os_image_file_id."
   type        = string
+  default     = null
+}
+
+variable "proxmox_template_vm_id" {
+  description = "VM ID of a pre-baked kube-image Proxmox VM template to full-clone every control-plane node from, instead of booting a stock cloud image. The template already carries OS prep, the RKE2 binaries (both server and agent units — the role is chosen at launch), SELinux policy, kernel modules, and the guest agent, so a node reaches Ready in a fraction of the stock-image time. Null (the default) keeps the stock path via os_image_url/os_image_file_id — kube-image is opt-in and kube-compute works standalone without it. Set exactly one of os_image_url, os_image_file_id, or proxmox_template_vm_id. No compatibility validation is performed between this ID and what is actually baked in it: the template's own self-describing name (kube-image-<k8s_version>-<cilium_version>-<argocd_version>-<build-date>) is documentation, treated the same way a hand-picked stock image already is."
+  type        = number
   default     = null
 }
 

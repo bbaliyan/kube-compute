@@ -31,8 +31,24 @@ locals {
   # zero-resource-dependency string whenever DNS is configured; falls back to genesis's
   # raw IP (a real resource dependency, unavoidable without DNS) only when
   # dns_server_address is null.
-  genesis_dns_name     = local.has_domain ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
-  registration_address = var.dns_server_address != null ? local.genesis_dns_name : local.cp_ips["0"]
+  genesis_dns_name = local.has_domain ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+  # Deliberately NOT local.cp_ips["0"]: local.cp_ips is a single merged map
+  # built from BOTH proxmox_virtual_environment_vm.control_plane AND
+  # proxmox_virtual_environment_vm.control_plane_additional (all instances),
+  # so any reference to it — even just the "0" key — makes the referencing
+  # expression depend on the whole control_plane_additional resource in
+  # OpenTofu's (resource-grained, not key-grained) dependency graph. Once
+  # Task 5 wired each additional node's own cloud-init to
+  # module.node_bootstrap_additional's output (which needs
+  # registration_address), that closed a real cycle: control_plane_additional
+  # -> local.cp_ips -> registration_address -> node_bootstrap_additional ->
+  # node_init_additional -> control_plane_additional. genesis_ip below reads
+  # only proxmox_virtual_environment_vm.control_plane (never _additional),
+  # producing the identical value without the cycle.
+  genesis_ip = local.static_ips ? split("/", var.control_plane_ip_addresses[0])[0] : try(
+    [for ip in flatten(proxmox_virtual_environment_vm.control_plane.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
+  )
+  registration_address = var.dns_server_address != null ? local.genesis_dns_name : local.genesis_ip
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")
@@ -189,43 +205,9 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
   }
 }
 
-# ---- Minimal, RKE2-agnostic boot-time cloud-init: hostname only ----
-# SSH-key injection and qemu-guest-agent are already handled by vendor_data
-# above, entirely independent of RKE2. inotify sysctls and the hot-plug-CPU
-# udev rule moved into node-bootstrap's Ansible role (os-prep tasks). The
-# ONLY thing still needed at boot, before Ansible ever connects, is a
-# distinct-per-node hostname: RKE2/kubelet defaults the registered
-# Kubernetes node name to the OS hostname, so every node MUST get a unique
-# one or later nodes silently clobber earlier ones' node registration.
-resource "proxmox_virtual_environment_file" "hostname_init" {
-  content_type = "snippets"
-  datastore_id = var.iso_datastore_id
-  node_name    = var.proxmox_node
-
-  source_raw {
-    data      = "#cloud-config\nhostname: ${var.cluster_name}-cp-0\n"
-    file_name = "${var.cluster_name}-cp-0-hostname-init.yaml"
-  }
-}
-
-resource "proxmox_virtual_environment_file" "hostname_init_additional" {
-  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
-
-  content_type = "snippets"
-  datastore_id = var.iso_datastore_id
-  node_name    = var.proxmox_node
-
-  source_raw {
-    data      = "#cloud-config\nhostname: ${var.cluster_name}-cp-${each.key}\n"
-    file_name = "${var.cluster_name}-cp-${each.key}-hostname-init.yaml"
-  }
-}
-
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
-  node_provider                  = "proxmox"
-  ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
   k8s_version                    = var.k8s_version
@@ -260,64 +242,22 @@ module "node_bootstrap" {
   tsig_key_name                 = var.tsig_key_name
   tsig_key_algorithm            = var.tsig_key_algorithm
   tsig_key_secret               = var.tsig_key_secret
-
-  ansible_connection_vars = {
-    ansible_connection           = "ssh"
-    ansible_host                 = local.cp_ips["0"]
-    ansible_user                 = var.ansible_ssh_user
-    ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
-    # UserKnownHostsFile=/dev/null makes every connection start from a blank
-    # known_hosts, so accept-new always succeeds regardless of what a prior
-    # incarnation of this node presented at the same IP — this project's
-    # clusters are deliberately disposable (destroy/recreate at a stable
-    # static IP is the normal operating model, not an edge case), so a
-    # rotated host key on every recreate is expected, not suspicious. Without
-    # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
-    # the operator's real known_hosts and requires a manual `ssh-keygen -R`
-    # before every apply after a destroy/recreate. Deliberate trade-off: it
-    # still verifies the key isn't swapped mid-apply, but gives up
-    # host-key continuity *across* destroy/recreate cycles — acceptable here
-    # since the disposable-cluster model already discards that continuity by
-    # design once a node is destroyed. Nothing is written to the operator's
-    # real ~/.ssh/known_hosts either way. (Same reasoning applies to
-    # node_bootstrap_additional's identical block below.)
-    ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
-    # Pinned rather than left to Ansible's auto-discovery: every node this
-    # project targets is always AlmaLinux 10 (this project's only supported
-    # OS, no compatibility claim for others), so there's nothing to actually
-    # discover, and pinning avoids the "future installation of another Python
-    # interpreter could cause a different interpreter to be discovered"
-    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
-    # symlink to whatever the current default Python actually is (3.12 as of
-    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
-    # OS bump doesn't silently break this. (Same reasoning applies to
-    # node_bootstrap_additional's identical block below.)
-    ansible_python_interpreter = "/usr/bin/python3"
-  }
 }
 
-# Deliberately NOT depends_on module.node_bootstrap — see aws-control-plane's identical
-# comment on module.node_bootstrap_additional: that dependency forced every additional
-# server's OS-prep/install to wait for genesis's entire Ansible run, including its
-# post-Ready GitOps bootstrap, which has nothing to do with etcd join safety. RKE2's
-# server process retries its `server:` line the same way its agent process retries a
-# worker's join target (see aws-node-pool's established no-depends_on precedent), so a
-# sibling starting concurrently with genesis just waits out genesis's install via that
-# connection retry. The one genuine ordering requirement — genesis's dns-self-register
-# task (node_role == "server-init", gated on dns_self_register_zone) publishing
-# genesis_dns_name before a sibling resolves registration_address — self-resolves
-# without an explicit dependency: that task runs during genesis's OS-prep, well before
-# genesis's own RKE2 install, so it's very likely already published by the time a
-# concurrently-bootstrapping sibling reaches its own join attempt; if it isn't yet, the
-# sibling's join-race retry loop below (which already tolerates a not-yet-reachable
-# target) absorbs the wait via its ordinary wipe-and-retry cycle.
+# node-bootstrap no longer executes anything, so there is no run to order
+# against: this is a pure render, and both calls are plan-time-only. The
+# ordering property the old comment defended still holds, now enforced by the
+# node itself rather than by Terraform — genesis publishes its
+# dns-self-register record early in its own first boot, and a sibling that
+# resolves registration_address before that lands is absorbed by the join-race
+# retry loop in bootstrap.sh, which already tolerates a not-yet-reachable
+# target. RKE2's server process retries its `server:` line the same way its
+# agent process retries a worker's join target.
 module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
   source = "../node-bootstrap"
 
-  node_provider            = "proxmox"
-  ansible_playbook_path    = var.ansible_playbook_path
   cluster_name             = var.cluster_name
   node_name                = "${var.cluster_name}-cp-${each.key}"
   k8s_version              = var.k8s_version
@@ -341,31 +281,54 @@ module "node_bootstrap_additional" {
   cert_mode            = var.cert_mode
   extra_tags           = var.extra_tags
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
+}
 
-  ansible_connection_vars = {
-    ansible_connection           = "ssh"
-    ansible_host                 = local.cp_ips[each.key]
-    ansible_user                 = var.ansible_ssh_user
-    ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
-    # Same reasoning as module.node_bootstrap's identical block above.
-    ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
-    # Same reasoning as module.node_bootstrap's identical block above.
-    ansible_python_interpreter = "/usr/bin/python3"
+# ---- Per-node cloud-init: node-bootstrap's full lean payload ----
+# This subsumes the hostname-only snippet that used to live here. Hostname is
+# now one key inside node-bootstrap's own cloud-config, alongside the RKE2
+# config/registries/CA/manifest write_files and the runcmd that starts the
+# bootstrap script — one payload, one place, no chance of the two drifting.
+# vendor_data (SSH keys + qemu-guest-agent) and network_data are unrelated to
+# RKE2 and stay exactly as they were.
+resource "proxmox_virtual_environment_file" "node_init" {
+  content_type = "snippets"
+  datastore_id = var.iso_datastore_id
+  node_name    = var.proxmox_node
+  overwrite    = true
+
+  source_raw {
+    data      = module.node_bootstrap.cloud_init_user_data
+    file_name = "${var.cluster_name}-cp-0-node-init.yaml"
+  }
+}
+
+resource "proxmox_virtual_environment_file" "node_init_additional" {
+  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
+
+  content_type = "snippets"
+  datastore_id = var.iso_datastore_id
+  node_name    = var.proxmox_node
+  overwrite    = true
+
+  source_raw {
+    data      = module.node_bootstrap_additional[each.key].cloud_init_user_data
+    file_name = "${var.cluster_name}-cp-${each.key}-node-init.yaml"
   }
 }
 
 # ---- DNS registration: publishes cluster_fqdn -> every control-plane IP via RFC2136 ----
-# depends_on every node-bootstrap run (not just the VMs) so the record only
-# appears once the API server is actually reachable at those IPs — mirrors the
-# same "depends on the Ansible run, not just the resource" reasoning used for
-# module.node_bootstrap_additional above. Optional: skipped entirely when no
-# dns_server_address is supplied (this module creates no DNS by default,
-# same as every other provider module in this project).
+# depends_on the control-plane VMs rather than node-bootstrap: node-bootstrap
+# is now a plan-time render with nothing to wait for. This is a real, accepted
+# semantic change — the api.* record now appears once the VMs exist, not once
+# the API server is actually answering, because cloud-init runs asynchronously
+# after Terraform has already returned and nothing in Terraform can observe it
+# finishing. A client that resolves the name too early retries; RKE2's own
+# join paths already tolerate an unreachable target.
 module "dns_registration" {
   source = "../dns-registration"
 
   providers  = { dns = dns }
-  depends_on = [module.node_bootstrap, module.node_bootstrap_additional]
+  depends_on = [proxmox_virtual_environment_vm.control_plane, proxmox_virtual_environment_vm.control_plane_additional]
 
   enabled          = local.dns_registration_enabled
   dns_zone         = coalesce(local.dns_zone, "invalid.")
@@ -377,11 +340,18 @@ module "dns_registration" {
 # ---- Wildcard DNS registration: publishes *.<cluster_name> -> the same IPs ----
 # Only on all_in_one clusters — see wildcard_registration_enabled above for why
 # a dedicated_control_plane cluster leaves this to proxmox-node-pool instead.
+# depends_on the control-plane VMs rather than node-bootstrap: node-bootstrap
+# is now a plan-time render with nothing to wait for. This is a real, accepted
+# semantic change — the api.* record now appears once the VMs exist, not once
+# the API server is actually answering, because cloud-init runs asynchronously
+# after Terraform has already returned and nothing in Terraform can observe it
+# finishing. A client that resolves the name too early retries; RKE2's own
+# join paths already tolerate an unreachable target.
 module "dns_registration_wildcard" {
   source = "../dns-registration"
 
   providers  = { dns = dns }
-  depends_on = [module.node_bootstrap, module.node_bootstrap_additional]
+  depends_on = [proxmox_virtual_environment_vm.control_plane, proxmox_virtual_environment_vm.control_plane_additional]
 
   enabled          = local.wildcard_registration_enabled
   dns_zone         = coalesce(local.dns_zone, "invalid.")
@@ -443,15 +413,30 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     dedicated = var.vm_memory_mb
   }
 
+  # Full-clone a pre-baked kube-image template when one is supplied. full =
+  # true is NOT optional: a linked clone leaves every provisioned node
+  # permanently dependent on the template continuing to exist, which breaks the
+  # moment kube-image's prune-images.sh deletes an old build. Always an
+  # independent copy.
+  dynamic "clone" {
+    for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
+    content {
+      vm_id = clone.value
+      full  = true
+    }
+  }
+
   disk {
     datastore_id = var.disk_datastore_id
-    import_from  = var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id
-    file_id      = null
-    interface    = "scsi0"
-    size         = var.vm_disk_gb
-    discard      = "on"
-    iothread     = true
-    ssd          = true
+    # Omitted when cloning: the clone already brings its own disk, and size /
+    # datastore_id above still override what it inherits.
+    import_from = var.proxmox_template_vm_id != null ? null : (var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id)
+    file_id     = null
+    interface   = "scsi0"
+    size        = var.vm_disk_gb
+    discard     = "on"
+    iothread    = true
+    ssd         = true
   }
 
   serial_device {}
@@ -468,15 +453,19 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 
   initialization {
     datastore_id         = var.disk_datastore_id
-    user_data_file_id    = proxmox_virtual_environment_file.hostname_init.id
+    user_data_file_id    = proxmox_virtual_environment_file.node_init.id
     vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
     network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data["0"].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
   }
 
   lifecycle {
     precondition {
-      condition     = (var.os_image_url != null) != (var.os_image_file_id != null)
-      error_message = "Set exactly one of os_image_url (download) or os_image_file_id (pre-existing Proxmox file)."
+      condition = length(compact([
+        var.os_image_url != null ? "url" : "",
+        var.os_image_file_id != null ? "file" : "",
+        var.proxmox_template_vm_id != null ? "template" : "",
+      ])) == 1
+      error_message = "Set exactly one of os_image_url (download a stock cloud image), os_image_file_id (a stock image already on Proxmox storage), or proxmox_template_vm_id (full-clone a pre-baked kube-image VM template)."
     }
 
     precondition {
@@ -516,15 +505,30 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
     dedicated = var.vm_memory_mb
   }
 
+  # Full-clone a pre-baked kube-image template when one is supplied. full =
+  # true is NOT optional: a linked clone leaves every provisioned node
+  # permanently dependent on the template continuing to exist, which breaks the
+  # moment kube-image's prune-images.sh deletes an old build. Always an
+  # independent copy.
+  dynamic "clone" {
+    for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
+    content {
+      vm_id = clone.value
+      full  = true
+    }
+  }
+
   disk {
     datastore_id = var.disk_datastore_id
-    import_from  = var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id
-    file_id      = null
-    interface    = "scsi0"
-    size         = var.vm_disk_gb
-    discard      = "on"
-    iothread     = true
-    ssd          = true
+    # Omitted when cloning: the clone already brings its own disk, and size /
+    # datastore_id above still override what it inherits.
+    import_from = var.proxmox_template_vm_id != null ? null : (var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id)
+    file_id     = null
+    interface   = "scsi0"
+    size        = var.vm_disk_gb
+    discard     = "on"
+    iothread    = true
+    ssd         = true
   }
 
   serial_device {}
@@ -541,7 +545,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
 
   initialization {
     datastore_id        = var.disk_datastore_id
-    user_data_file_id   = proxmox_virtual_environment_file.hostname_init_additional[each.key].id
+    user_data_file_id   = proxmox_virtual_environment_file.node_init_additional[each.key].id
     vendor_data_file_id = proxmox_virtual_environment_file.vendor_data.id
     # Same static/DHCP branch as the primary control_plane resource above
     # (network_data is empty when static_ips is false — a DHCP HA cluster has
@@ -556,11 +560,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
 locals {
   # Resolved IP per control-plane VM, static or via guest agent — same pattern node-proxmox uses.
   cp_ips = merge(
-    {
-      "0" = local.static_ips ? split("/", var.control_plane_ip_addresses[0])[0] : try(
-        [for ip in flatten(proxmox_virtual_environment_vm.control_plane.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
-      )
-    },
+    { "0" = local.genesis_ip },
     {
       for k, vm in proxmox_virtual_environment_vm.control_plane_additional :
       k => local.static_ips ? split("/", var.control_plane_ip_addresses[tonumber(k)])[0] : try(

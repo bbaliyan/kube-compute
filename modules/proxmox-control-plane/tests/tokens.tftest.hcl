@@ -13,6 +13,13 @@ mock_provider "proxmox" {
     }
   }
 }
+mock_provider "external" {
+  mock_data "external" {
+    defaults = {
+      result = { manifest = "# mocked-helm-render" }
+    }
+  }
+}
 
 run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   command = plan
@@ -33,12 +40,29 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
     etcd_ipset_name            = "kube-compute-bharat-etcd"
   }
 
-  # NOTE: all three assertions that used to live here compared random_password.*.result
-  # values, or asserted content in the now-removed `rendered_cloud_init` output.
-  # random_password's result is unknown until apply, and this module's apply now
-  # genuinely invokes node-bootstrap's local-exec (real ansible-playbook), which this
-  # sandboxed/CI environment can't run — so there's no way to reach those apply-time
-  # values here anymore. See rke2-ansible-bootstrap Ticket 14's resolution notes for
-  # this coverage gap (token distinctness, agent-token propagation into the bootstrap
-  # run, cluster_agent_token output correctness).
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "CLUSTER_TOKEN='test-cluster-token-0123456789'") &&
+      strcontains(base64decode(f.content), "CLUSTER_AGENT_TOKEN='test-agent-token-0123456789'")
+      if f.path == "/opt/kube-compute/secrets.env"
+    ])
+    error_message = "the genesis node's payload must carry both the server and the agent join token, and they must be distinct values"
+  }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      f.permissions == "0600"
+      if f.path == "/opt/kube-compute/secrets.env"
+    ])
+    error_message = "the join tokens must land in a 0600 file on the node, never a world-readable one"
+  }
+  assert {
+    condition = alltrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      !strcontains(base64decode(f.content), "ansible")
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
+    error_message = "the bootstrap payload must not reference Ansible — this module no longer runs any playbook against the node"
+  }
 }

@@ -13,6 +13,13 @@ mock_provider "proxmox" {
     }
   }
 }
+mock_provider "external" {
+  mock_data "external" {
+    defaults = {
+      result = { manifest = "# mocked-helm-render" }
+    }
+  }
+}
 
 variables {
   cluster_name          = "bharat"
@@ -81,16 +88,16 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
   # replaced.
   assert {
     condition = alltrue([
-      for k, v in proxmox_virtual_environment_file.hostname_init_additional :
-      yamldecode(replace(v.source_raw[0].data, "#cloud-config\n", "")).hostname != yamldecode(replace(proxmox_virtual_environment_file.hostname_init.source_raw[0].data, "#cloud-config\n", "")).hostname
+      for k, v in proxmox_virtual_environment_file.node_init_additional :
+      yamldecode(v.source_raw[0].data).hostname != yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).hostname
     ])
-    error_message = "every additional control-plane node's hostname-init payload must differ from the genesis node's — rke2/kubelet default the registered Kubernetes node name to the OS hostname, so a collision makes every kubelet register as the same node, silently clobbering each other"
+    error_message = "every additional control-plane node's cloud-init payload must set a hostname different from the genesis node's — rke2/kubelet default the registered Kubernetes node name to the OS hostname, so a collision makes every kubelet register as the same node, silently clobbering each other"
   }
   assert {
     condition = length(distinct([
-      for k, v in proxmox_virtual_environment_file.hostname_init_additional :
-      yamldecode(replace(v.source_raw[0].data, "#cloud-config\n", "")).hostname
-    ])) == length(proxmox_virtual_environment_file.hostname_init_additional)
+      for k, v in proxmox_virtual_environment_file.node_init_additional :
+      yamldecode(v.source_raw[0].data).hostname
+    ])) == length(proxmox_virtual_environment_file.node_init_additional)
     error_message = "additional control-plane nodes must each get a distinct hostname from one another too, not just from genesis"
   }
   assert {
