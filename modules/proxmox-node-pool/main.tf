@@ -143,25 +143,6 @@ resource "proxmox_virtual_environment_file" "network_data" {
   }
 }
 
-# ---- Minimal, RKE2-agnostic boot-time cloud-init: hostname only ----
-# SSH-key injection and qemu-guest-agent are already handled by vendor_data
-# above. inotify sysctls and the hot-plug-CPU udev rule moved into
-# node-bootstrap's Ansible role (os-prep tasks). The only thing still needed
-# at boot, before Ansible ever connects, is a distinct-per-node hostname —
-# see proxmox-control-plane's identical resource for the full reasoning.
-resource "proxmox_virtual_environment_file" "hostname_init" {
-  for_each = { for i in range(var.desired_count) : tostring(i) => i }
-
-  content_type = "snippets"
-  datastore_id = var.iso_datastore_id
-  node_name    = var.proxmox_node
-
-  source_raw {
-    data      = "#cloud-config\nhostname: ${var.cluster_name}-worker-${each.key}\n"
-    file_name = "${var.cluster_name}-worker-${each.key}-hostname-init.yaml"
-  }
-}
-
 resource "proxmox_virtual_environment_vm" "worker" {
   # Deliberately an independent index range, not for_each = module.node_bootstrap:
   # that module depends on this VM's own IP (via local.worker_ips), so keying off
@@ -183,6 +164,18 @@ resource "proxmox_virtual_environment_vm" "worker" {
     trim    = true
   }
 
+  # Full-clone a pre-baked kube-image template when one is supplied. full =
+  # true is NOT optional: a linked clone leaves every worker permanently
+  # dependent on the template continuing to exist, which breaks the moment
+  # kube-image's prune-images.sh deletes an old build.
+  dynamic "clone" {
+    for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
+    content {
+      vm_id = clone.value
+      full  = true
+    }
+  }
+
   cpu {
     cores = var.vm_cores
     type  = var.vm_cpu_type
@@ -194,13 +187,15 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   disk {
     datastore_id = var.disk_datastore_id
-    import_from  = var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id
-    file_id      = null
-    interface    = "scsi0"
-    size         = var.vm_disk_gb
-    discard      = "on"
-    iothread     = true
-    ssd          = true
+    # Omitted when cloning: the clone already brings its own disk, and size /
+    # datastore_id above still override what it inherits.
+    import_from = var.proxmox_template_vm_id != null ? null : (var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id)
+    file_id     = null
+    interface   = "scsi0"
+    size        = var.vm_disk_gb
+    discard     = "on"
+    iothread    = true
+    ssd         = true
   }
 
   serial_device {}
@@ -217,15 +212,19 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   initialization {
     datastore_id         = var.disk_datastore_id
-    user_data_file_id    = proxmox_virtual_environment_file.hostname_init[each.key].id
+    user_data_file_id    = proxmox_virtual_environment_file.node_init[each.key].id
     vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
     network_data_file_id = proxmox_virtual_environment_file.network_data[each.key].id
   }
 
   lifecycle {
     precondition {
-      condition     = (var.os_image_url != null) != (var.os_image_file_id != null)
-      error_message = "Set exactly one of os_image_url (download) or os_image_file_id (pre-existing Proxmox file)."
+      condition = length(compact([
+        var.os_image_url != null ? "url" : "",
+        var.os_image_file_id != null ? "file" : "",
+        var.proxmox_template_vm_id != null ? "template" : "",
+      ])) == 1
+      error_message = "Set exactly one of os_image_url (download a stock cloud image), os_image_file_id (a stock image already on Proxmox storage), or proxmox_template_vm_id (full-clone a pre-baked kube-image VM template)."
     }
     precondition {
       condition     = local.effective_registration_address != null
@@ -263,8 +262,6 @@ module "node_bootstrap" {
 
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
-  node_provider             = "proxmox"
-  ansible_playbook_path     = var.ansible_playbook_path
   cluster_name              = var.cluster_name
   node_name                 = "${var.cluster_name}-worker-${each.key}"
   k8s_version               = local.k8s_version
@@ -274,50 +271,39 @@ module "node_bootstrap" {
   node_labels               = var.extra_node_labels
   trusted_ca_pem            = var.trusted_ca_pem
   registry_mirror_url       = var.registry_mirror_url
+}
 
-  ansible_connection_vars = {
-    ansible_connection           = "ssh"
-    ansible_host                 = local.worker_ips[each.key]
-    ansible_user                 = var.ansible_ssh_user
-    ansible_ssh_private_key_file = pathexpand(var.ansible_ssh_private_key_file)
-    # UserKnownHostsFile=/dev/null makes every connection start from a blank
-    # known_hosts, so accept-new always succeeds regardless of what a prior
-    # incarnation of this node presented at the same IP — this project's
-    # clusters are deliberately disposable (destroy/recreate at a stable
-    # static IP is the normal operating model, not an edge case), so a
-    # rotated host key on every recreate is expected, not suspicious. Without
-    # this, a recreate hits "REMOTE HOST IDENTIFICATION HAS CHANGED" against
-    # the operator's real known_hosts and requires a manual `ssh-keygen -R`
-    # before every apply after a destroy/recreate. Deliberate trade-off: it
-    # still verifies the key isn't swapped mid-apply, but gives up
-    # host-key continuity *across* destroy/recreate cycles — acceptable here
-    # since the disposable-cluster model already discards that continuity by
-    # design once a node is destroyed. Nothing is written to the operator's
-    # real ~/.ssh/known_hosts either way.
-    ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
-    # Pinned rather than left to Ansible's auto-discovery: every node this
-    # project targets is always AlmaLinux 10 (this project's only supported
-    # OS, no compatibility claim for others), so there's nothing to actually
-    # discover, and pinning avoids the "future installation of another Python
-    # interpreter could cause a different interpreter to be discovered"
-    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
-    # symlink to whatever the current default Python actually is (3.12 as of
-    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
-    # OS bump doesn't silently break this.
-    ansible_python_interpreter = "/usr/bin/python3"
+# ---- Per-node cloud-init: node-bootstrap's full lean payload ----
+# Subsumes the hostname-only snippet that used to live here — hostname is now
+# one key inside node-bootstrap's own cloud-config, alongside the RKE2 config,
+# the registry mirror config, the trusted CA, and the runcmd that starts the
+# bootstrap script. vendor_data (SSH keys + qemu-guest-agent) and network_data
+# are unrelated to RKE2 and stay exactly as they were.
+resource "proxmox_virtual_environment_file" "node_init" {
+  for_each = { for i in range(var.desired_count) : tostring(i) => i }
+
+  content_type = "snippets"
+  datastore_id = var.iso_datastore_id
+  node_name    = var.proxmox_node
+  overwrite    = true
+
+  source_raw {
+    data      = module.node_bootstrap[each.key].cloud_init_user_data
+    file_name = "${var.cluster_name}-worker-${each.key}-node-init.yaml"
   }
 }
 
 # ---- Wildcard DNS registration: publishes *.<cluster_name> -> every worker IP ----
-# depends_on every worker's node_bootstrap run so the record only appears
-# once each worker has actually joined — mirrors proxmox-control-plane's
-# identical "depends on the Ansible run, not just the VM" reasoning. Optional:
-# skipped entirely when no dns_server_address is supplied.
+# depends_on the worker VMs rather than node-bootstrap: node-bootstrap is now a
+# plan-time render with nothing to wait for. Accepted semantic change — the
+# wildcard record now appears once the VMs exist, not once each worker has
+# actually joined, because cloud-init runs asynchronously after Terraform has
+# already returned. Ingress clients that resolve it early simply retry.
 module "dns_registration" {
   source = "../dns-registration"
 
   providers  = { dns = dns }
-  depends_on = [module.node_bootstrap]
+  depends_on = [proxmox_virtual_environment_vm.worker]
 
   enabled          = local.dns_registration_enabled
   dns_zone         = coalesce(local.dns_zone, "invalid.")

@@ -13,6 +13,13 @@ mock_provider "proxmox" {
     }
   }
 }
+mock_provider "external" {
+  mock_data "external" {
+    defaults = {
+      result = { manifest = "# mocked-helm-render" }
+    }
+  }
+}
 
 run "worker_pool_wiring" {
   command = plan
@@ -31,16 +38,6 @@ run "worker_pool_wiring" {
     os_image_file_name   = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
   }
 
-  # NOTE: two assertions used to live here, checking the now-removed
-  # `rendered_cloud_init` output for the embedded agent-token fetch command and the
-  # absence of an AWS SSM reference. The agent token now flows to node-bootstrap's
-  # `agent_token_fetch_command` variable, which is merged into the local-exec
-  # provisioner's `environment` block (not a trigger or any other plan/state-visible
-  # attribute) — so there is no longer a Terraform-visible value to assert on for
-  # this content. The "never references AWS SSM" property is true by construction
-  # here (this module always sets ansible_connection_vars.ansible_connection = "ssh"),
-  # but that input isn't re-exposed as an output either. See rke2-ansible-bootstrap
-  # Ticket 14's resolution notes for this coverage gap.
   assert {
     condition     = length(proxmox_virtual_environment_vm.worker) == 2
     error_message = "desired_count = 2 must create exactly 2 worker VMs"
@@ -52,5 +49,34 @@ run "worker_pool_wiring" {
   assert {
     condition     = output.node_provider == "proxmox"
     error_message = "module must expose a node_provider output — kube-shell/kube-status/kube-start read it from terragrunt output to dispatch; without it they get literal JSON null and fail with \"unknown node_provider 'null'\" when run from a node-pool directory"
+  }
+  assert {
+    condition = alltrue([
+      for k, snippet in proxmox_virtual_environment_file.node_init :
+      anytrue([
+        for f in yamldecode(snippet.source_raw[0].data).write_files :
+        strcontains(base64decode(f.content), "AGENT_TOKEN_FETCH_COMMAND='echo '\\''agent-secret-abc123'\\'''")
+        if f.path == "/opt/kube-compute/secrets.env"
+      ])
+    ])
+    error_message = "every worker's payload must carry this pool's agent-token fetch command — on Proxmox there is no secret store, so the token is embedded verbatim in an echo"
+  }
+  assert {
+    condition = alltrue([
+      for k, snippet in proxmox_virtual_environment_file.node_init :
+      alltrue([
+        for f in yamldecode(snippet.source_raw[0].data).write_files :
+        !strcontains(base64decode(f.content), "aws_ssm") && !strcontains(base64decode(f.content), "amazon.aws")
+        if f.path == "/opt/kube-compute/bootstrap.sh"
+      ])
+    ])
+    error_message = "a Proxmox worker's bootstrap payload must never reference an AWS SSM transport"
+  }
+  assert {
+    condition = length(distinct([
+      for k, snippet in proxmox_virtual_environment_file.node_init :
+      yamldecode(snippet.source_raw[0].data).hostname
+    ])) == 2
+    error_message = "each worker must get a distinct hostname — rke2/kubelet register the Kubernetes node under the OS hostname"
   }
 }
