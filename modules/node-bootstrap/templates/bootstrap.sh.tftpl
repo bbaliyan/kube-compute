@@ -48,7 +48,7 @@ umask 077
 cat >/run/dns-self-register-tsig.key <<EOF
 key "${tsig_key_name}" {
   algorithm ${tsig_key_algorithm};
-  secret "$TSIG_KEY_SECRET";
+  secret "$${TSIG_KEY_SECRET:-}";
 };
 EOF
 trap 'rm -f /run/dns-self-register-tsig.key' EXIT
@@ -69,7 +69,7 @@ umask 022
 # Advisory only, matching the Ansible role's uri check in spirit: a 200 or 401
 # both mean "the mirror is answering". Non-fatal here because a first boot must
 # not be lost to a transiently unreachable mirror.
-MIRROR_CODE="$(curl -fsS -o /dev/null -w '%%{http_code}' "${registry_mirror_url}/v2/" || true)"
+MIRROR_CODE="$(curl -sS --max-time 10 -o /dev/null -w '%%{http_code}' "${registry_mirror_url}/v2/" || true)"
 case "$MIRROR_CODE" in
   200|401) echo "kube-compute: registry mirror preflight OK ($MIRROR_CODE)" ;;
   *) echo "kube-compute: registry mirror preflight did not answer 200/401 (got '$MIRROR_CODE'), continuing" >&2 ;;
@@ -84,7 +84,7 @@ umask 077
 # The fetch command is provider-shaped: on Proxmox it is a literal `echo
 # '<token>'` (no secret store to fetch from), on AWS an SSM call. Either way it
 # is evaluated here, never embedded in config.yaml as a command.
-RESOLVED_AGENT_TOKEN="$(eval "$AGENT_TOKEN_FETCH_COMMAND")"
+RESOLVED_AGENT_TOKEN="$(eval "$${AGENT_TOKEN_FETCH_COMMAND:-}")"
 if [ -z "$RESOLVED_AGENT_TOKEN" ]; then
   echo "kube-compute: agent_token_fetch_command produced an empty token" >&2
   exit 1
@@ -117,7 +117,7 @@ esac
 %{ endif ~}
 {
   if [ -n "$SERVER_LINE" ]; then echo "$SERVER_LINE"; fi
-  echo "token: $CLUSTER_TOKEN"
+  echo "token: $${CLUSTER_TOKEN:-}"
   # Empty on a server-join node, exactly as the Ansible template rendered it
   # there (the env lookup produced ""); RKE2 tolerates the empty value and the
   # genesis node's agent-token is the one that actually governs agent joins.
@@ -168,7 +168,7 @@ systemctl enable --now rke2-server.service
 # this wipes local server state and retries — so the presleep only needs enough
 # jitter to keep simultaneous starts out of the exact same instant.
 NODE_INDEX="$(hostname | grep -oE '[0-9]+$' || echo 0)"
-sleep $(( (NODE_INDEX * 5) + (RANDOM % 5) ))
+sleep $(( (10#$NODE_INDEX * 5) + (RANDOM % 5) ))
 systemctl enable rke2-server.service
 JOIN_ATTEMPT=0
 until systemctl start rke2-server.service && timeout 90 bash -c 'until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
@@ -191,7 +191,7 @@ systemctl enable --now rke2-agent.service
 %{ if node_role != "worker" ~}
 READY=0
 for attempt in $(seq 1 60); do
-  if /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -q Ready; then
+  if /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -qE '^Ready'; then
     READY=1
     break
   fi
