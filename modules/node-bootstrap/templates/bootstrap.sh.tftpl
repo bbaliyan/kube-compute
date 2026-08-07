@@ -1,0 +1,240 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Runtime half of the RKE2 bootstrap: everything the kube-image Proxmox
+# template deliberately does NOT bake, because it is per-cluster identity,
+# per-cluster secrets, or join logic that only makes sense once this specific
+# node boots. The bake-time half (OS prep, RKE2 binaries, SELinux policy,
+# guest agent, kernel modules) is already present in the image.
+#
+# Delivered by cloud-init write_files and invoked from runcmd. Rendered by
+# templatefile(): a dollar-brace is Terraform interpolation, and a doubled
+# percent-brace escapes to a literal percent-brace for bash.
+set -euo pipefail
+exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
+echo "kube-compute: bootstrap start $(date -Is)"
+
+KC=/opt/kube-compute
+# shellcheck disable=SC1091
+. "$KC/secrets.env"
+
+# Own IP, discovered on the node itself — the same probe the Ansible role's
+# dns-self-register task used. RKE2 needs it for node-ip and (on a server) as
+# the first tls-san entry.
+NODE_IP="$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')"
+if [ -z "$NODE_IP" ]; then
+  echo "kube-compute: could not determine this node's IP" >&2
+  exit 1
+fi
+
+%{ if trusted_ca_enabled ~}
+# cloud-init already wrote the PEM to the anchors directory; only the trust
+# store rebuild is left.
+update-ca-trust extract
+%{ endif ~}
+
+%{ if node_role == "server-init" && dns_self_register_zone != "" ~}
+# ---- genesis DNS self-registration (RFC2136/TSIG) ----
+# Publishes a single-target A record as soon as this node knows its own IP, so
+# a concurrently-bootstrapping sibling never has to wait for the round-robin
+# api.* record every control-plane node contributes to.
+if ! command -v nsupdate >/dev/null 2>&1; then
+  dnf install -y bind-utils
+fi
+# A TSIG keyfile (rather than nsupdate's -y "<alg>:<name>:<secret>" form) keeps
+# the secret out of /proc/<pid>/cmdline, readable by any local user for the
+# lifetime of the process. Written 0600 via umask, removed unconditionally
+# afterwards whether or not the update itself succeeded.
+umask 077
+cat >/run/dns-self-register-tsig.key <<EOF
+key "${tsig_key_name}" {
+  algorithm ${tsig_key_algorithm};
+  secret "$TSIG_KEY_SECRET";
+};
+EOF
+trap 'rm -f /run/dns-self-register-tsig.key' EXIT
+nsupdate ${nsupdate_flags} -k /run/dns-self-register-tsig.key <<EOF
+server ${dns_server_address} ${dns_server_port}
+zone ${dns_self_register_zone}
+update delete ${dns_self_register_record_name}.${dns_self_register_zone} A
+update add ${dns_self_register_record_name}.${dns_self_register_zone} ${dns_self_register_ttl} A $NODE_IP
+send
+EOF
+rm -f /run/dns-self-register-tsig.key
+trap - EXIT
+umask 022
+%{ endif ~}
+
+%{ if registry_mirror_url != "" ~}
+# ---- registry mirror preflight ----
+# Advisory only, matching the Ansible role's uri check in spirit: a 200 or 401
+# both mean "the mirror is answering". Non-fatal here because a first boot must
+# not be lost to a transiently unreachable mirror.
+MIRROR_CODE="$(curl -fsS -o /dev/null -w '%%{http_code}' "${registry_mirror_url}/v2/" || true)"
+case "$MIRROR_CODE" in
+  200|401) echo "kube-compute: registry mirror preflight OK ($MIRROR_CODE)" ;;
+  *) echo "kube-compute: registry mirror preflight did not answer 200/401 (got '$MIRROR_CODE'), continuing" >&2 ;;
+esac
+%{ endif ~}
+
+# ---- render /etc/rancher/rke2/config.yaml ----
+install -d -m 0755 /etc/rancher/rke2
+CONFIG=/etc/rancher/rke2/config.yaml
+umask 077
+%{ if node_role == "worker" ~}
+# The fetch command is provider-shaped: on Proxmox it is a literal `echo
+# '<token>'` (no secret store to fetch from), on AWS an SSM call. Either way it
+# is evaluated here, never embedded in config.yaml as a command.
+RESOLVED_AGENT_TOKEN="$(eval "$AGENT_TOKEN_FETCH_COMMAND")"
+if [ -z "$RESOLVED_AGENT_TOKEN" ]; then
+  echo "kube-compute: agent_token_fetch_command produced an empty token" >&2
+  exit 1
+fi
+{
+  echo "server: https://${registration_address}:9345"
+  echo "token: $RESOLVED_AGENT_TOKEN"
+  echo "node-ip: $NODE_IP"
+  cat <<'KUBE_COMPUTE_WORKER_STATIC'
+${node_label_block}
+KUBE_COMPUTE_WORKER_STATIC
+} >"$CONFIG"
+%{ else ~}
+SERVER_LINE=""
+%{ if node_role == "server-join" ~}
+# An additional control-plane node is always joining an existing cluster.
+SERVER_LINE="server: https://${registration_address}:9345"
+%{ endif ~}
+%{ if node_role == "server-init" && registration_address != "" ~}
+# Rejoin detection. RKE2 has no --cluster-init flag: the first server is simply
+# the one whose config.yaml has no "server:" key. A REPLACED genesis node must
+# rejoin an already-healthy cluster rather than blindly re-initializing etcd,
+# which would split-brain a live quorum. 200/401/403 all mean "the API server
+# is up and answering"; anything else (including no answer at all) means there
+# is no cluster to rejoin, so this really is genesis.
+PROBE_CODE="$(curl -sk --max-time 10 -o /dev/null -w '%%{http_code}' "https://${registration_address}:6443/readyz" || true)"
+case "$PROBE_CODE" in
+  200|401|403) SERVER_LINE="server: https://${registration_address}:9345" ;;
+esac
+%{ endif ~}
+{
+  if [ -n "$SERVER_LINE" ]; then echo "$SERVER_LINE"; fi
+  echo "token: $CLUSTER_TOKEN"
+  # Empty on a server-join node, exactly as the Ansible template rendered it
+  # there (the env lookup produced ""); RKE2 tolerates the empty value and the
+  # genesis node's agent-token is the one that actually governs agent joins.
+  echo "agent-token: $${CLUSTER_AGENT_TOKEN:-}"
+  echo "node-ip: $NODE_IP"
+  echo "tls-san:"
+  # Quote every SAN: a wildcard entry (e.g. *.cluster.example) starts with '*',
+  # which is YAML's alias indicator, so an unquoted "- *.foo" is invalid YAML
+  # and RKE2 refuses to start. Quoting is inert for plain IPs/hostnames.
+  echo "  - \"$NODE_IP\""
+  cat <<'KUBE_COMPUTE_SERVER_STATIC'
+${static_tls_san_block}
+${server_static_block}
+KUBE_COMPUTE_SERVER_STATIC
+} >"$CONFIG"
+%{ endif ~}
+chmod 0600 "$CONFIG"
+umask 022
+
+%{ if node_role != "worker" ~}
+# ---- auto-deploy manifests: must exist before RKE2's first start, since RKE2
+#      only applies whatever it finds under server/manifests/ at startup ----
+install -d -m 0700 /var/lib/rancher/rke2/server/manifests
+%{ if cni == "cilium" && node_role == "server-init" ~}
+# Genesis only: Cilium is cluster-wide state, not per-node, so a joining server
+# does not re-apply it. Rendered by `helm template` on the operator, never via
+# RKE2's HelmChart CRD — that CR's finalizer runs `helm uninstall` on deletion,
+# which would fight handing off to Argo CD.
+install -m 0600 "$KC/manifests/cilium.yaml" /var/lib/rancher/rke2/server/manifests/cilium.yaml
+%{ endif ~}
+if [ -d "$KC/server-manifests" ]; then
+  for extra_manifest in "$KC/server-manifests/"*; do
+    if [ -e "$extra_manifest" ]; then
+      install -m 0600 "$extra_manifest" /var/lib/rancher/rke2/server/manifests/
+    fi
+  done
+fi
+%{ endif ~}
+
+# ---- start RKE2 ----
+%{ if node_role == "server-init" ~}
+systemctl enable --now rke2-server.service
+%{ endif ~}
+%{ if node_role == "server-join" ~}
+# Additional control-plane nodes join embedded-etcd one at a time (an upstream
+# etcd limit of one non-voting learner at a time). The real collision guard is
+# the retry loop below — etcd rejects a second concurrent learner outright, and
+# this wipes local server state and retries — so the presleep only needs enough
+# jitter to keep simultaneous starts out of the exact same instant.
+NODE_INDEX="$(hostname | grep -oE '[0-9]+$' || echo 0)"
+sleep $(( (NODE_INDEX * 5) + (RANDOM % 5) ))
+systemctl enable rke2-server.service
+JOIN_ATTEMPT=0
+until systemctl start rke2-server.service && timeout 90 bash -c 'until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers 2>/dev/null | grep -q " Ready"; do sleep 5; done'; do
+  JOIN_ATTEMPT=$((JOIN_ATTEMPT + 1))
+  if [ "$JOIN_ATTEMPT" -ge 6 ]; then
+    echo "kube-compute: join-race exhausted after 6 attempts" >&2
+    exit 1
+  fi
+  systemctl stop rke2-server 2>/dev/null || true
+  rm -rf /var/lib/rancher/rke2/server/tls /var/lib/rancher/rke2/server/cred /var/lib/rancher/rke2/server/db
+  sleep 10
+done
+%{ endif ~}
+%{ if node_role == "worker" ~}
+systemctl enable --now rke2-agent.service
+%{ endif ~}
+
+# ---- wait for readiness, so the bootstrap log reflects real success/failure
+#      rather than "service started" alone ----
+%{ if node_role != "worker" ~}
+READY=0
+for attempt in $(seq 1 60); do
+  if /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -q Ready; then
+    READY=1
+    break
+  fi
+  sleep 5
+done
+if [ "$READY" -ne 1 ]; then
+  echo "kube-compute: node did not report Ready within 300s" >&2
+  exit 1
+fi
+%{ else ~}
+ACTIVE=0
+for attempt in $(seq 1 60); do
+  if systemctl is-active --quiet rke2-agent; then
+    ACTIVE=1
+    break
+  fi
+  sleep 5
+done
+if [ "$ACTIVE" -ne 1 ]; then
+  echo "kube-compute: rke2-agent did not become active within 300s" >&2
+  exit 1
+fi
+%{ endif ~}
+
+%{ if argocd_needed ~}
+# ---- GitOps/Argo CD bootstrap: genesis only, after the node is Ready ----
+KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
+# --server-side is required: a client-side apply stores the previous config in
+# a last-applied-configuration annotation, and Argo CD's applicationsets CRD
+# exceeds Kubernetes' 262144-byte annotation limit.
+$KUBECTL apply --server-side -f "$KC/manifests/00-argocd.yaml"
+# NOT a health wait — only blocks until the API server serves the Application
+# type (avoids a "no matches for kind Application" race). Deliberately does not
+# wait for argocd-server to roll out: on a tainted control plane, or before a
+# worker pool joins, it has nowhere to schedule yet and converges once capacity
+# exists.
+$KUBECTL wait --for=condition=established --timeout=120s crd/applications.argoproj.io
+%{ if platform_app_enabled ~}
+$KUBECTL apply -f "$KC/manifests/10-platform-app.yaml"
+%{ endif ~}
+%{ if workloads_app_enabled ~}
+$KUBECTL apply -f "$KC/manifests/11-workloads-app.yaml"
+%{ endif ~}
+%{ endif ~}
+
+echo "kube-compute: bootstrap complete $(date -Is)"
