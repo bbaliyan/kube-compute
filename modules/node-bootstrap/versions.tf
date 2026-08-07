@@ -2,14 +2,14 @@
 terraform {
   required_version = ">= 1.12.0"
   required_providers {
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
-    }
-    # on_node mode only: zips the playbook + role into the run-command bundle.
-    archive = {
-      source  = "hashicorp/archive"
-      version = "~> 2.4"
+    # Runs `helm template` at PLAN time to render the Cilium and Argo CD
+    # genesis manifests. A data source, not a provisioner: the render is
+    # side-effect-free (it needs the chart and values, never cluster access),
+    # its result is plan-known, and it can be mocked in `tofu test`. Nothing in
+    # this module ever executes anything against the target node.
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.3"
     }
   }
 }

@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
+# node-bootstrap renders a lean cloud-init payload. It executes NOTHING: no
+# null_resource, no local-exec, no Ansible, no connection to the node. The
+# heavy half of RKE2 bootstrap (OS prep, RKE2 binaries, SELinux policy, kernel
+# modules, guest agent) is baked into a kube-image template; what is left here
+# is per-cluster identity, per-cluster secrets, and join logic — the things
+# that can never be baked into a shared image.
 module "component_versions" {
   source = "../component-versions"
 }
 
 locals {
-  playbook_path = coalesce(var.ansible_playbook_path, "${path.module}/ansible/playbook.yml")
-
-  # Resolve to the platform default rather than passing null through: a null/empty
-  # version renders "version: \"\"" into the Cilium HelmChart CR, which Helm/RKE2
+  # Resolve to the platform default rather than passing null through: a
+  # null/empty version renders "version: \"\"" into a chart request, which Helm
   # silently treats as "latest".
   cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
   argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
@@ -20,39 +24,47 @@ locals {
   # the-pin does NOT fall through to a variable's own default the way an
   # omitted argument would — that "explicit null uses the callee's default"
   # convenience is specific to optional() object-type attributes, not plain
-  # string variables passed through a module call. Verified the hard way: a
-  # real apply, and a regression test below, both showed a literal null reaching
-  # Ansible's extra-vars (crashing the `| length > 0` gate) instead of the pin.
-  # coalesce() is the actual fix — it treats both null and "" as "not set" uniformly.
-  # Tracks kube-platform's protected `main` branch (required PR review before merge),
-  # not a pinned commit SHA. This trades "a freshly-provisioned node always bootstraps
-  # against a fixed, previously-audited commit" for "platform components — including
-  # RKE2 version, via platform/platform-versions/values.yaml — stay continuously
-  # current without a terragrunt apply per change." Branch protection is the safeguard
-  # replacing the reproducibility guarantee the SHA pin used to provide.
+  # string variables passed through a module call. Verified the hard way on a
+  # real apply; the regression test in tests/platform_pin.tftest.hcl locks it
+  # in. coalesce() is the actual fix — it treats null and "" identically.
+  # Tracks kube-platform's protected `main` branch, not a pinned commit SHA:
+  # branch protection is the safeguard replacing the reproducibility guarantee
+  # a SHA pin would provide.
   pinned_platform_repo_url = module.component_versions.pinned_platform_repo_url
   pinned_platform_revision = module.component_versions.pinned_platform_revision
 
-  # gitops_platform_enabled = false clears the repo URL to "" regardless of the pin,
-  # so every gate downstream (this module's own tasks, plus the bootstrap-runner
-  # template's Argo CD render) can keep testing "repo_url non-empty" as the single
-  # signal, matching gitops_workloads_repo_url's existing null-means-skip shape.
+  # gitops_platform_enabled = false clears the repo URL to "" regardless of the
+  # pin, so every gate downstream can keep testing "repo_url non-empty" as the
+  # single signal, matching gitops_workloads_repo_url's null-means-skip shape.
   effective_gitops_platform_repo_url = var.gitops_platform_enabled ? coalesce(var.gitops_platform_repo_url, local.pinned_platform_repo_url) : ""
   effective_gitops_platform_revision = coalesce(var.gitops_platform_revision, local.pinned_platform_revision)
 
-  # nsupdate's `zone` directive requires a fully-qualified (trailing-dot) name, but
-  # callers commonly pass a bare zone (e.g. "lan") the way they would to any other
-  # DNS tool. Normalize here so either form works identically, mirroring the same
-  # precedent in proxmox-control-plane/main.tf's local.dns_zone. Idempotent whether
-  # or not var.dns_self_register_zone already ends in a dot; both null and "" stay
-  # "" so the "no self-registration" no-op path is unaffected either way (the
-  # Ansible gate below checks dns_self_register_zone != "").
+  effective_gitops_workloads_repo_url = var.gitops_workloads_repo_url != null ? var.gitops_workloads_repo_url : ""
+
+  platform_app_enabled  = local.effective_gitops_platform_repo_url != ""
+  workloads_app_enabled = local.effective_gitops_workloads_repo_url != ""
+  # Argo CD itself is only needed when at least one of the two Applications is
+  # going to be applied — a non-empty sentinel covers both.
+  argocd_needed = local.platform_app_enabled || local.workloads_app_enabled
+
+  # nsupdate's `zone` directive requires a fully-qualified (trailing-dot) name,
+  # but callers commonly pass a bare zone (e.g. "lan"). Normalize here so
+  # either form works identically, mirroring proxmox-control-plane's own
+  # local.dns_zone. Idempotent; both null and "" stay "" so the
+  # no-self-registration path is unaffected.
   dns_self_register_zone = var.dns_self_register_zone != null && var.dns_self_register_zone != "" ? "${trimsuffix(var.dns_self_register_zone, ".")}." : ""
 
-  # Cilium/Argo CD genesis values, computed as plain Terraform strings and
-  # base64-encoded into the runner (decoded with a single `base64 -d`) rather than
-  # embedded as a nested bash heredoc, which proved fragile inside the runner's own
-  # heredoc. `%{ if ~}` here is evaluated by Terraform, not bash.
+  # nsupdate transport flags, derived exactly as the Ansible role derived them:
+  # -v forces TCP, -4/-6 pin the address family.
+  nsupdate_flags = trimspace(join(" ", compact([
+    startswith(var.dns_transport, "tcp") ? "-v" : "",
+    endswith(var.dns_transport, "4") ? "-4" : "",
+    endswith(var.dns_transport, "6") ? "-6" : "",
+  ])))
+
+  is_server = contains(["server-init", "server-join"], var.node_role)
+
+  # ---- Cilium / Argo CD genesis chart values ----
   cilium_values_yaml = <<-EOT
     kubeProxyReplacement: true
     k8sServiceHost: "127.0.0.1"
@@ -78,10 +90,10 @@ locals {
         clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
   EOT
 
-  # repoServer/controller resources + probe timeouts: upstream defaults are zero
-  # requests (BestEffort QoS) and a 1s probe timeout, which crash-loop Argo CD
-  # under a real platform tree. Kept in sync with bootstrap/templates/argocd-app.yaml
-  # in kube-platform.
+  # repoServer/controller resources + probe timeouts: upstream defaults are
+  # zero requests (BestEffort QoS) and a 1s probe timeout, which crash-loop
+  # Argo CD under a real platform tree. Kept in sync with
+  # bootstrap/templates/argocd-app.yaml in kube-platform.
   argocd_values_yaml = <<-EOT
     configs:
       params:
@@ -113,141 +125,325 @@ locals {
         failureThreshold: 5
   EOT
 
-  # Bundled alongside this module's own playbook/roles, not the (possibly
-  # overridden) playbook_path — these pin the connection-plugin dependencies
-  # this module's operator_connect transports need (amazon.aws + boto3 for AWS
-  # SSM), independent of which playbook content a caller substitutes. Not used
-  # in on_node mode, which needs no connection plugin (-c local).
-  ansible_requirements_yml = "${path.module}/ansible/requirements.yml"
-  ansible_requirements_txt = "${path.module}/ansible/requirements.txt"
+  render_cilium = var.cni == "cilium" && var.node_role == "server-init"
+  render_argocd = local.argocd_needed && var.node_role == "server-init"
 
-  # Non-secret extra-vars only. Secrets (cluster_token, cluster_agent_token,
-  # agent_token_fetch_command, trusted_ca_pem) are excluded here — they flow
-  # through the local-exec `environment` block (operator_connect) or run-command
-  # protected parameters (on_node), never the bundle.
-  extra_vars = merge(var.ansible_connection_vars, {
-    node_provider                  = var.node_provider
-    cluster_name                   = var.cluster_name
-    node_name                      = var.node_name
-    k8s_version                    = var.k8s_version
-    cluster_fqdn                   = var.cluster_fqdn != null ? var.cluster_fqdn : ""
-    cluster_fqdn_suffix            = var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""
-    node_role                      = var.node_role
-    control_plane_taint            = var.control_plane_taint
-    registration_address           = var.registration_address != null ? var.registration_address : ""
-    extra_tls_sans                 = var.extra_tls_sans
-    cni                            = var.cni
-    cilium_version                 = local.cilium_version
-    cilium_operator_replicas       = var.cilium_operator_replicas != null ? var.cilium_operator_replicas : 0
-    registry_mirror_url            = var.registry_mirror_url != null ? var.registry_mirror_url : ""
-    node_labels                    = var.node_labels
-    extra_server_manifests         = var.extra_server_manifests
-    gitops_platform_repo_url       = local.effective_gitops_platform_repo_url
-    argocd_version                 = local.argocd_version
-    gitops_platform_revision       = local.effective_gitops_platform_revision
-    gitops_workloads_repo_url      = var.gitops_workloads_repo_url != null ? var.gitops_workloads_repo_url : ""
-    gitops_workloads_revision      = var.gitops_workloads_revision
-    gitops_workloads_path          = var.gitops_workloads_path
-    cert_mode                      = var.cert_mode
-    platform_extra_helm_parameters = var.platform_extra_helm_parameters
-    platform_helm_values_object    = var.platform_helm_values_object != null ? var.platform_helm_values_object : {}
-    extra_tags                     = var.extra_tags
-    dns_self_register_zone         = local.dns_self_register_zone
-    dns_self_register_record_name  = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
-    dns_self_register_ttl          = var.dns_self_register_ttl
-    dns_server_address             = var.dns_server_address != null ? var.dns_server_address : ""
-    dns_server_port                = var.dns_server_port
-    dns_transport                  = var.dns_transport
-    tsig_key_name                  = var.tsig_key_name != null ? var.tsig_key_name : ""
-    tsig_key_algorithm             = var.tsig_key_algorithm
-  })
+  cilium_manifest = local.render_cilium ? data.external.cilium_manifest[0].result.manifest : ""
 
-  extra_vars_json = jsonencode(local.extra_vars)
+  # Namespace prepended in Terraform rather than inside the render program, so
+  # the program stays a single-purpose `helm template` wrapper.
+  argocd_manifest = local.render_argocd ? join("\n", [
+    "apiVersion: v1",
+    "kind: Namespace",
+    "metadata:",
+    "  name: argocd",
+    "---",
+    data.external.argocd_manifest[0].result.manifest,
+  ]) : ""
 
-  # Secrets, keyed by node_role so the key SET is known at plan time. This
-  # encodes the same role->secret policy every provider module already follows:
-  # server-init gets both tokens, server-join the cluster token, worker the fetch
-  # command; trusted_ca_pem (a plain input) is added for any role. Role-gating
-  # rather than value-presence-gating is deliberate: on_node's caller builds one
-  # run-command protected_parameter per key via for_each, which Terraform
-  # requires to be plan-known — but the token VALUES come from a random_password
-  # and are unknown until apply, so gating the key set on `!= null` would make
-  # for_each unknown and fail. node_role and trusted_ca_pem are plain inputs,
-  # known at plan. In operator_connect these are the local-exec `environment`;
-  # in on_node the caller maps them to run-command protected parameters (exposed
-  # via the on_node_secret_env output). Never a file, never an extra-var.
-  secret_env = merge(
-    var.node_role == "server-init" ? { CLUSTER_TOKEN = var.cluster_token, CLUSTER_AGENT_TOKEN = var.cluster_agent_token } : {},
-    var.node_role == "server-join" ? { CLUSTER_TOKEN = var.cluster_token } : {},
-    var.node_role == "worker" ? { AGENT_TOKEN_FETCH_COMMAND = var.agent_token_fetch_command } : {},
-    var.trusted_ca_pem != null ? { TRUSTED_CA_PEM = var.trusted_ca_pem } : {},
-    var.tsig_key_secret != null ? { TSIG_KEY_SECRET = var.tsig_key_secret } : {},
+  # ---- GitOps Application manifests ----
+  # Rendered by templatefile()/yamlencode() here, not by Ansible's template
+  # module on the node — consistent with how the Cilium/Argo values above are
+  # already plain Terraform strings, and it keeps the node free of any
+  # templating engine at all.
+  platform_values_object = merge(
+    var.platform_helm_values_object != null ? var.platform_helm_values_object : {},
+    { extraTags = var.extra_tags },
   )
 
-  is_operator_connect = var.invocation_mode == "operator_connect"
+  platform_app_yaml = <<-EOT
+    apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: platform
+      namespace: argocd
+    spec:
+      project: default
+      source:
+        repoURL: ${local.effective_gitops_platform_repo_url}
+        targetRevision: ${local.effective_gitops_platform_revision}
+        path: bootstrap
+        helm:
+          parameters:
+            - name: platformRepoURL
+              value: "${local.effective_gitops_platform_repo_url}"
+            - name: platformRevision
+              value: "${local.effective_gitops_platform_revision}"
+            - name: certMode
+              value: "${var.cert_mode}"
+            - name: clusterName
+              value: "${var.cluster_name}"
+            - name: clusterFqdnSuffix
+              value: "${var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""}"
+            - name: trustedCaPemB64
+              value: "${base64encode(var.trusted_ca_pem != null ? var.trusted_ca_pem : "")}"
+    %{~for name, val in var.platform_extra_helm_parameters~}
+            - name: ${name}
+              value: "${val}"
+    %{~endfor~}
+          valuesObject:
+            ${indent(8, yamlencode(local.platform_values_object))}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions: ["CreateNamespace=true"]
+  EOT
 
-  # One template renders the runner for both modes; the Cilium/Argo render and
-  # the extra-vars payload are shared, so they can never diverge again (the
-  # divergence that motivated retiring the separate cloud-init template). All
-  # keys are always present — empty where a mode doesn't use them — so
-  # templatefile() never fails on a missing key inside a not-taken branch.
-  runner_vars = {
-    mode      = var.invocation_mode
-    node_name = var.node_name
-    cni       = var.cni
-    node_role = var.node_role
-    # Gates the bootstrap-runner template's Argo CD helm-template render — needed
-    # if either the platform or the workloads Application is going to be applied,
-    # not just platform, so a non-empty sentinel covers both.
-    argocd_needed           = local.effective_gitops_platform_repo_url != "" || (var.gitops_workloads_repo_url != null && var.gitops_workloads_repo_url != "") ? "true" : ""
-    cilium_version          = local.cilium_version
-    argocd_version          = local.argocd_version
-    cilium_values_b64       = base64encode(local.cilium_values_yaml)
-    argocd_values_b64       = base64encode(local.argocd_values_yaml)
-    extra_vars_json         = local.extra_vars_json
-    requirements_yml        = local.ansible_requirements_yml
-    requirements_txt        = local.ansible_requirements_txt
-    playbook_path           = local.playbook_path
-    bundle_playbook_relpath = "playbook.yml"
-    bundle_zip_b64          = local.is_operator_connect ? "" : filebase64(data.archive_file.ansible_bundle[0].output_path)
+  # Deliberately independent of the platform Application: no shared app-of-apps
+  # parent, no sync-wave ordering against it. Eventual consistency — if a
+  # workload needs something platform provides, Argo CD's own automated
+  # selfHeal/retry converges it once platform catches up.
+  workloads_app_yaml = <<-EOT
+    apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: workloads
+      namespace: argocd
+    spec:
+      project: default
+      source:
+        repoURL: ${local.effective_gitops_workloads_repo_url}
+        targetRevision: ${var.gitops_workloads_revision}
+        path: ${var.gitops_workloads_path}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions: ["CreateNamespace=true"]
+  EOT
+
+  # ---- registries.yaml ----
+  # Faithful port of registries.yaml.j2, including the belt-and-suspenders
+  # containerd TLS pin to the same anchors path the trusted CA is written to.
+  registry_mirror_host = var.registry_mirror_url != null ? replace(var.registry_mirror_url, "/^https?:\\/\\//", "") : ""
+
+  registries_yaml = var.registry_mirror_url == null ? "" : join("\n", concat([
+    "mirrors:",
+    "  docker.io:",
+    "    endpoint: [\"${var.registry_mirror_url}\"]",
+    "  ghcr.io:",
+    "    endpoint: [\"${var.registry_mirror_url}\"]",
+    "  quay.io:",
+    "    endpoint: [\"${var.registry_mirror_url}\"]",
+    "  registry.k8s.io:",
+    "    endpoint: [\"${var.registry_mirror_url}\"]",
+    ], var.trusted_ca_pem == null ? [] : [
+    "configs:",
+    "  \"${local.registry_mirror_host}\":",
+    "    tls:",
+    "      ca_file: /etc/pki/ca-trust/source/anchors/trusted-ca.crt",
+  ], [""]))
+
+  # ---- static config.yaml fragments ----
+  # Everything in config.yaml that is known at plan time. The node-discovered
+  # parts (node-ip, its own IP as the first tls-san, the fetched agent token,
+  # the rejoin-probe result) are appended by bootstrap.sh on the node itself.
+  # Every SAN is quoted: a wildcard entry starts with '*', which is YAML's
+  # alias indicator, so an unquoted "- *.foo" is invalid YAML and RKE2 refuses
+  # to start. Quoting is inert for plain IPs/hostnames.
+  static_tls_san_block = join("\n", [
+    for san in compact(concat([var.cluster_fqdn != null ? var.cluster_fqdn : ""], var.extra_tls_sans)) :
+    "  - \"${san}\""
+  ])
+
+  server_static_block = join("\n", concat([
+    "write-kubeconfig-mode: \"0644\"",
+    "secrets-encryption: true",
+    "disable-cloud-controller: true",
+    # Disables whatever RKE2's default ingress controller is for the installed
+    # version (ingress-nginx or Traefik) — this project doesn't bundle one at
+    # bootstrap.
+    "ingress-controller: none",
+    ], var.control_plane_taint ? [
+    "node-taint:",
+    "  - \"CriticalAddonsOnly=true:NoExecute\"",
+    ] : [], var.cni == "cilium" ? [
+    "cni: cilium",
+    "disable-kube-proxy: true",
+    # Without this, RKE2 installs its own bundled rke2-cilium addon (a separate
+    # HelmChart CR) alongside the genesis-rendered Cilium manifest — both
+    # fighting over the same cilium-operator/cilium objects in kube-system.
+    "disable:",
+    "  - rke2-cilium",
+  ] : []))
+
+  node_label_block = length(var.node_labels) == 0 ? "" : join("\n", concat(
+    ["node-label:"],
+    [for k, v in var.node_labels : "  - \"${k}=${v}\""],
+  ))
+
+  # ---- runtime bootstrap script ----
+  bootstrap_sh = templatefile("${path.module}/templates/bootstrap.sh.tftpl", {
+    node_role                     = var.node_role
+    cni                           = var.cni
+    registration_address          = var.registration_address != null ? var.registration_address : ""
+    trusted_ca_enabled            = var.trusted_ca_pem != null
+    registry_mirror_url           = var.registry_mirror_url != null ? var.registry_mirror_url : ""
+    dns_self_register_zone        = local.dns_self_register_zone
+    dns_self_register_record_name = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
+    dns_self_register_ttl         = var.dns_self_register_ttl
+    dns_server_address            = var.dns_server_address != null ? var.dns_server_address : ""
+    dns_server_port               = var.dns_server_port
+    nsupdate_flags                = local.nsupdate_flags
+    tsig_key_name                 = var.tsig_key_name != null ? var.tsig_key_name : ""
+    tsig_key_algorithm            = var.tsig_key_algorithm
+    node_label_block              = local.node_label_block
+    static_tls_san_block          = local.static_tls_san_block
+    server_static_block           = local.server_static_block
+    argocd_needed                 = local.render_argocd
+    platform_app_enabled          = local.platform_app_enabled
+    workloads_app_enabled         = local.workloads_app_enabled
+  })
+
+  # ---- secrets.env ----
+  # Every key is always defined (empty where a role doesn't use it) so
+  # bootstrap.sh can run under `set -u` after sourcing it. Single-quoted with
+  # the POSIX '\'' escape so any character in a token is safe.
+  secret_values = {
+    CLUSTER_TOKEN             = var.node_role != "worker" && var.cluster_token != null ? var.cluster_token : ""
+    CLUSTER_AGENT_TOKEN       = var.node_role == "server-init" && var.cluster_agent_token != null ? var.cluster_agent_token : ""
+    AGENT_TOKEN_FETCH_COMMAND = var.node_role == "worker" && var.agent_token_fetch_command != null ? var.agent_token_fetch_command : ""
+    TSIG_KEY_SECRET           = var.tsig_key_secret != null ? var.tsig_key_secret : ""
   }
 
-  on_node_bundle = local.is_operator_connect ? null : templatefile("${path.module}/templates/bootstrap-runner.sh.tpl", local.runner_vars)
+  secrets_env = join("\n", concat(
+    ["# SPDX-License-Identifier: Apache-2.0"],
+    [for k in sort(keys(local.secret_values)) : "${k}='${replace(local.secret_values[k], "'", "'\\''")}'"],
+    [""],
+  ))
+
+  # ---- cloud-init write_files ----
+  # Every entry is base64-encoded (encoding: b64). This is not cosmetic: it is
+  # what makes the outer cloud-config document immune to its own payloads —
+  # a PEM, a multi-megabyte Helm render, an operator-supplied auto-deploy
+  # manifest, or a token containing a colon can never break the YAML around
+  # them. It also means the whole document is safely produced by yamlencode()
+  # rather than a text template, so it is structurally valid by construction.
+  write_files = concat(
+    [
+      {
+        path        = "/opt/kube-compute/secrets.env"
+        permissions = "0600"
+        owner       = "root:root"
+        encoding    = "b64"
+        content     = base64encode(local.secrets_env)
+      },
+      {
+        path        = "/opt/kube-compute/bootstrap.sh"
+        permissions = "0700"
+        owner       = "root:root"
+        encoding    = "b64"
+        content     = base64encode(local.bootstrap_sh)
+      },
+    ],
+    var.trusted_ca_pem == null ? [] : [{
+      path        = "/etc/pki/ca-trust/source/anchors/trusted-ca.crt"
+      permissions = "0644"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(var.trusted_ca_pem)
+    }],
+    var.registry_mirror_url == null ? [] : [{
+      path        = "/etc/rancher/rke2/registries.yaml"
+      permissions = "0644"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(local.registries_yaml)
+    }],
+    !local.render_cilium ? [] : [{
+      path        = "/opt/kube-compute/manifests/cilium.yaml"
+      permissions = "0600"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(local.cilium_manifest)
+    }],
+    !local.render_argocd ? [] : [{
+      path        = "/opt/kube-compute/manifests/00-argocd.yaml"
+      permissions = "0644"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(local.argocd_manifest)
+    }],
+    !(local.render_argocd && local.platform_app_enabled) ? [] : [{
+      path        = "/opt/kube-compute/manifests/10-platform-app.yaml"
+      permissions = "0600"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(local.platform_app_yaml)
+    }],
+    !(local.render_argocd && local.workloads_app_enabled) ? [] : [{
+      path        = "/opt/kube-compute/manifests/11-workloads-app.yaml"
+      permissions = "0644"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(local.workloads_app_yaml)
+    }],
+    !local.is_server ? [] : [
+      for name in sort(keys(var.extra_server_manifests)) : {
+        path        = "/opt/kube-compute/server-manifests/${name}"
+        permissions = "0600"
+        owner       = "root:root"
+        encoding    = "b64"
+        content     = base64encode(var.extra_server_manifests[name])
+      }
+    ],
+  )
+
+  # RKE2/kubelet default the registered Kubernetes node name to the OS
+  # hostname, so every node in a cluster MUST get a distinct value here — this
+  # single key replaces the standalone hostname-only cloud-init snippet the
+  # Proxmox modules used to carry separately.
+  cloud_config = merge(
+    {
+      hostname          = var.node_name
+      preserve_hostname = false
+      write_files       = local.write_files
+      runcmd            = [["/opt/kube-compute/bootstrap.sh"]]
+    },
+    var.cluster_fqdn_suffix != null && var.cluster_fqdn_suffix != "" ? {
+      fqdn = "${var.node_name}.${var.cluster_fqdn_suffix}"
+    } : {},
+  )
+
+  # "#cloud-config" is a YAML comment, so the whole document — including this
+  # required first line — round-trips through any YAML parser unchanged.
+  cloud_init_user_data = "#cloud-config\n${yamlencode(local.cloud_config)}"
 }
 
-# on_node bundle: a self-contained zip of the playbook + role, base64'd into the
-# runner script. Built only in on_node mode — operator_connect runs the role
-# straight off disk on the operator. output_path lives under .terraform (git-
-# ignored runtime dir), keyed by node_name so parallel node builds don't collide.
-data "archive_file" "ansible_bundle" {
-  count       = local.is_operator_connect ? 0 : 1
-  type        = "zip"
-  source_dir  = "${path.module}/ansible"
-  output_path = "${path.module}/.terraform/ansible-bundle-${var.node_name}.zip"
-}
+# Genesis-only Cilium render. `helm template` needs the chart and values but no
+# cluster access, so it runs on the operator at plan time.
+data "external" "cilium_manifest" {
+  count = local.render_cilium ? 1 : 0
 
-# operator_connect: triggers the Ansible install/join for exactly one node,
-# ansible-playbook running here and connecting via ansible_connection_vars. Not
-# created in on_node mode — there the caller (an Azure module) delivers the
-# on_node_bundle output via az vm run-command and owns the execution resource.
-resource "null_resource" "ansible_bootstrap" {
-  count = local.is_operator_connect ? 1 : 0
+  program = ["python3", "${path.module}/scripts/helm-render.py"]
 
-  triggers = {
-    node_name       = var.node_name
-    node_role       = var.node_role
-    playbook_path   = local.playbook_path
-    extra_vars_json = local.extra_vars_json
-    connection_vars = jsonencode(var.ansible_connection_vars)
+  query = {
+    release    = "cilium"
+    chart      = "cilium"
+    repo       = "https://helm.cilium.io/"
+    version    = local.cilium_version
+    namespace  = "kube-system"
+    values_b64 = base64encode(local.cilium_values_yaml)
   }
+}
 
-  provisioner "local-exec" {
-    # local-exec defaults to /bin/sh (dash), which lacks `set -o pipefail`;
-    # force bash. The runner's own console output is suppressed by Terraform
-    # because this resource's config touches sensitive values (secret_env) —
-    # tail the logfile the runner tees to for live progress.
-    interpreter = ["/bin/bash", "-c"]
-    environment = local.secret_env
-    command     = templatefile("${path.module}/templates/bootstrap-runner.sh.tpl", local.runner_vars)
+# Genesis only needs a working pinned Argo CD version; kube-platform's own
+# self-managing Application carries the consumer's chosen version afterward (an
+# in-place Helm upgrade, unlike a CNI swap).
+data "external" "argocd_manifest" {
+  count = local.render_argocd ? 1 : 0
+
+  program = ["python3", "${path.module}/scripts/helm-render.py"]
+
+  query = {
+    release    = "argocd"
+    chart      = "argo-cd"
+    repo       = "https://argoproj.github.io/argo-helm"
+    version    = local.argocd_version
+    namespace  = "argocd"
+    values_b64 = base64encode(local.argocd_values_yaml)
   }
 }

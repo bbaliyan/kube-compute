@@ -1,4 +1,0 @@
-# Python dependency of the amazon.aws collection's aws_ssm connection plugin
-# (see requirements.yml). Installed by node-bootstrap's own local-exec
-# command before ansible-playbook runs — not baked into kube-devenv.
-boto3==1.43.55

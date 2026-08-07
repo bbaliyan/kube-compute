@@ -1,35 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook to run. Use the bundled AlmaLinux 10 playbook (the default), or supply your own path for other distributions. No compatibility guarantee is made for untested distributions."
-  type        = string
-  default     = null
-}
-
-variable "invocation_mode" {
-  description = "How the Ansible role is executed. 'operator_connect' (default): ansible-playbook runs on the operator (the terragrunt-apply machine) and connects to the node via ansible_connection_vars — AWS SSM or Proxmox SSH. 'on_node': this module renders a self-contained bundle (playbook + role zipped and base64'd into a runner script) exposed via the on_node_bundle output; the caller (an Azure module) delivers it with az vm run-command and Ansible runs on the node itself (-c local). In on_node mode ansible_connection_vars is ignored, no local-exec runs, and the caller maps on_node_secret_env to run-command protected parameters."
-  type        = string
-  default     = "operator_connect"
-  validation {
-    condition     = contains(["operator_connect", "on_node"], var.invocation_mode)
-    error_message = "invocation_mode must be 'operator_connect' or 'on_node'."
-  }
-}
-
-variable "ansible_connection_vars" {
-  description = "Non-secret Ansible connection facts for this node, assembled by the caller (a provider module) since connection transport is inherently provider-specific — e.g. { ansible_connection = \"ssh\", ansible_host = \"10.0.1.5\", ansible_user = \"almalinux\", ansible_ssh_private_key_file = \"...\" } for Proxmox, or { ansible_connection = \"amazon.aws.aws_ssm\", ansible_aws_ssm_instance_id = \"i-...\", ansible_aws_ssm_region = \"...\", ansible_aws_ssm_bucket_name = \"...\" } for AWS. This module does not interpret the keys — it forwards them to ansible-playbook as extra-vars. Ignored when invocation_mode = \"on_node\" (Ansible runs locally on the node, no connection); pass {} there."
-  type        = map(string)
-  default     = {}
-}
-
-variable "node_provider" {
-  description = "Which provider module is calling ('aws', 'azure', or 'proxmox') — a stable identity fact, forwarded to Ansible as an extra-var for the shared role tasks to gate provider-specific behavior on (e.g. Proxmox-only qemu-guest-agent setup). Deliberately NOT inferred from ansible_connection/invocation_mode: today ssh happens to mean Proxmox and amazon.aws.aws_ssm happens to mean AWS, but that's an artifact of current transport choices, not a guarantee — a future transport change for any provider must not silently change which provider-specific tasks run."
-  type        = string
-  validation {
-    condition     = contains(["aws", "azure", "proxmox"], var.node_provider)
-    error_message = "node_provider must be 'aws', 'azure', or 'proxmox'."
-  }
-}
-
 variable "cluster_name" {
   description = "Cluster name. Drives the kubeconfig server SAN."
   type        = string
@@ -73,14 +42,14 @@ variable "control_plane_taint" {
 }
 
 variable "cluster_token" {
-  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (there is no existing secret store to fetch a server token from). Sensitive: delivered to the Ansible run via the local-exec environment block, never as an extra-var or inventory value."
+  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (there is no existing secret store to fetch a server token from). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env, sourced by the bootstrap script, never into config.yaml's world-readable siblings."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "cluster_agent_token" {
-  description = "Separate shared secret accepted only from agents (rke2 config.yaml's agent-token:) — a worker presenting this value can join as an agent but never as a server/etcd member. Only meaningful for node_role server-init (server-join callers omit it in every provider module checked). Sensitive: delivered via environment, never as an extra-var."
+  description = "Separate shared secret accepted only from agents (rke2 config.yaml's agent-token:) — a worker presenting this value can join as an agent but never as a server/etcd member. Only meaningful for node_role server-init (server-join callers omit it in every provider module checked). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
   type        = string
   default     = null
   sensitive   = true
@@ -93,7 +62,7 @@ variable "registration_address" {
 }
 
 variable "agent_token_fetch_command" {
-  description = "Shell command that prints the rke2 agent join token to stdout when run on the node (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store). Required for node_role worker; ignored otherwise. Sensitive: some providers' fetch commands embed the raw token in the command string itself rather than genuinely fetching it out-of-band (e.g. Proxmox's node-pool module today passes a literal `echo '<token>'`), so this is treated as sensitive uniformly and delivered via environment, never as an extra-var."
+  description = "Shell command that prints the rke2 agent join token to stdout when run on the node (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store). Required for node_role worker; ignored otherwise. Sensitive: some providers' fetch commands embed the raw token in the command string itself rather than genuinely fetching it out-of-band (e.g. Proxmox's node-pool module today passes a literal `echo '<token>'`), so this is treated as sensitive uniformly and written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
   type        = string
   default     = null
   sensitive   = true
@@ -128,7 +97,7 @@ variable "cilium_operator_replicas" {
 }
 
 variable "trusted_ca_pem" {
-  description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive: delivered to the Ansible run via the local-exec environment block, never as an extra-var — the same treatment as the join-secret variables above."
+  description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
   type        = string
   default     = null
   sensitive   = true
@@ -290,7 +259,7 @@ variable "tsig_key_algorithm" {
 }
 
 variable "tsig_key_secret" {
-  description = "Base64-encoded TSIG key secret. Required when dns_self_register_zone is set; ignored otherwise. Sensitive: delivered to the Ansible run via the local-exec environment block, never as an extra-var — same treatment as the join-secret variables above."
+  description = "Base64-encoded TSIG key secret. Required when dns_self_register_zone is set; ignored otherwise. Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env, consumed by a 0600 keyfile the bootstrap script removes immediately after nsupdate."
   type        = string
   default     = null
   sensitive   = true
