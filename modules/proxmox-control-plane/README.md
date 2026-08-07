@@ -37,6 +37,23 @@ orchestrator) should expect to need the host-side change.
 
 ### Booting from a kube-image template
 
+**A `proxmox_template_vm_id` template is now effectively required for a working
+cluster.** `node-bootstrap`'s cloud-init payload no longer installs RKE2 — it
+only configures and starts it, on the assumption the binaries are already on
+disk. That assumption only holds for a kube-image-baked template. Setting
+`os_image_url`/`os_image_file_id` alone (the plain stock-cloud-image path)
+still creates a VM and still validates/applies cleanly, but the node will fail
+at `systemctl enable --now rke2-server.service` during first-boot cloud-init —
+`tofu apply` reports success while the cluster never actually comes up. This
+is a direct, previously-undocumented consequence of the same node-bootstrap
+cutover that intentionally left `aws-control-plane`/`azure-control-plane`
+non-functional (see `../node-bootstrap/README.md`) — Proxmox's own stock-image
+path is just as affected, for the identical reason (no more live Ansible
+install step anywhere). `os_image_url`/`os_image_file_id` remain supported at
+the Terraform level (unchanged variables, no new validation added) so a
+consumer who needs a plain, non-RKE2 Proxmox VM for some other purpose is
+unaffected — only "boot a working RKE2 node from a stock image" is gone.
+
 Set `proxmox_template_vm_id` to a pre-baked kube-image VM template's ID instead
 of `os_image_url`/`os_image_file_id`. Nodes are **full**-cloned from it, so they
 never depend on the template surviving. The template carries OS prep, the RKE2
@@ -48,3 +65,10 @@ rendered by `node-bootstrap`. Bootstrap runs asynchronously on the node after
 to watch it. No compatibility check is made between the template's contents and
 `k8s_version`/`cilium_version`/`argocd_version`; the template's self-describing
 name is the documentation.
+
+Changing any of `node-bootstrap`'s inputs (a rotated token, a new registry
+mirror, a different platform revision) after a node's first boot has no effect
+on that already-running node — cloud-init only ever reads its user-data once,
+on first boot, and the rendered snippet file is stable/reused rather than
+triggering a VM replacement. Day-2 config changes need a new node (replace),
+not a `tofu apply` on the existing one.
