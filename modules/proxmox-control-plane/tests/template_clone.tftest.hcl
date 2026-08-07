@@ -90,6 +90,7 @@ run "all_three_image_sources_at_once_is_rejected" {
     proxmox_template_vm_id = 9000
     os_image_url           = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
     os_image_file_name     = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+    os_image_file_id       = "local:iso/stock.img"
   }
 
   expect_failures = [proxmox_virtual_environment_vm.control_plane]

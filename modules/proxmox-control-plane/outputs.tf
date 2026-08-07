@@ -31,7 +31,7 @@ output "node_provider" {
 }
 
 output "node_control_ref" {
-  description = "Genesis VM ID, for control-plane verb-scripts that need a single node reference. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that Ansible (not cloud-init) owns bootstrap."
+  description = "Genesis VM ID, for control-plane verb-scripts that need a single node reference. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that cloud-init (not Ansible) owns bootstrap."
   value       = tostring(proxmox_virtual_environment_vm.control_plane.vm_id)
 }
 
@@ -56,7 +56,7 @@ output "proxmox_node" {
 }
 
 output "ansible_ssh_user" {
-  description = "SSH user Ansible connects as for guest access (os-patch and any other ops tooling) — same account node-bootstrap itself connects as."
+  description = "SSH user for guest access (os-patch and any other ops tooling connecting to the node directly) — node-bootstrap itself no longer connects to the node at all; this account exists for day-2 tooling only."
   value       = var.ansible_ssh_user
 }
 
