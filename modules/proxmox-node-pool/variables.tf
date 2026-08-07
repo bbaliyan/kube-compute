@@ -1,18 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to node-bootstrap) ----
-variable "ansible_ssh_private_key_file" {
-  description = "Path to the SSH private key Ansible uses to reach each worker (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
-  type        = string
-  default     = "~/.ssh/id_ed25519_kube_cluster"
-}
-
-variable "ansible_ssh_user" {
-  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 10 image."
-  type        = string
-  default     = "almalinux"
-}
-
 variable "cluster_name" {
   description = "Cluster identity this pool joins. Must match the control plane's cluster_name."
   type        = string

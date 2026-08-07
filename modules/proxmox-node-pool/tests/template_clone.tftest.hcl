@@ -96,3 +96,61 @@ run "two_image_sources_at_once_is_rejected" {
 
   expect_failures = [proxmox_virtual_environment_vm.worker]
 }
+
+run "no_image_source_at_all_is_rejected" {
+  command = plan
+  variables {
+    proxmox_template_vm_id = null
+    os_image_url           = null
+    os_image_file_name     = null
+  }
+
+  expect_failures = [proxmox_virtual_environment_vm.worker]
+}
+
+run "file_id_stock_image_path_creates_no_clone_block" {
+  command = plan
+  variables {
+    proxmox_template_vm_id = null
+    os_image_url           = null
+    os_image_file_name     = null
+    os_image_file_id       = "local:iso/almalinux-10.qcow2"
+  }
+
+  assert {
+    condition = alltrue([
+      for k, vm in proxmox_virtual_environment_vm.worker : length(vm.clone) == 0
+    ])
+    error_message = "the os_image_file_id path must create no clone block — kube-image stays opt-in"
+  }
+  assert {
+    condition = alltrue([
+      for k, vm in proxmox_virtual_environment_vm.worker : vm.disk[0].import_from == "local:iso/almalinux-10.qcow2"
+    ])
+    error_message = "os_image_file_id must be wired straight to the disk's import_from when it is the sole image source"
+  }
+}
+
+run "template_and_file_id_at_once_is_rejected" {
+  command = plan
+  variables {
+    proxmox_template_vm_id = 9000
+    os_image_url           = null
+    os_image_file_name     = null
+    os_image_file_id       = "local:iso/almalinux-10.qcow2"
+  }
+
+  expect_failures = [proxmox_virtual_environment_vm.worker]
+}
+
+run "url_and_file_id_at_once_is_rejected" {
+  command = plan
+  variables {
+    proxmox_template_vm_id = null
+    os_image_url           = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+    os_image_file_name     = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+    os_image_file_id       = "local:iso/almalinux-10.qcow2"
+  }
+
+  expect_failures = [proxmox_virtual_environment_vm.worker]
+}

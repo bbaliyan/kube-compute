@@ -476,9 +476,18 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 }
 
 resource "proxmox_virtual_environment_vm" "control_plane_additional" {
-  # Deliberately NOT for_each = module.node_bootstrap_additional: that module
-  # depends on this VM's own IP (via local.cp_ips), so keying off it here
-  # would be circular. Same index range, computed independently.
+  # Deliberately NOT for_each = module.node_bootstrap_additional. It is no
+  # longer a real cycle — node_bootstrap_additional's registration_address
+  # resolves through local.genesis_ip, which (per the comment above it) was
+  # already narrowed to read only proxmox_virtual_environment_vm.control_plane,
+  # never control_plane_additional. The reason to keep this for_each
+  # independent now is the same resource-grained (not key-grained) dependency
+  # graph that motivated local.genesis_ip in the first place: chaining this
+  # resource's for_each through module.node_bootstrap_additional would add a
+  # dependency edge on every instance of that module — and transitively on
+  # genesis's own VM attributes — even though this resource's key set is a
+  # pure function of var.control_plane_count and needs none of that data.
+  # Same index range, computed independently so the two never entangle.
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
   name            = "${var.cluster_name}-cp-${each.key}"

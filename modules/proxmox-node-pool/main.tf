@@ -144,9 +144,13 @@ resource "proxmox_virtual_environment_file" "network_data" {
 }
 
 resource "proxmox_virtual_environment_vm" "worker" {
-  # Deliberately an independent index range, not for_each = module.node_bootstrap:
-  # that module depends on this VM's own IP (via local.worker_ips), so keying off
-  # it here would be circular — see proxmox-control-plane's identical comment.
+  # Not for_each = module.node_bootstrap. Post-cutover, module.node_bootstrap
+  # never reads local.worker_ips (or anything else derived from this VM) at
+  # all — a worker's registration_address/agent_token_fetch_command come from
+  # the caller, not from its own IP — so there is no cycle to avoid here
+  # anymore. Kept as its own identical index range anyway: this resource's key
+  # set is a pure function of var.desired_count and doesn't need to chain
+  # through a module output to get it.
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
   name            = "${var.cluster_name}-worker-${each.key}"

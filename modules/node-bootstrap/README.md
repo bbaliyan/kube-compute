@@ -1,101 +1,87 @@
 # node-bootstrap
 
-Triggers an Ansible-driven RKE2 install/join for **one node**, given a role
-already assigned by the caller (`server-init`, `server-join`, or `worker`).
-This module never decides how many nodes exist or which role each gets — that
-stays in the provider modules (`aws-control-plane`, `proxmox-control-plane`,
-`aws-node-pool`, `proxmox-node-pool`, ...), matching the existing two-layer
-split.
+Renders a `#cloud-config` document for **one node**, given a role already
+assigned by the caller (`server-init`, `server-join`, or `worker`). This
+module never decides how many nodes exist or which role each gets — that
+stays in the provider modules.
 
-The same Ansible role is the single source of truth for the bootstrap; only how
-it's invoked differs by provider, selected by `invocation_mode`:
+## What this module does — and does not do
 
-- **`operator_connect`** (default — AWS, Proxmox): Terraform triggers a
-  `null_resource` `local-exec` running `ansible-playbook` on the operator, which
-  connects to the node over whichever transport the caller's
-  `ansible_connection_vars` describe (AWS: SSM; Proxmox: SSH) — never a new
-  inbound port.
-- **`on_node`** (Azure): this module renders a self-contained bootstrap bundle —
-  the playbook and role zipped and base64'd into a runner script — and exposes it
-  on the `on_node_bundle` output. It delivers nothing itself; the caller (an Azure
-  module) hands the bundle to `az vm run-command` and Ansible runs on the node via
-  `-c local`. Secrets are **not** in the bundle: they're exposed separately on the
-  `on_node_secret_env` output for the caller to pass as run-command protected
-  parameters (which Linux injects as environment variables — the same names the
-  role already reads). This keeps `az` out of this provider-neutral module, the
-  same render/attach split a cloud-init renderer would use (this module renders, the
-  caller attaches), while the Cilium/Argo genesis render
-  and extra-vars payload stay shared with `operator_connect` so they can't diverge.
+This module executes nothing and creates no resources of its own, other than
+two `external` data sources (`data.external.cilium_manifest`,
+`data.external.argocd_manifest`) that run `helm template` at plan time. There
+is no `null_resource`, no `local-exec`, no connection of any kind to the node,
+and no Ansible. Its single meaningful output is `cloud_init_user_data` — a
+complete cloud-init document (hostname, RKE2 `config.yaml`/`registries.yaml`/
+trusted-CA/manifest payloads as base64 `write_files`, and a `runcmd` that
+invokes an on-node bootstrap script). The caller is responsible for attaching
+that output to its VM as user-data; this module has no resource to
+`depends_on`.
 
-## What this module does
+The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
+modules, the guest agent — is expected to already be baked into the image the
+caller boots the VM from (a "kube-image" template). This module only renders
+the per-cluster identity, per-cluster secrets, and join logic that can never
+be baked into a shared image. `modules/proxmox-control-plane` and
+`modules/proxmox-node-pool` are the only callers currently wired for this —
+both accept an optional `proxmox_template_vm_id` to full-clone a pre-baked
+image, alongside their older stock-cloud-image paths.
 
-The RKE2 install/join for one node: config.yaml generation for all three roles,
-the etcd-learner join-race staggering, systemd unit management, secrets flow, OS
-prep (`br_netfilter`/`overlay`, sysctls, SELinux package install — `br_netfilter`
-and its `bridge-nf-call-*` sysctls are skipped on AlmaLinux 10, whose kernel
-dropped that legacy module; see `cni` below for the deeper consequence of that
-same kernel change), CA trust (`trusted_ca_pem`), registry mirror
-(`registry_mirror_url`), the Cilium CNI HelmChart manifest,
-node labels (`node_labels`), extra server
-manifests (`extra_server_manifests`), and GitOps/Argo CD bootstrap (`gitops_*`,
-`cert_mode`, `platform_*`, `extra_tags` — a distinct post-install step, applied
-via `kubectl` once the cluster reports Ready, server-init only).
+## `helm template` runs at plan time, on your machine
 
-This module is the single bootstrap path for every provider module
-(`aws-control-plane`, `aws-node-pool`, `proxmox-control-plane`,
-`proxmox-node-pool`, `azure-control-plane`, `azure-node-pool`). The kubeconfig is
-not published to a local file — `kube-kubeconfig` fetches
-`/etc/rancher/rke2/rke2.yaml` out-of-band instead.
+When a genesis node (`node_role = "server-init"`) is in the plan with
+`cni = "cilium"`, or with a GitOps repo configured (`gitops_platform_enabled`
+or `gitops_workloads_repo_url`), this module shells out to `helm template` via
+`scripts/helm-render.py` to pre-render the Cilium and/or Argo CD manifests
+that get embedded in the cloud-init payload. This happens on whatever machine
+runs `tofu plan` — not on the node, not at apply time. That machine needs the
+`helm` binary, `python3`, and network access to `helm.cilium.io` and
+`argoproj.github.io` whenever such a node is being planned. `tofu test` never
+hits this path: every test mocks the `external` provider.
 
 ## Watching progress during a real apply
 
-Terraform/OpenTofu unconditionally suppresses this provisioner's own live
-console output ("output suppressed due to sensitive value in config") the
-moment any value in this resource's config touches something sensitive
-(`CLUSTER_TOKEN` etc.) — a static, config-level decision, not based on what
-the command actually prints. The full output still surfaces if the command
-*fails* (it's part of the error diagnostic), just not while it's running.
-
-For live progress during a long apply, run `kube-tail` (`kube-devenv`) from a
-second terminal — it tails the `bootstrap_log_path` output
-(`/tmp/kube-compute-bootstrap-<node_name>.log` on whatever machine runs
-`terragrunt apply`) for you, prompting to pick a node the same way
-`kube-status`/`kube-shell` do. It's a plain mirror of the same output Ansible
-would print anyway — every secret-touching task in the role sets `no_log: true`,
-so nothing sensitive lands there. (Splitting the invocation so the apply console
-could stream live was considered, but it would need secrets to cross between
-provisioner steps via an on-disk file — `kube-tail` avoids that by watching the
-log from a separate process instead.)
+Terraform/OpenTofu returns as soon as the cloud-init payload is attached to
+the VM — it has no way to know when (or whether) the node actually joins the
+cluster, because nothing in this module executes anything. All of that now
+happens asynchronously on the node itself, after `apply` has already
+returned. The node writes its own progress to
+`/var/log/kube-compute-bootstrap.log`; that log is the only place to watch
+bootstrap progress. There is no Terraform-visible signal, no provisioner
+output, and no `bootstrap_log_path`-style output to depend on.
 
 ## Interface notes
 
-- `ansible_playbook_path` is an escape hatch: overridable, defaults to the
-  bundled AlmaLinux-10-only
-  playbook (`ansible/playbook.yml`). No compatibility guarantee for other
-  distributions.
-- `ansible_connection_vars` is a non-secret map the caller assembles for its
-  own provider's transport — this module never branches on provider.
-- `cni` defaults to `"cilium"`, standard regardless of topology (single-node
-  or HA). Confirmed via a real `cluster-1` apply that `"default"`
-  (Canal/flannel+Calico) is broken on AlmaLinux 10: flannel's own code stats
-  `/proc/sys/net/bridge/bridge-nf-call-iptables` and crashes when it's absent,
-  and Felix's `ipset`-based dataplane fails outright (`ipset v7.21: Kernel
-  error received: Invalid argument`) — both are downstream of the same
-  kernel change that dropped `br_netfilter`. Cilium's eBPF dataplane
-  (`kubeProxyReplacement: true`) has no iptables/ipset/xtables dependency, so
-  it doesn't hit any of these. `"default"` remains selectable only as an
-  escape hatch for a consumer-supplied playbook targeting a different OS.
+- `ansible_playbook_path`, `invocation_mode`, `ansible_connection_vars`,
+  `on_node_bundle`, `on_node_secret_env`, `node_provider`, and `bootstrap_id`
+  are all gone. There is no playbook, no `null_resource`, no on-node bundle,
+  and no provider branching in this module.
+- `cni` defaults to `"cilium"` (eBPF dataplane, no iptables/ipset/xtables
+  dependency — the only variant verified against AlmaLinux 10). When
+  `cni = "cilium"` on a genesis node, the module renders the Cilium chart via
+  `helm template` at plan time, writes the manifest into the cloud-init
+  payload, and sets `disable: [rke2-cilium]` in `config.yaml` so RKE2's own
+  built-in HelmChart install of Cilium never runs alongside it. `"default"`
+  remains selectable only as an escape hatch for a consumer-supplied
+  image/template that ships a different CNI out of the box.
 - `cilium_operator_replicas` defaults to `null` (the Cilium chart's own
   default of `2`, with pod anti-affinity). The calling control-plane module
   passes `1` when `control_plane_count = 1` — otherwise the second replica
   has nowhere to schedule and sits permanently `Pending` on a genuinely
   single-node cluster.
-- `cluster_token`/`cluster_agent_token`/`agent_token_fetch_command` are all
-  `sensitive = true` and flow to the Ansible run via the `local-exec`
-  `environment` block only — never as an extra-var, never in the generated
-  inventory. `server-join` receives `cluster_token` the same direct way
-  `server-init` does (both get the same freshly-generated cluster secret —
-  there's no existing secret store to fetch a *server* token from); only
-  `worker` uses the fetch-command pattern, since a worker joins an
-  already-existing cluster and can pull its token from the provider's own
-  secret store.
+- `cluster_token`/`cluster_agent_token`/`agent_token_fetch_command`/
+  `trusted_ca_pem`/`tsig_key_secret` are all `sensitive = true` and flow only
+  into the cloud-init payload's base64-encoded `write_files` (a 0600
+  `/opt/kube-compute/secrets.env`, sourced by the bootstrap script on the
+  node) — never as plaintext Terraform state elsewhere, never over any
+  inbound connection. `server-join` receives `cluster_token` the same direct
+  way `server-init` does; only `worker` uses the fetch-command pattern, since
+  a worker joins an already-existing cluster and pulls its token from the
+  provider's own secret store instead.
+- `modules/aws-*` and `modules/azure-*` still reference the pre-cutover
+  interface (`node_provider`, `ansible_playbook_path`, `invocation_mode`,
+  `ansible_connection_vars`, `bootstrap_id`, `on_node_bundle`,
+  `on_node_secret_env`) and do not currently validate against this module.
+  Proxmox is the only provider with an end-to-end working path today;
+  updating AWS/Azure is tracked as separate follow-up work, not part of this
+  module's current interface.

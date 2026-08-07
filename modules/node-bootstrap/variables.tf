@@ -5,7 +5,7 @@ variable "cluster_name" {
 }
 
 variable "node_name" {
-  description = "Unique per-node name, also used as this node's Ansible inventory host pattern. RKE2/kubelet defaults the registered Kubernetes node name to the OS hostname, so every node in a multi-node cluster MUST get a distinct value here."
+  description = "Unique per-node name, set as this node's cloud-init hostname (and fqdn, when cluster_fqdn_suffix is set). RKE2/kubelet defaults the registered Kubernetes node name to the OS hostname, so every node in a multi-node cluster MUST get a distinct value here."
   type        = string
 }
 
@@ -75,7 +75,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not currently viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules that flannel and Felix's iptables dataplane both hard-require. Kept as an escape hatch for a consumer-supplied playbook targeting a different OS. Sets the config.yaml cni:/disable-kube-proxy: flags and, when 'cilium', deploys the Cilium HelmChart manifest (server-init/server-join only)."
+  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not currently viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules that flannel and Felix's iptables dataplane both hard-require. Kept as an escape hatch for a consumer-supplied image/template that ships a different CNI out of the box. Sets the config.yaml cni:/disable-kube-proxy: flags and, when 'cilium' on a genesis node (server-init only), renders the Cilium chart via 'helm template' at plan time and writes the manifest into the cloud-init payload for the node's own bootstrap script to kubectl apply — RKE2's own built-in HelmChart install path for Cilium is explicitly disabled (disable: [rke2-cilium]) so the two never race over the same objects."
   type        = string
   default     = "cilium"
   validation {
