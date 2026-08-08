@@ -94,6 +94,56 @@ run "server_init_payload_is_valid_cloud_config" {
     )
     error_message = "a server-init node with a platform repo must carry the platform Application manifest"
   }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      !strcontains(base64decode(f.content), "kubelet-arg")
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
+    error_message = "with dns_servers unset, no kubelet-arg resolv-conf override should be emitted at all"
+  }
+}
+
+# Regression test for a real bug hit on a live apply: kubelet's default
+# ClusterFirst DNS policy copies the node's own /etc/resolv.conf search
+# domains into every pod. This node's own search domain (NetworkManager-
+# derived from its FQDN, cluster_fqdn_suffix) collides with the wildcard
+# cluster DNS record for that same zone — with a pod's default ndots:5, a
+# bare external hostname like "github.com" gets that search suffix tried
+# first, silently resolving to the cluster's own wildcard IP. Confirmed on
+# cluster-1: Argo CD's repo-server tried to git-clone github.com against the
+# node's own IP over HTTPS and got connection refused.
+run "dns_servers_set_gives_kubelet_a_search_domain_free_resolv_conf" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    cluster_fqdn              = "api.test.example"
+    cluster_fqdn_suffix       = "test.example"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    dns_servers               = ["1.1.1.1", "9.9.9.9"]
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      base64decode(f.content) == "nameserver 1.1.1.1\nnameserver 9.9.9.9\n"
+      if f.path == "/etc/rancher/rke2/resolv-conf-no-search.conf"
+    ])
+    error_message = "the kubelet resolv-conf override file must contain exactly the given nameservers, no search domain"
+  }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "kubelet-arg:") &&
+      strcontains(base64decode(f.content), "resolv-conf=/etc/rancher/rke2/resolv-conf-no-search.conf")
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
+    error_message = "config.yaml must point kubelet at the search-domain-free resolv-conf override"
+  }
 }
 
 run "worker_payload_skips_genesis_only_content" {

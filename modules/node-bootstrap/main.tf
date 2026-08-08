@@ -218,6 +218,35 @@ locals {
     [for k, v in var.node_labels : "  - \"${k}=${v}\""],
   ))
 
+  # ---- kubelet resolv-conf override ----
+  # kubelet's default ClusterFirst DNS policy copies the NODE's own
+  # /etc/resolv.conf search domains into every pod. NetworkManager derives a
+  # search domain from this node's own FQDN hostname (cluster_fqdn_suffix,
+  # set below) — the same zone a wildcard cluster DNS record
+  # (*.<cluster>.<domain>) answers for. With the pod's default ndots:5, a
+  # bare external hostname like "github.com" gets that search suffix tried
+  # FIRST, silently resolving to the cluster's own wildcard IP instead of the
+  # real host — confirmed on a real cluster-1 apply: Argo CD's repo-server
+  # tried to git-clone github.com against the node's own IP over HTTPS and
+  # got connection refused. Pointing kubelet at a search-domain-free
+  # resolv.conf (var.dns_servers only, no `search` line) fixes every pod on
+  # the node at once, without touching the node's own OS resolv.conf (kept
+  # search-enabled there for host-level convenience). Opt-in via
+  # var.dns_servers so a caller that doesn't pass it keeps the old behavior
+  # rather than erroring.
+  kubelet_resolv_conf_enabled = var.dns_servers != null && length(var.dns_servers) > 0
+  kubelet_resolv_conf_path    = "/etc/rancher/rke2/resolv-conf-no-search.conf"
+  kubelet_resolv_conf_content = join("\n", concat(
+    [for ip in coalesce(var.dns_servers, []) : "nameserver ${ip}"],
+    [""],
+  ))
+  # Applies to every role (server-init, server-join, worker) — kubelet runs
+  # on all three and pollutes every pod scheduled to that node identically.
+  kubelet_resolv_conf_block = !local.kubelet_resolv_conf_enabled ? "" : join("\n", [
+    "kubelet-arg:",
+    "  - \"resolv-conf=${local.kubelet_resolv_conf_path}\"",
+  ])
+
   # ---- runtime bootstrap script ----
   bootstrap_sh = templatefile("${path.module}/templates/bootstrap.sh.tftpl", {
     node_role                     = var.node_role
@@ -236,6 +265,7 @@ locals {
     node_label_block              = local.node_label_block
     static_tls_san_block          = local.static_tls_san_block
     server_static_block           = local.server_static_block
+    kubelet_resolv_conf_block     = local.kubelet_resolv_conf_block
     argocd_needed                 = local.render_argocd
     platform_app_enabled          = local.platform_app_enabled
     workloads_app_enabled         = local.workloads_app_enabled
@@ -299,6 +329,13 @@ locals {
       owner       = "root:root"
       encoding    = "b64"
       content     = base64encode(local.registries_yaml)
+    }],
+    !local.kubelet_resolv_conf_enabled ? [] : [{
+      path        = local.kubelet_resolv_conf_path
+      permissions = "0644"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(local.kubelet_resolv_conf_content)
     }],
     !(local.render_argocd && local.platform_app_enabled) ? [] : [{
       path        = "/opt/kube-compute/manifests/10-platform-app.yaml"

@@ -213,6 +213,12 @@ variable "dns_server_port" {
   default     = 53
 }
 
+variable "dns_servers" {
+  description = "Upstream DNS resolver IPs (not this node's RFC2136 update target above — its ordinary pod/kubelet resolvers, e.g. the same list a caller already passes its own VM's network config). Null/empty (the default) skips writing a kubelet resolv-conf override, leaving kubelet's default ClusterFirst DNS policy in place: every pod inherits the node's own /etc/resolv.conf search domains. That collides with a wildcard cluster DNS record (*.<cluster>.<domain>, see cluster_fqdn_suffix) whenever the node's own hostname-derived search domain matches that zone — confirmed on a real apply: with the pod's default ndots:5, a bare external hostname like \"github.com\" gets the search suffix tried first, silently resolving to the cluster's own wildcard IP instead of the real host, breaking any GitOps/external fetch from inside the cluster. Set this (the same DNS servers the node's own network config already uses) to give kubelet a resolv.conf with no search domain, fixing every pod on the node at once."
+  type        = list(string)
+  default     = null
+}
+
 variable "dns_transport" {
   description = "Transport nsupdate uses to reach dns_server_address: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Only meaningful when dns_self_register_zone is set."
   type        = string

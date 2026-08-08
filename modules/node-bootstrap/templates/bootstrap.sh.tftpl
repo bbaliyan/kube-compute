@@ -95,6 +95,7 @@ fi
   echo "node-ip: $NODE_IP"
   cat <<'KUBE_COMPUTE_WORKER_STATIC'
 ${node_label_block}
+${kubelet_resolv_conf_block}
 KUBE_COMPUTE_WORKER_STATIC
 } >"$CONFIG"
 %{ else ~}
@@ -131,6 +132,7 @@ esac
   cat <<'KUBE_COMPUTE_SERVER_STATIC'
 ${static_tls_san_block}
 ${server_static_block}
+${kubelet_resolv_conf_block}
 KUBE_COMPUTE_SERVER_STATIC
 } >"$CONFIG"
 %{ endif ~}

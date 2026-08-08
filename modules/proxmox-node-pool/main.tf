@@ -275,6 +275,10 @@ module "node_bootstrap" {
   node_labels               = var.extra_node_labels
   trusted_ca_pem            = var.trusted_ca_pem
   registry_mirror_url       = var.registry_mirror_url
+  # Same list this module's own VM network config uses — see node-bootstrap's
+  # dns_servers variable for why a worker's kubelet needs this too (every
+  # pod scheduled on it inherits the same node-search-domain collision).
+  dns_servers = var.dns_servers
 }
 
 # ---- Per-node cloud-init: node-bootstrap's full lean payload ----

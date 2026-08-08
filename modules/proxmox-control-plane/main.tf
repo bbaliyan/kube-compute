@@ -242,9 +242,14 @@ module "node_bootstrap" {
   dns_server_address            = var.dns_server_address
   dns_server_port               = var.dns_server_port
   dns_transport                 = var.dns_transport
-  tsig_key_name                 = var.tsig_key_name
-  tsig_key_algorithm            = var.tsig_key_algorithm
-  tsig_key_secret               = var.tsig_key_secret
+  # Same list this module's own VM network config (network_data_dhcp above)
+  # uses — gives kubelet a resolv-conf with no search domain, avoiding a
+  # collision between the node's own hostname-derived search domain and a
+  # wildcard cluster DNS record (see node-bootstrap's dns_servers variable).
+  dns_servers        = var.dns_servers
+  tsig_key_name      = var.tsig_key_name
+  tsig_key_algorithm = var.tsig_key_algorithm
+  tsig_key_secret    = var.tsig_key_secret
 }
 
 # node-bootstrap no longer executes anything, so there is no run to order
@@ -280,6 +285,7 @@ module "node_bootstrap_additional" {
   cluster_token        = var.cluster_token
   trusted_ca_pem       = var.trusted_ca_pem
   registry_mirror_url  = var.registry_mirror_url
+  dns_servers          = var.dns_servers
   cert_mode            = var.cert_mode
   extra_tags           = var.extra_tags
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
