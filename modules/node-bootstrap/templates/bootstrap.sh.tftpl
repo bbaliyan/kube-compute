@@ -231,7 +231,29 @@ KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.y
 # Kubernetes' restart backoff, but that backoff is pure wasted time before
 # the cluster settles — waiting here instead is a bounded few seconds against
 # an already-scheduled pod, not a new dependency.
-$KUBECTL wait --for=condition=Ready pod -l k8s-app=rke2-coredns-rke2-coredns -n kube-system --timeout=120s
+#
+# A loop, not a single `kubectl wait`: RKE2 installs CoreDNS asynchronously
+# via its own helm-install job, so the pod frequently doesn't exist yet at
+# this point in boot — `kubectl wait` errors immediately ("no matching
+# resources found") rather than waiting for a resource to be *created*, and
+# under `set -e` that silently killed the rest of this script on a real
+# apply. Non-fatal on timeout (falls through and applies Argo CD anyway):
+# this is a speedup, not a hard dependency — Argo CD's own restart/selfHeal
+# already covers the case where CoreDNS is unusually slow.
+#
+# k8s-app=kube-dns, not a name guess: RKE2's CoreDNS chart labels its pod
+# with the standard upstream convention, not chart/release-name-derived.
+COREDNS_READY=0
+for attempt in $(seq 1 60); do
+  if $KUBECTL wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=5s >/dev/null 2>&1; then
+    COREDNS_READY=1
+    break
+  fi
+  sleep 2
+done
+if [ "$COREDNS_READY" -ne 1 ]; then
+  echo "kube-compute: CoreDNS did not report Ready within ~150s, proceeding anyway" >&2
+fi
 # --server-side is required: a client-side apply stores the previous config in
 # a last-applied-configuration annotation, and Argo CD's applicationsets CRD
 # exceeds Kubernetes' 262144-byte annotation limit.
