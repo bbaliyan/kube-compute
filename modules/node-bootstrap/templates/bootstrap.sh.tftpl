@@ -221,6 +221,17 @@ fi
 %{ if argocd_needed ~}
 # ---- GitOps/Argo CD bootstrap: genesis only, after the node is Ready ----
 KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
+# Node Ready only means the CNI is minimally configured — not that CoreDNS
+# itself is up and its ClusterIP is actually routable yet. Applying Argo CD's
+# manifest immediately races its own pods (which resolve each other by
+# ClusterIP DNS, e.g. dex-server -> argocd-repo-server) against CoreDNS/
+# Cilium's own startup: confirmed on a real apply, argocd-dex-server crashed
+# ("no route to host" dialing CoreDNS's ClusterIP) 22s after Cilium reported
+# Ready, because CoreDNS's own pod wasn't Ready yet. It self-heals via
+# Kubernetes' restart backoff, but that backoff is pure wasted time before
+# the cluster settles — waiting here instead is a bounded few seconds against
+# an already-scheduled pod, not a new dependency.
+$KUBECTL wait --for=condition=Ready pod -l k8s-app=rke2-coredns-rke2-coredns -n kube-system --timeout=120s
 # --server-side is required: a client-side apply stores the previous config in
 # a last-applied-configuration annotation, and Argo CD's applicationsets CRD
 # exceeds Kubernetes' 262144-byte annotation limit.
