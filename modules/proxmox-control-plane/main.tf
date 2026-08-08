@@ -52,9 +52,13 @@ locals {
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")
-  # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one
-  # replica permanently Pending on a genuinely single-node cluster.
-  effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
+  # Cilium's operator replica count is no longer a per-cluster knob here:
+  # kube-image bakes the genesis manifest with a fixed replicas: 1 (matching
+  # kube-platform's own cilium-app.yaml default, which has no topology signal
+  # of its own either and would overwrite any other value within moments of
+  # Argo CD's first selfHeal reconcile anyway — this was already the
+  # effective end state on every topology, just with an extra transient
+  # Pending pod on a multi-node genesis beforehand).
 
   # DNS registration (RFC2136): publishes cluster_fqdn -> every resolved control-plane
   # IP, the HA registration/access endpoint (Proxmox has no load-balancer/VIP
@@ -216,7 +220,6 @@ module "node_bootstrap" {
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
-  cilium_operator_replicas       = local.effective_cilium_operator_replicas
   cluster_token                  = var.cluster_token
   cluster_agent_token            = var.cluster_agent_token
   extra_tls_sans                 = compact([local.wildcard_name, local.genesis_dns_name])
@@ -258,15 +261,14 @@ module "node_bootstrap_additional" {
 
   source = "../node-bootstrap"
 
-  cluster_name             = var.cluster_name
-  node_name                = "${var.cluster_name}-cp-${each.key}"
-  k8s_version              = var.k8s_version
-  cluster_fqdn             = local.cluster_fqdn
-  cluster_fqdn_suffix      = local.fqdn_suffix
-  node_role                = "server-join"
-  control_plane_taint      = local.control_plane_taint
-  cni                      = local.effective_cni
-  cilium_operator_replicas = local.effective_cilium_operator_replicas
+  cluster_name        = var.cluster_name
+  node_name           = "${var.cluster_name}-cp-${each.key}"
+  k8s_version         = var.k8s_version
+  cluster_fqdn        = local.cluster_fqdn
+  cluster_fqdn_suffix = local.fqdn_suffix
+  node_role           = "server-join"
+  control_plane_taint = local.control_plane_taint
+  cni                 = local.effective_cni
   # local.registration_address (genesis's self-registered DNS name when DNS is
   # configured, its raw IP otherwise) — see the no-depends_on comment above
   # module.node_bootstrap_additional for why genesis's dns-self-register task

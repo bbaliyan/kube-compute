@@ -1,19 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Guards the lean-cloud-init contract: the payload must be a single valid
 # cloud-config document, must set a distinct hostname, must carry the runtime
-# bootstrap script, and must gate the genesis-only Helm renders on
-# node_role == "server-init".
-#
-# The `external` provider is mocked so these runs never need the helm binary or
-# network access to the Cilium/Argo chart repos — the render program itself is
-# exercised separately, by hand, against a real helm.
-mock_provider "external" {
-  mock_data "external" {
-    defaults = {
-      result = { manifest = "# mocked-helm-render" }
-    }
-  }
-}
+# bootstrap script, and must gate the genesis-only Cilium/Argo CD apply steps
+# on node_role == "server-init". This module renders neither manifest itself
+# (kube-image bakes both onto the template) — no `helm`/network dependency
+# for these tests to mock.
 
 variables {
   cluster_name = "test"
@@ -89,11 +80,12 @@ run "server_init_payload_is_valid_cloud_config" {
     error_message = "the ported config.yaml must keep secrets-encryption, disable-cloud-controller, and ingress-controller: none"
   }
   assert {
-    condition = contains(
-      [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/cilium.yaml"
-    )
-    error_message = "a server-init node with cni = cilium must carry the genesis Cilium manifest"
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "install -m 0600 \"$KC/manifests/cilium.yaml\"")
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
+    error_message = "a server-init node with cni = cilium must install the (kube-image-baked) genesis Cilium manifest into RKE2's auto-deploy directory"
   }
   assert {
     condition = contains(
@@ -116,18 +108,20 @@ run "worker_payload_skips_genesis_only_content" {
   }
 
   assert {
-    condition = !contains(
-      [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/cilium.yaml"
-    )
-    error_message = "a worker must not carry the genesis Cilium manifest — Cilium is cluster-wide state applied once by genesis"
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      !strcontains(base64decode(f.content), "manifests/cilium.yaml")
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
+    error_message = "a worker must not install the genesis Cilium manifest — Cilium is cluster-wide state applied once by genesis"
   }
   assert {
-    condition = !contains(
-      [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/00-argocd.yaml"
-    )
-    error_message = "a worker must not carry the Argo CD manifest"
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      !strcontains(base64decode(f.content), "manifests/00-argocd.yaml")
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
+    error_message = "a worker must not apply the Argo CD manifest"
   }
   assert {
     condition = anytrue([
@@ -167,10 +161,11 @@ run "server_join_uses_the_staggered_self_healing_join" {
     error_message = "a server-join node must keep the self-healing join retry loop — etcd admits one non-voting learner at a time, so a concurrent join must wipe local server state and retry"
   }
   assert {
-    condition = !contains(
-      [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/cilium.yaml"
-    )
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      !strcontains(base64decode(f.content), "manifests/cilium.yaml")
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
     error_message = "a joining server must not re-apply the genesis Cilium manifest"
   }
 }

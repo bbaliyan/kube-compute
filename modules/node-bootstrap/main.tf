@@ -10,12 +10,6 @@ module "component_versions" {
 }
 
 locals {
-  # Resolve to the platform default rather than passing null through: a
-  # null/empty version renders "version: \"\"" into a chart request, which Helm
-  # silently treats as "latest".
-  cilium_version = coalesce(var.cilium_version, module.component_versions.cilium_version)
-  argocd_version = coalesce(var.argocd_version, module.component_versions.argocd_version)
-
   # Single source of truth for the kube-platform pin is component-versions
   # (shared with cluster-facts, which needs the same pin for its own
   # k8s_version-from-platform-versions.yaml fetch) — NOT the
@@ -64,82 +58,16 @@ locals {
 
   is_server = contains(["server-init", "server-join"], var.node_role)
 
-  # ---- Cilium / Argo CD genesis chart values ----
-  cilium_values_yaml = <<-EOT
-    kubeProxyReplacement: true
-    k8sServiceHost: "127.0.0.1"
-    k8sServicePort: 6443
-    # Node IPAM LB is the platform's LoadBalancer mechanism on every provider:
-    # it advertises the node's own (LAN- or VPC-routable) IP into a
-    # LoadBalancer Service, with the eBPF datapath forwarding to pods — no ARP,
-    # BGP, cloud API, or extra component. defaultLBServiceIPAM makes every
-    # LoadBalancer Service use it without a per-Service loadBalancerClass. Kept
-    # in sync with bootstrap/templates/cilium-app.yaml in kube-platform, which
-    # is authoritative once Argo CD adopts this genesis install.
-    nodeIPAM:
-      enabled: true
-    defaultLBServiceIPAM: nodeipam
-    operator:
-    %{~if var.cilium_operator_replicas != null~}
-      replicas: ${var.cilium_operator_replicas}
-    %{~endif~}
-      tolerations:
-        - operator: Exists
-    ipam:
-      operator:
-        clusterPoolIPv4PodCIDRList: ["10.42.0.0/16"]
-  EOT
-
-  # repoServer/controller resources + probe timeouts: upstream defaults are
-  # zero requests (BestEffort QoS) and a 1s probe timeout, which crash-loop
-  # Argo CD under a real platform tree. Kept in sync with
-  # bootstrap/templates/argocd-app.yaml in kube-platform.
-  argocd_values_yaml = <<-EOT
-    configs:
-      params:
-        server.insecure: "true"
-    repoServer:
-      resources:
-        requests:
-          cpu: 100m
-          memory: 128Mi
-        limits:
-          cpu: 500m
-          memory: 512Mi
-      readinessProbe:
-        timeoutSeconds: 5
-        failureThreshold: 5
-      livenessProbe:
-        timeoutSeconds: 5
-        failureThreshold: 5
-    controller:
-      resources:
-        requests:
-          cpu: 250m
-          memory: 256Mi
-        limits:
-          cpu: 1000m
-          memory: 1Gi
-      readinessProbe:
-        timeoutSeconds: 5
-        failureThreshold: 5
-  EOT
-
+  # Whether bootstrap.sh should apply the Cilium/Argo CD manifests kube-image
+  # already baked onto every template at /opt/kube-compute/manifests/ — a
+  # per-cluster runtime decision (CNI choice, GitOps enablement), independent
+  # of whether the files exist on disk (they always do). This module renders
+  # neither: the live `helm template` render that used to happen here (and
+  # get embedded whole in cloud-init) exceeded Proxmox's 1 MiB cicustom
+  # snippet cap on a real apply — see kube-image's packer/proxmox/build.sh
+  # and helm-values/ for where the render moved.
   render_cilium = var.cni == "cilium" && var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
-
-  cilium_manifest = local.render_cilium ? data.external.cilium_manifest[0].result.manifest : ""
-
-  # Namespace prepended in Terraform rather than inside the render program, so
-  # the program stays a single-purpose `helm template` wrapper.
-  argocd_manifest = local.render_argocd ? join("\n", [
-    "apiVersion: v1",
-    "kind: Namespace",
-    "metadata:",
-    "  name: argocd",
-    "---",
-    data.external.argocd_manifest[0].result.manifest,
-  ]) : ""
 
   # ---- GitOps Application manifests ----
   # Rendered by templatefile()/yamlencode() here, not by Ansible's template
@@ -333,10 +261,14 @@ locals {
   # ---- cloud-init write_files ----
   # Every entry is base64-encoded (encoding: b64). This is not cosmetic: it is
   # what makes the outer cloud-config document immune to its own payloads —
-  # a PEM, a multi-megabyte Helm render, an operator-supplied auto-deploy
-  # manifest, or a token containing a colon can never break the YAML around
-  # them. It also means the whole document is safely produced by yamlencode()
-  # rather than a text template, so it is structurally valid by construction.
+  # a PEM, an operator-supplied auto-deploy manifest, or a token containing a
+  # colon can never break the YAML around them. It also means the whole
+  # document is safely produced by yamlencode() rather than a text template,
+  # so it is structurally valid by construction. Cilium/Argo CD's own
+  # manifests are NOT among these entries — kube-image bakes them directly
+  # onto the template at /opt/kube-compute/manifests/, and bootstrap.sh reads
+  # them from there; embedding Argo CD's ~1.9 MB chart render here is exactly
+  # what used to exceed Proxmox's 1 MiB cicustom snippet cap.
   write_files = concat(
     [
       {
@@ -367,20 +299,6 @@ locals {
       owner       = "root:root"
       encoding    = "b64"
       content     = base64encode(local.registries_yaml)
-    }],
-    !local.render_cilium ? [] : [{
-      path        = "/opt/kube-compute/manifests/cilium.yaml"
-      permissions = "0600"
-      owner       = "root:root"
-      encoding    = "b64"
-      content     = base64encode(local.cilium_manifest)
-    }],
-    !local.render_argocd ? [] : [{
-      path        = "/opt/kube-compute/manifests/00-argocd.yaml"
-      permissions = "0644"
-      owner       = "root:root"
-      encoding    = "b64"
-      content     = base64encode(local.argocd_manifest)
     }],
     !(local.render_argocd && local.platform_app_enabled) ? [] : [{
       path        = "/opt/kube-compute/manifests/10-platform-app.yaml"
@@ -426,39 +344,4 @@ locals {
   # "#cloud-config" is a YAML comment, so the whole document — including this
   # required first line — round-trips through any YAML parser unchanged.
   cloud_init_user_data = "#cloud-config\n${yamlencode(local.cloud_config)}"
-}
-
-# Genesis-only Cilium render. `helm template` needs the chart and values but no
-# cluster access, so it runs on the operator at plan time.
-data "external" "cilium_manifest" {
-  count = local.render_cilium ? 1 : 0
-
-  program = ["python3", "${path.module}/scripts/helm-render.py"]
-
-  query = {
-    release    = "cilium"
-    chart      = "cilium"
-    repo       = "https://helm.cilium.io/"
-    version    = local.cilium_version
-    namespace  = "kube-system"
-    values_b64 = base64encode(local.cilium_values_yaml)
-  }
-}
-
-# Genesis only needs a working pinned Argo CD version; kube-platform's own
-# self-managing Application carries the consumer's chosen version afterward (an
-# in-place Helm upgrade, unlike a CNI swap).
-data "external" "argocd_manifest" {
-  count = local.render_argocd ? 1 : 0
-
-  program = ["python3", "${path.module}/scripts/helm-render.py"]
-
-  query = {
-    release    = "argocd"
-    chart      = "argo-cd"
-    repo       = "https://argoproj.github.io/argo-helm"
-    version    = local.argocd_version
-    namespace  = "argocd"
-    values_b64 = base64encode(local.argocd_values_yaml)
-  }
 }

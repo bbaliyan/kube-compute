@@ -84,18 +84,6 @@ variable "cni" {
   }
 }
 
-variable "cilium_version" {
-  description = "Cilium Helm chart version. Only meaningful when cni = \"cilium\"."
-  type        = string
-  default     = null
-}
-
-variable "cilium_operator_replicas" {
-  description = "Cilium operator replica count. Only meaningful when cni = \"cilium\". Null uses the Cilium chart's own default (2, with pod anti-affinity) — on a genuinely single-node cluster this leaves one replica permanently Pending, so control-plane modules pass 1 explicitly when control_plane_count = 1."
-  type        = number
-  default     = null
-}
-
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
   type        = string
@@ -135,12 +123,6 @@ variable "gitops_platform_repo_url" {
 
 variable "gitops_platform_revision" {
   description = "Branch/tag/SHA the platform Application tracks. Null/\"\" (the default) falls back to local.pinned_platform_revision — kube-platform's protected `main` branch, not a fixed commit — see that local for why. Override for a fork or to pin a specific revision instead."
-  type        = string
-  default     = null
-}
-
-variable "argocd_version" {
-  description = "Argo CD Helm chart version. Only meaningful when gitops_platform_enabled is true or gitops_workloads_repo_url is set (either one needs Argo CD installed)."
   type        = string
   default     = null
 }

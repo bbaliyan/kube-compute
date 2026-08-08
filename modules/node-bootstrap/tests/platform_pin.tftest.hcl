@@ -8,13 +8,6 @@
 # a module call). coalesce() in main.tf's effective_gitops_platform_repo_url/
 # _revision locals is the actual fix; this test locks it in against the
 # cloud-init payload the same way it used to against the Ansible extra-vars.
-mock_provider "external" {
-  mock_data "external" {
-    defaults = {
-      result = { manifest = "# mocked-helm-render" }
-    }
-  }
-}
 
 variables {
   cluster_name        = "test"

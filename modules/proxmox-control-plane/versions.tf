@@ -10,12 +10,5 @@ terraform {
       source  = "hashicorp/dns"
       version = "~> 3.6"
     }
-    # Used transitively by ../node-bootstrap to render the Cilium/Argo CD
-    # genesis manifests. Declared explicitly so `tofu test`'s
-    # mock_provider "external" has a provider to bind to here.
-    external = {
-      source  = "hashicorp/external"
-      version = "~> 2.3"
-    }
   }
 }

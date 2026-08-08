@@ -15,13 +15,6 @@ mock_provider "proxmox" {
     }
   }
 }
-mock_provider "external" {
-  mock_data "external" {
-    defaults = {
-      result = { manifest = "# mocked-helm-render" }
-    }
-  }
-}
 
 variables {
   cluster_name         = "bharat"

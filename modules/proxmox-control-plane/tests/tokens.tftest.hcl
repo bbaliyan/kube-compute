@@ -13,13 +13,6 @@ mock_provider "proxmox" {
     }
   }
 }
-mock_provider "external" {
-  mock_data "external" {
-    defaults = {
-      result = { manifest = "# mocked-helm-render" }
-    }
-  }
-}
 
 run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   command = plan

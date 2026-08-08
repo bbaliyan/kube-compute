@@ -7,37 +7,41 @@ stays in the provider modules.
 
 ## What this module does — and does not do
 
-This module executes nothing and creates no resources of its own, other than
-two `external` data sources (`data.external.cilium_manifest`,
-`data.external.argocd_manifest`) that run `helm template` at plan time. There
-is no `null_resource`, no `local-exec`, no connection of any kind to the node,
-and no Ansible. Its single meaningful output is `cloud_init_user_data` — a
-complete cloud-init document (hostname, RKE2 `config.yaml`/`registries.yaml`/
-trusted-CA/manifest payloads as base64 `write_files`, and a `runcmd` that
-invokes an on-node bootstrap script). The caller is responsible for attaching
-that output to its VM as user-data; this module has no resource to
-`depends_on`.
+This module executes nothing and creates no resources of its own. There is no
+`null_resource`, no `local-exec`, no connection of any kind to the node, no
+Ansible, and (unlike an earlier version of this module) no `data.external`
+Helm render at plan time either. Its single meaningful output is
+`cloud_init_user_data` — a complete cloud-init document (hostname, RKE2
+`config.yaml`/`registries.yaml`/trusted-CA/manifest payloads as base64
+`write_files`, and a `runcmd` that invokes an on-node bootstrap script). The
+caller is responsible for attaching that output to its VM as user-data; this
+module has no resource to `depends_on`.
 
 The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
-modules, the guest agent — is expected to already be baked into the image the
-caller boots the VM from (a "kube-image" template). This module only renders
-the per-cluster identity, per-cluster secrets, and join logic that can never
-be baked into a shared image. `modules/proxmox-control-plane` and
+modules, the guest agent, **and the genesis Cilium/Argo CD manifests** — is
+expected to already be baked into the image the caller boots the VM from (a
+"kube-image" template; see its `packer/proxmox/build.sh` and `helm-values/`
+for where that render actually happens now). This module only renders the
+per-cluster identity, per-cluster secrets, and join logic that can never be
+baked into a shared image. `modules/proxmox-control-plane` and
 `modules/proxmox-node-pool` are the only callers currently wired for this —
 both accept an optional `proxmox_template_vm_id` to full-clone a pre-baked
 image, alongside their older stock-cloud-image paths.
 
-## `helm template` runs at plan time, on your machine
+## Cilium/Argo CD are baked, not rendered here
 
-When a genesis node (`node_role = "server-init"`) is in the plan with
-`cni = "cilium"`, or with a GitOps repo configured (`gitops_platform_enabled`
-or `gitops_workloads_repo_url`), this module shells out to `helm template` via
-`scripts/helm-render.py` to pre-render the Cilium and/or Argo CD manifests
-that get embedded in the cloud-init payload. This happens on whatever machine
-runs `tofu plan` — not on the node, not at apply time. That machine needs the
-`helm` binary, `python3`, and network access to `helm.cilium.io` and
-`argoproj.github.io` whenever such a node is being planned. `tofu test` never
-hits this path: every test mocks the `external` provider.
+An earlier version of this module shelled out to `helm template` at plan
+time (via a `data.external` source) and embedded the rendered manifest whole
+in the cloud-init payload. That stopped working for real: Argo CD's chart
+alone renders to ~1.9 MB, and Proxmox's `cicustom` snippet upload has a hard
+1 MiB cap — a real `tofu apply` against `cluster-1` failed with
+`file '...' too long - aborting`. The render moved to kube-image's Packer
+build instead (once, at bake time, not on every `tofu apply`); this module's
+`render_cilium`/`render_argocd` locals now only decide whether `bootstrap.sh`
+applies the files kube-image already put at
+`/opt/kube-compute/manifests/{cilium.yaml,00-argocd.yaml}` on the template —
+a per-cluster runtime decision (CNI choice, GitOps enablement), independent
+of whether the files exist (they always do, on a kube-image-baked template).
 
 ## Watching progress during a real apply
 
@@ -53,22 +57,27 @@ output, and no `bootstrap_log_path`-style output to depend on.
 ## Interface notes
 
 - `ansible_playbook_path`, `invocation_mode`, `ansible_connection_vars`,
-  `on_node_bundle`, `on_node_secret_env`, `node_provider`, and `bootstrap_id`
-  are all gone. There is no playbook, no `null_resource`, no on-node bundle,
-  and no provider branching in this module.
+  `on_node_bundle`, `on_node_secret_env`, `node_provider`, `bootstrap_id`,
+  `cilium_version`, `argocd_version`, and `cilium_operator_replicas` are all
+  gone. There is no playbook, no `null_resource`, no on-node bundle, no
+  provider branching, and no Helm render in this module — the two version
+  variables had no effect once kube-image took over the render (both
+  versions are now baked into the template, resolved from kube-platform's
+  `platform-versions.yaml` at kube-image build time), and
+  `cilium_operator_replicas` had nowhere left to reach once the render was no
+  longer per-cluster (kube-platform's own `cilium-app.yaml` already
+  hardcodes `replicas: 1` with no topology signal of its own, and overwrites
+  any genesis-time value within moments of Argo CD's first `selfHeal`
+  reconcile regardless — this was already the effective end state on every
+  topology).
 - `cni` defaults to `"cilium"` (eBPF dataplane, no iptables/ipset/xtables
   dependency — the only variant verified against AlmaLinux 10). When
-  `cni = "cilium"` on a genesis node, the module renders the Cilium chart via
-  `helm template` at plan time, writes the manifest into the cloud-init
-  payload, and sets `disable: [rke2-cilium]` in `config.yaml` so RKE2's own
-  built-in HelmChart install of Cilium never runs alongside it. `"default"`
-  remains selectable only as an escape hatch for a consumer-supplied
-  image/template that ships a different CNI out of the box.
-- `cilium_operator_replicas` defaults to `null` (the Cilium chart's own
-  default of `2`, with pod anti-affinity). The calling control-plane module
-  passes `1` when `control_plane_count = 1` — otherwise the second replica
-  has nowhere to schedule and sits permanently `Pending` on a genuinely
-  single-node cluster.
+  `cni = "cilium"` on a genesis node, the module has `bootstrap.sh` apply the
+  Cilium manifest kube-image already baked onto the template, and sets
+  `disable: [rke2-cilium]` in `config.yaml` so RKE2's own built-in HelmChart
+  install of Cilium never runs alongside it. `"default"` remains selectable
+  only as an escape hatch for a consumer-supplied image/template that ships a
+  different CNI out of the box.
 - `cluster_token`/`cluster_agent_token`/`agent_token_fetch_command`/
   `trusted_ca_pem`/`tsig_key_secret` are all `sensitive = true` and flow only
   into the cloud-init payload's base64-encoded `write_files` (a 0600
