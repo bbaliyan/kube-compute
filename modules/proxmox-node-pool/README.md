@@ -2,6 +2,18 @@
 
 Provisions a pool of worker nodes for a single-cluster RKE2 deployment on Proxmox.
 
+## Join token and firewall ipset naming
+
+This pool takes `cluster_agent_token` as a plain input variable — pass it the value of
+`proxmox-control-plane`'s own `cluster_agent_token` output via the consumer's
+Terragrunt config. There is no Terraform-level dependency between the two sibling
+modules, and this pool never generates or owns a token itself.
+
+The cluster-wide firewall ipset name it references (`kube-compute-<cluster_name>-cluster`)
+is a plain deterministic-string convention computed locally from `cluster_name`,
+identical to the formula `proxmox-control-plane` computes to name the ipset it actually
+creates. This pool never creates the ipset itself, only references it by name.
+
 ## Operational note: SSH connection bursts on apply
 
 See [proxmox-control-plane's README](../proxmox-control-plane/README.md#operational-note-ssh-connection-bursts-on-apply)

@@ -22,33 +22,6 @@ variable "cluster_name" {
   }
 }
 
-variable "k8s_version" {
-  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Sourced from this cluster's cluster-facts unit — both control-plane and node-pool consume the same resolved value, so version-skew between them is prevented by construction rather than checked at runtime."
-  type        = string
-}
-
-variable "cluster_token" {
-  description = "Join token from this cluster's cluster-facts unit. Passed straight through to every node-bootstrap call (server-init and server-join alike)."
-  type        = string
-  sensitive   = true
-}
-
-variable "cluster_agent_token" {
-  description = "Agent token from this cluster's cluster-facts unit. Passed to the genesis (server-init) node-bootstrap call only — workers fetch it themselves via proxmox-node-pool, which sources it directly from cluster-facts, not from this module."
-  type        = string
-  sensitive   = true
-}
-
-variable "cluster_ipset_name" {
-  description = "Name of the cluster-wide firewall ipset, from this cluster's cluster-facts unit. This module still creates the ipset resource itself (see main.tf) — this is only the name, so it matches what proxmox-node-pool independently receives from the same cluster-facts unit."
-  type        = string
-}
-
-variable "etcd_ipset_name" {
-  description = "Name of the etcd-peer firewall ipset, from this cluster's cluster-facts unit. Same treatment as cluster_ipset_name."
-  type        = string
-}
-
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) added to the node OS trust store. Null = none. Sensitive."
   type        = string
@@ -63,25 +36,25 @@ variable "registry_mirror_url" {
 }
 
 variable "gitops_platform_enabled" {
-  description = "Whether to bootstrap kube-platform at all. false = a bare RKE2+Cilium cluster, no Argo CD/platform Application. Sourced from this cluster's cluster-facts unit."
+  description = "Whether to bootstrap kube-platform at all. false = a bare RKE2+Cilium cluster, no Argo CD/platform Application."
   type        = bool
   default     = true
 }
 
 variable "gitops_platform_repo_url_override" {
-  description = "Override for kube-platform's repo URL. Null (the default) passes through to node-bootstrap, which falls back to its own pinned default — this module is not the source of truth for the pin. Sourced from this cluster's cluster-facts unit."
+  description = "Override for kube-platform's repo URL. Null (the default) passes through to node-bootstrap, which falls back to its own pinned default — this module is not the source of truth for the pin."
   type        = string
   default     = null
 }
 
 variable "gitops_platform_revision_override" {
-  description = "Override for the branch/tag/SHA the platform Application tracks. Null (the default) passes through to node-bootstrap's own pinned default. Sourced from this cluster's cluster-facts unit."
+  description = "Override for the branch/tag/SHA the platform Application tracks. Null (the default) passes through to node-bootstrap's own pinned default."
   type        = string
   default     = null
 }
 
 variable "gitops_workloads_repo_url" {
-  description = "Optional user-defined workloads Application source repo, independent of the platform Application (no shared ordering). Null (the default) = no workloads Application. Sourced from this cluster's cluster-facts unit."
+  description = "Optional user-defined workloads Application source repo, independent of the platform Application (no shared ordering). Null (the default) = no workloads Application."
   type        = string
   default     = null
 }

@@ -2,6 +2,22 @@
 
 Provisions the control-plane node(s) for a single-cluster RKE2 deployment on Proxmox.
 
+## Join tokens and firewall ipset naming
+
+This module generates its own cluster join tokens (`random_password` resources) and
+exposes them as the `cluster_token`/`cluster_agent_token` outputs — there is no
+separate cluster-facts unit to pre-generate them. `cluster_token` is consumed by this
+module's own `node-bootstrap` calls (server-init and server-join alike);
+`cluster_agent_token` is meant to be handed to `proxmox-node-pool`'s own
+`cluster_agent_token` input by the consumer's Terragrunt config. There is no
+Terraform-level dependency between the two sibling modules — only a value passed
+through at that layer.
+
+Similarly, the cluster-wide and etcd-peer firewall ipset names
+(`kube-compute-<cluster_name>-cluster` / `-etcd`) are a plain deterministic-string
+convention computed locally from `cluster_name`, not a shared output. `proxmox-node-pool`
+computes the same formula independently to reference the cluster ipset by name.
+
 ## Operational note: SSH connection bursts on apply
 
 The `proxmox_virtual_environment_file` resources here (`vendor_data`, `node_init`,

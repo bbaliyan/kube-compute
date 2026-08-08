@@ -13,10 +13,10 @@ mock_provider "proxmox" {
     }
   }
 }
+mock_provider "dns" {}
 
 variables {
   cluster_name          = "bharat"
-  k8s_version           = "v1.36.2+rke2r1"
   proxmox_node          = "pve"
   vm_cores              = 4
   vm_memory_mb          = 8192
@@ -24,10 +24,6 @@ variables {
   allowed_ingress_cidrs = ["192.168.1.0/24"]
   os_image_url          = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
   os_image_file_name    = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
-  cluster_token         = "test-cluster-token-0123456789"
-  cluster_agent_token   = "test-agent-token-0123456789"
-  cluster_ipset_name    = "kube-compute-bharat-cluster"
-  etcd_ipset_name       = "kube-compute-bharat-etcd"
 }
 
 run "single_node_no_endpoint" {
@@ -57,7 +53,10 @@ run "invalid_control_plane_count_rejected" {
 }
 
 run "ha_control_plane_creates_n_minus_1_additional_vms" {
-  command = plan
+  # apply (not plan): every node's rendered cloud-init payload now embeds
+  # random_password's result, which is unknown at plan time — the hostname
+  # uniqueness assertions below need the actual rendered strings.
+  command = apply
   variables {
     control_plane_count        = 3
     control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]

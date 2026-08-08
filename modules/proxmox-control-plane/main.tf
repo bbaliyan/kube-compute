@@ -19,6 +19,14 @@ provider "dns" {
 }
 
 locals {
+  # Naming convention only, no shared resource — proxmox-node-pool computes the
+  # identical formula independently from its own var.cluster_name so it can
+  # reference this module's ipset by name ("+<name>") with zero Terraform
+  # dependency between the two sibling modules. This module still owns the
+  # ipset *resources* themselves (below); node-pool never creates one.
+  cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
+  etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
+
   has_domain    = var.cluster_domain != null
   fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
@@ -150,9 +158,26 @@ locals {
     EOT
 }
 
+# ---- Join tokens: generated here (not in a shared cluster-facts unit) — this module is
+# the only Proxmox unit that ever needs the server token, and proxmox-node-pool takes
+# the agent token as a plain input (wired by the consumer's Terragrunt config from this
+# module's own cluster_agent_token output), so there is no other Terraform unit for a
+# shared pre-generation step to save. Two tokens, least privilege: the server token
+# grants joining etcd/control-plane; the agent token is all a worker ever receives, so a
+# compromised worker cannot rejoin as a control-plane/etcd member.
+resource "random_password" "server_token" {
+  length  = 48
+  special = false
+}
+
+resource "random_password" "agent_token" {
+  length  = 48
+  special = false
+}
+
 # ---- Cluster firewall: an ipset scoped to the cluster's L2 subnet CIDR (see plan design note 2) ----
 resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
-  name    = var.cluster_ipset_name
+  name    = local.cluster_ipset_name
   comment = "kube-compute ${var.cluster_name}: east-west traffic among cluster members (subnet-scoped — see module README)."
 
   cidr {
@@ -162,7 +187,7 @@ resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
 
 # ---- etcd firewall: exact control-plane IPs only, never joined by workers ----
 resource "proxmox_virtual_environment_firewall_ipset" "etcd" {
-  name    = var.etcd_ipset_name
+  name    = local.etcd_ipset_name
   comment = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
 
   dynamic "cidr" {
@@ -214,14 +239,13 @@ module "node_bootstrap" {
 
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-0"
-  k8s_version                    = var.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
   cluster_fqdn_suffix            = local.fqdn_suffix
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
-  cluster_token                  = var.cluster_token
-  cluster_agent_token            = var.cluster_agent_token
+  cluster_token                  = random_password.server_token.result
+  cluster_agent_token            = random_password.agent_token.result
   extra_tls_sans                 = compact([local.wildcard_name, local.genesis_dns_name])
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
@@ -268,7 +292,6 @@ module "node_bootstrap_additional" {
 
   cluster_name        = var.cluster_name
   node_name           = "${var.cluster_name}-cp-${each.key}"
-  k8s_version         = var.k8s_version
   cluster_fqdn        = local.cluster_fqdn
   cluster_fqdn_suffix = local.fqdn_suffix
   node_role           = "server-join"
@@ -282,7 +305,7 @@ module "node_bootstrap_additional" {
   # — this is always a single target.
   registration_address = local.registration_address
   extra_tls_sans       = compact([local.wildcard_name, local.genesis_dns_name])
-  cluster_token        = var.cluster_token
+  cluster_token        = random_password.server_token.result
   trusted_ca_pem       = var.trusted_ca_pem
   registry_mirror_url  = var.registry_mirror_url
   dns_servers          = var.dns_servers
@@ -612,7 +635,7 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
   rule {
     type    = "in"
     action  = "ACCEPT"
-    source  = "+${var.cluster_ipset_name}"
+    source  = "+${local.cluster_ipset_name}"
     comment = "all traffic among cluster members"
   }
 
@@ -621,7 +644,7 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
     action  = "ACCEPT"
     proto   = "tcp"
     dport   = "2379:2380"
-    source  = "+${var.etcd_ipset_name}"
+    source  = "+${local.etcd_ipset_name}"
     comment = "etcd peer/client traffic, control-plane nodes only"
   }
 

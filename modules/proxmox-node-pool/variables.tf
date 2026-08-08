@@ -9,12 +9,6 @@ variable "cluster_name" {
   }
 }
 
-variable "k8s_version" {
-  description = "K8s distro version this pool's workers install. Should match the control plane's k8s_version — both are expected to come from the same cluster-facts source, so version skew is prevented by construction, not a runtime check. Null uses the platform default (module.component_versions.k8s_version)."
-  type        = string
-  default     = null
-}
-
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) added to the worker's OS trust store. Null = none. Sensitive."
   type        = string
@@ -143,14 +137,9 @@ variable "registration_address" {
 }
 
 variable "cluster_agent_token" {
-  description = "The agent join token, sourced from proxmox-cluster-facts (not the control plane, which no longer outputs it). Embedded directly into this pool's cloud-init (no managed secret store on Proxmox). Sensitive."
+  description = "The agent join token for this cluster. Embedded directly into this pool's cloud-init (no managed secret store on Proxmox). Sourced from the control plane's own cluster_agent_token output at the consumer's Terragrunt layer — there is no Terraform-level dependency between this module and proxmox-control-plane, only a value handed through. Sensitive."
   type        = string
   sensitive   = true
-}
-
-variable "cluster_ipset_name" {
-  description = "Name of the cluster-wide firewall ipset, sourced from proxmox-cluster-facts (not the control plane, which no longer outputs it). Referenced by name ('+<name>') in this pool's own per-VM firewall rules — the pool never creates or owns the ipset itself."
-  type        = string
 }
 
 variable "extra_node_labels" {

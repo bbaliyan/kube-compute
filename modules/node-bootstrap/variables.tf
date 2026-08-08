@@ -9,11 +9,6 @@ variable "node_name" {
   type        = string
 }
 
-variable "k8s_version" {
-  description = "K8s distro version to install (an RKE2 release string, e.g. v1.36.1+rke2r1). Neutral name so a future distro hop does not change the interface."
-  type        = string
-}
-
 variable "cluster_fqdn" {
   description = "Optional DNS name for the API/kubeconfig server and an extra TLS SAN. Null = use the node IP only."
   type        = string

@@ -21,16 +21,11 @@ mock_provider "proxmox" {
 
 variables {
   cluster_name          = "bharat"
-  k8s_version           = "v1.36.2+rke2r1"
   proxmox_node          = "pve"
   vm_cores              = 4
   vm_memory_mb          = 8192
   vm_disk_gb            = 50
   allowed_ingress_cidrs = ["192.168.1.0/24"]
-  cluster_token         = "test-cluster-token-0123456789"
-  cluster_agent_token   = "test-agent-token-0123456789"
-  cluster_ipset_name    = "kube-compute-bharat-cluster"
-  etcd_ipset_name       = "kube-compute-bharat-etcd"
 }
 
 run "template_clone_is_always_a_full_clone" {

@@ -9,7 +9,6 @@
 variables {
   cluster_name = "test"
   node_name    = "test-cp-0"
-  k8s_version  = "v1.36.2+rke2r1"
 }
 
 run "server_init_payload_is_valid_cloud_config" {

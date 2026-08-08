@@ -1,8 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-module "component_versions" {
-  source = "../component-versions"
-}
-
 # Configured here (not in dns-registration) for the same reason
 # proxmox-control-plane configures its own: dns-registration needs depends_on
 # to sequence its write after node_bootstrap succeeds, and Terraform forbids
@@ -22,8 +18,11 @@ provider "dns" {
 }
 
 locals {
-  # Falls back to the platform-wide default when the caller doesn't override k8s_version.
-  k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
+  # Naming convention only, computed independently from proxmox-control-plane's
+  # identical formula — see that module's matching local for why there is no
+  # shared module/output for this instead. This pool only ever references the
+  # cluster ipset by name; it never creates one.
+  cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
 
   static_ips = var.worker_ip_addresses != null
 
@@ -268,7 +267,6 @@ module "node_bootstrap" {
 
   cluster_name              = var.cluster_name
   node_name                 = "${var.cluster_name}-worker-${each.key}"
-  k8s_version               = local.k8s_version
   node_role                 = "worker"
   registration_address      = local.effective_registration_address
   agent_token_fetch_command = local.agent_token_fetch_command
@@ -340,7 +338,7 @@ resource "proxmox_virtual_environment_firewall_rules" "worker" {
   rule {
     type    = "in"
     action  = "ACCEPT"
-    source  = "+${var.cluster_ipset_name}"
+    source  = "+${local.cluster_ipset_name}"
     comment = "all traffic among cluster members"
   }
 }

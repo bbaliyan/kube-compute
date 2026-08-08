@@ -15,10 +15,14 @@ mock_provider "proxmox" {
 }
 
 run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
-  command = plan
+  # apply (not plan): random_password's result is unknown at plan time — this
+  # run needs the actual generated values to assert they made it into the
+  # rendered cloud-init payload unchanged. Every other resource in this module
+  # is either a mocked Proxmox resource or an equally apply-safe local render,
+  # so nothing here talks to a real API.
+  command = apply
   variables {
     cluster_name               = "bharat"
-    k8s_version                = "v1.36.2+rke2r1"
     proxmox_node               = "pve"
     vm_cores                   = 4
     vm_memory_mb               = 8192
@@ -27,20 +31,20 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
     allowed_ingress_cidrs      = ["192.168.1.0/24"]
     os_image_url               = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
     os_image_file_name         = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
-    cluster_token              = "test-cluster-token-0123456789"
-    cluster_agent_token        = "test-agent-token-0123456789"
-    cluster_ipset_name         = "kube-compute-bharat-cluster"
-    etcd_ipset_name            = "kube-compute-bharat-etcd"
   }
 
   assert {
+    condition     = output.cluster_token != output.cluster_agent_token
+    error_message = "the server and agent tokens must be generated as distinct values"
+  }
+  assert {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "CLUSTER_TOKEN='test-cluster-token-0123456789'") &&
-      strcontains(base64decode(f.content), "CLUSTER_AGENT_TOKEN='test-agent-token-0123456789'")
+      strcontains(base64decode(f.content), "CLUSTER_TOKEN='${output.cluster_token}'") &&
+      strcontains(base64decode(f.content), "CLUSTER_AGENT_TOKEN='${output.cluster_agent_token}'")
       if f.path == "/opt/kube-compute/secrets.env"
     ])
-    error_message = "the genesis node's payload must carry both the server and the agent join token, and they must be distinct values"
+    error_message = "the genesis node's payload must carry both the server and the agent join token, matching this module's own generated tokens"
   }
   assert {
     condition = anytrue([

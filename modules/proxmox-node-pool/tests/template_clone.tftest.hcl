@@ -18,7 +18,6 @@ mock_provider "proxmox" {
 
 variables {
   cluster_name         = "bharat"
-  k8s_version          = "v1.36.2+rke2r1"
   proxmox_node         = "pve"
   vm_cores             = 2
   vm_memory_mb         = 4096
@@ -26,7 +25,6 @@ variables {
   desired_count        = 2
   registration_address = "192.168.1.5"
   cluster_agent_token  = "agent-secret-abc123"
-  cluster_ipset_name   = "kube-compute-bharat-cluster"
 }
 
 run "template_clone_is_always_a_full_clone" {
