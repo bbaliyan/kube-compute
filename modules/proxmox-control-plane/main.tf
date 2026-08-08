@@ -1,23 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-# Configured here (not in dns-registration) because that module needs
-# depends_on to sequence its write after node-bootstrap succeeds, and
-# Terraform forbids depends_on/count/for_each on a module call whose module
-# owns its own provider block — see dns-registration's README. Coalesced to
-# harmless placeholders when DNS registration is disabled (var.dns_server_address
-# null): this provider is still configured either way since it's passed to an
-# always-instantiated module call, but dns-registration's own resource has
-# count = 0 in that case, so nothing ever actually dials these placeholders.
-provider "dns" {
-  update {
-    server        = coalesce(var.dns_server_address, "127.0.0.1")
-    port          = var.dns_server_port
-    transport     = var.dns_transport
-    key_name      = local.tsig_key_name_fqdn
-    key_algorithm = var.tsig_key_algorithm
-    key_secret    = coalesce(var.tsig_key_secret, "dW51c2VkAA==")
-  }
-}
-
 locals {
   # Naming convention only, no shared resource — proxmox-node-pool computes the
   # identical formula independently from its own var.cluster_name so it can

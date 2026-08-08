@@ -1,22 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-# Configured here (not in dns-registration) for the same reason
-# proxmox-control-plane configures its own: dns-registration needs depends_on
-# to sequence its write after node_bootstrap succeeds, and Terraform forbids
-# depends_on/count/for_each on a module call whose module owns its own
-# provider block. Coalesced to harmless placeholders when DNS registration is
-# disabled (var.dns_server_address null) — see proxmox-control-plane's
-# identical provider block for the full reasoning.
-provider "dns" {
-  update {
-    server        = coalesce(var.dns_server_address, "127.0.0.1")
-    port          = var.dns_server_port
-    transport     = var.dns_transport
-    key_name      = local.tsig_key_name_fqdn
-    key_algorithm = var.tsig_key_algorithm
-    key_secret    = coalesce(var.tsig_key_secret, "dW51c2VkAA==")
-  }
-}
-
 locals {
   # Naming convention only, computed independently from proxmox-control-plane's
   # identical formula — see that module's matching local for why there is no

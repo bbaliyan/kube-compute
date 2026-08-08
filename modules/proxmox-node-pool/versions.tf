@@ -7,8 +7,9 @@ terraform {
       version = "~> 0.110"
     }
     dns = {
-      source  = "hashicorp/dns"
-      version = "~> 3.6"
+      source                = "hashicorp/dns"
+      version               = "~> 3.6"
+      configuration_aliases = [dns]
     }
   }
 }

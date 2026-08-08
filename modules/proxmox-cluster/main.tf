@@ -1,7 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
+locals {
+  # Same formula as proxmox-control-plane's/proxmox-node-pool's own
+  # identical local — needed here too because this module now owns the
+  # dns provider both of them used to self-configure (see Task 3b).
+  tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
+}
+
 module "control_plane" {
-  source = "../proxmox-control-plane"
+  source    = "../proxmox-control-plane"
+  providers = { dns = dns }
 
   ansible_ssh_private_key_file      = var.ansible_ssh_private_key_file
   ansible_ssh_user                  = var.ansible_ssh_user
@@ -52,8 +60,9 @@ module "control_plane" {
 }
 
 module "node_pools" {
-  source   = "../proxmox-node-pool"
-  for_each = var.node_pools
+  source    = "../proxmox-node-pool"
+  for_each  = var.node_pools
+  providers = { dns = dns }
 
   cluster_name        = var.cluster_name
   cluster_agent_token = module.control_plane.cluster_agent_token
