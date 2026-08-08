@@ -337,6 +337,11 @@ variable "cluster_autoscaler_worker_max_size" {
   description = "Maximum worker count cluster-autoscaler will scale to. Only meaningful when cluster_autoscaler_enabled is true."
   type        = number
   default     = 0
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_max_size > 0
+    error_message = "cluster_autoscaler_worker_max_size must be > 0 when cluster_autoscaler_enabled is true — leaving it at the 0 default renders a valid but useless MachineDeployment that can never scale up."
+  }
 }
 
 variable "cluster_autoscaler_worker_template" {
@@ -351,4 +356,9 @@ variable "cluster_autoscaler_worker_template" {
     proxmox_node           = string
   })
   default = null
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_template != null
+    error_message = "cluster_autoscaler_worker_template is required when cluster_autoscaler_enabled is true."
+  }
 }

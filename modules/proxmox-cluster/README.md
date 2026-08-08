@@ -118,6 +118,24 @@ Each key in `node_pools` becomes one `proxmox-node-pool` instance, wired to this
 cluster's `cluster_name` and `cluster_agent_token` automatically. Add more entries
 for more pools (e.g. `pool-b` with a different sizing) — the map has no fixed size.
 
+## Cluster autoscaler (optional)
+
+`cluster_autoscaler_enabled`, `cluster_autoscaler_worker_min_size`,
+`cluster_autoscaler_worker_max_size`, and `cluster_autoscaler_worker_template` pass
+straight through to `proxmox-control-plane` (and from there to `node-bootstrap`,
+which renders the actual `MachineDeployment`/CAPI manifests — see
+[`node-bootstrap`'s README](../node-bootstrap/README.md#cluster-autoscaler-optional-proxmox-only-today)
+for the full mechanics). `false` (the default) is a no-op — no CAPI install, no
+MachineDeployment, no change to what this module already provisions.
+
+When enabling it, `cluster_autoscaler_worker_template.proxmox_template_vm_id` must
+point at the **`proxmox-autoscaler-worker`** kube-image variant — a different
+template than the `proxmox_template_vm_id` used above for control-plane/node-pool
+VMs. `cluster_autoscaler_worker_max_size` must be greater than its `0` default, and
+`cluster_autoscaler_worker_template` must be set; both are enforced by `plan`-time
+validation so an incomplete configuration fails with a clear error rather than
+producing a MachineDeployment that can never scale.
+
 ## Existing standalone modules remain fully supported
 
 `proxmox-control-plane` and `proxmox-node-pool` are unchanged and continue to work

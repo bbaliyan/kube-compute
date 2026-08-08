@@ -54,12 +54,12 @@ run "cluster_autoscaler_enabled_renders_manifest_and_apply_steps" {
     cluster_autoscaler_worker_max_size = 3
     cluster_autoscaler_worker_template = {
       vm_cores               = 4
-      vm_memory_mb            = 4096
-      vm_disk_gb              = 40
-      proxmox_template_vm_id  = 9100
-      network_bridge          = "vmbr0"
-      disk_datastore_id       = "local-lvm"
-      proxmox_node            = "pve1"
+      vm_memory_mb           = 4096
+      vm_disk_gb             = 40
+      proxmox_template_vm_id = 9100
+      network_bridge         = "vmbr0"
+      disk_datastore_id      = "local-lvm"
+      proxmox_node           = "pve1"
     }
   }
 
@@ -102,6 +102,52 @@ run "cluster_autoscaler_enabled_renders_manifest_and_apply_steps" {
   }
 }
 
+run "cluster_autoscaler_enabled_without_template_fails_validation" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+
+    cluster_autoscaler_enabled         = true
+    cluster_autoscaler_worker_min_size = 1
+    cluster_autoscaler_worker_max_size = 3
+    # cluster_autoscaler_worker_template left at its null default.
+  }
+
+  expect_failures = [var.cluster_autoscaler_worker_template]
+}
+
+run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+
+    cluster_autoscaler_enabled         = true
+    cluster_autoscaler_worker_min_size = 0
+    # cluster_autoscaler_worker_max_size left at its 0 default.
+    cluster_autoscaler_worker_template = {
+      vm_cores               = 4
+      vm_memory_mb           = 4096
+      vm_disk_gb             = 40
+      proxmox_template_vm_id = 9100
+      network_bridge         = "vmbr0"
+      disk_datastore_id      = "local-lvm"
+      proxmox_node           = "pve1"
+    }
+  }
+
+  expect_failures = [var.cluster_autoscaler_worker_max_size]
+}
+
 run "cluster_autoscaler_worker_node_never_renders_the_genesis_apply" {
   command = plan
 
@@ -116,12 +162,12 @@ run "cluster_autoscaler_worker_node_never_renders_the_genesis_apply" {
     cluster_autoscaler_worker_max_size = 3
     cluster_autoscaler_worker_template = {
       vm_cores               = 4
-      vm_memory_mb            = 4096
-      vm_disk_gb              = 40
-      proxmox_template_vm_id  = 9100
-      network_bridge          = "vmbr0"
-      disk_datastore_id       = "local-lvm"
-      proxmox_node            = "pve1"
+      vm_memory_mb           = 4096
+      vm_disk_gb             = 40
+      proxmox_template_vm_id = 9100
+      network_bridge         = "vmbr0"
+      disk_datastore_id      = "local-lvm"
+      proxmox_node           = "pve1"
     }
   }
 

@@ -79,12 +79,6 @@ locals {
   # (on cluster_autoscaler_enabled alone) apply step expects to exist.
   render_cluster_autoscaler = var.cluster_autoscaler_enabled && var.node_role == "server-init"
 
-  # RKE2 release stamped into the genesis-rendered RKE2ConfigTemplate for
-  # CAPI-provisioned autoscaler workers. Falls back to component-versions'
-  # own pin, the same source cluster-facts already uses, when the caller
-  # doesn't override it.
-  effective_k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
-
   # ---- GitOps Application manifests ----
   # Rendered by templatefile()/yamlencode() here, not by Ansible's template
   # module on the node — consistent with how the Cilium/Argo values above are
@@ -129,6 +123,8 @@ locals {
                 value: "${var.cert_mode}"
               - name: clusterName
                 value: "${var.cluster_name}"
+              - name: clusterAutoscalerEnabled
+                value: "${var.cluster_autoscaler_enabled}"
               - name: clusterFqdnSuffix
                 value: "${var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""}"
               - name: trustedCaPemB64
@@ -192,7 +188,7 @@ locals {
       proxmox_template_vm_id = var.cluster_autoscaler_worker_template.proxmox_template_vm_id
       disk_datastore_id      = var.cluster_autoscaler_worker_template.disk_datastore_id
       network_bridge         = var.cluster_autoscaler_worker_template.network_bridge
-      k8s_version            = local.effective_k8s_version
+      k8s_version            = module.component_versions.k8s_version
     }
   )
 

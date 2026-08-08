@@ -54,6 +54,37 @@ returned. The node writes its own progress to
 bootstrap progress. There is no Terraform-visible signal, no provisioner
 output, and no `bootstrap_log_path`-style output to depend on.
 
+## Cluster autoscaler (optional, Proxmox-only today)
+
+`cluster_autoscaler_enabled = true` has this module render an extra genesis-only
+manifest (`ProxmoxMachineTemplate` + `MachineDeployment` + `RKE2ConfigTemplate`) and
+the `bootstrap.sh` apply steps that install CAPI/CAPMOX/CAPRKE2 and hand the
+MachineDeployment to cluster-autoscaler. It is genesis-only (rendered on
+`server-init` nodes only) and independent of `gitops_platform_enabled` — the CAPI
+install/apply is a one-time step, not tied to whether a platform Argo CD
+Application also exists on this cluster.
+
+Two things to get right when enabling it:
+
+- `cluster_autoscaler_worker_template.proxmox_template_vm_id` must point at the
+  **`proxmox-autoscaler-worker`** kube-image variant, not the normal
+  control-plane/pool image — CAPMOX full-clones this template for every
+  autoscaled worker it provisions, so it needs to already carry the RKE2 agent
+  bits and CAPI-facing bootstrap contract that variant bakes in. Pointing it at
+  a control-plane or ordinary node-pool template will not fail at `plan` time
+  but produces workers that never join correctly.
+- `cluster_autoscaler_worker_max_size` must be set above its `0` default, and
+  `cluster_autoscaler_worker_template` must be set, whenever
+  `cluster_autoscaler_enabled = true` — both are enforced by variable
+  `validation` blocks so a misconfiguration fails at `plan` with a clear
+  message instead of a raw "Attempt to get attribute from null value" error
+  (or a MachineDeployment that can never scale up).
+- `gitops_platform_enabled = true` clusters also get a `clusterAutoscalerEnabled`
+  Helm parameter passed to the `platform` Argo CD Application, mirrored from
+  this same `cluster_autoscaler_enabled` value — that's what gates
+  kube-platform's own `cluster-autoscaler` Application so it only syncs on
+  clusters that opted in.
+
 ## Interface notes
 
 - `ansible_playbook_path`, `invocation_mode`, `ansible_connection_vars`,

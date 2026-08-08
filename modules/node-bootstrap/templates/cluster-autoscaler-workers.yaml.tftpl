@@ -19,6 +19,8 @@ kind: MachineDeployment
 metadata:
   name: ${cluster_name}-autoscaler-workers
   namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
   annotations:
     cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "${min_size}"
     cluster.x-k8s.io/cluster-api-autoscaler-node-group-max-size: "${max_size}"
@@ -26,8 +28,12 @@ spec:
   clusterName: ${cluster_name}
   replicas: ${min_size}
   selector:
-    matchLabels: {}
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${cluster_name}
   template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: ${cluster_name}
     spec:
       clusterName: ${cluster_name}
       bootstrap:

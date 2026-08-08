@@ -253,12 +253,6 @@ variable "tsig_key_secret" {
   }
 }
 
-variable "k8s_version" {
-  description = "RKE2 release string stamped into the genesis-rendered RKE2ConfigTemplate's agentConfig.version for CAPI/CAPRKE2-provisioned autoscaler workers. Only meaningful when cluster_autoscaler_enabled is true. Null (the default) falls back to component-versions' own k8s_version pin, the same source cluster-facts already uses — this module otherwise has no notion of an RKE2 version, since ordinary nodes get RKE2 pre-installed by kube-image and never need it passed in."
-  type        = string
-  default     = null
-}
-
 variable "cluster_autoscaler_enabled" {
   description = "Whether to genesis-apply CAPI/CAPMOX/CAPRKE2's MachineDeployment + cluster-autoscaler for this cluster. false (the default) means zero autoscaler-related resources exist — no CAPI install, no MachineDeployment, nothing for cluster-autoscaler to manage."
   type        = bool
@@ -275,6 +269,11 @@ variable "cluster_autoscaler_worker_max_size" {
   description = "Maximum worker count cluster-autoscaler will scale to. Only meaningful when cluster_autoscaler_enabled is true."
   type        = number
   default     = 0
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_max_size > 0
+    error_message = "cluster_autoscaler_worker_max_size must be > 0 when cluster_autoscaler_enabled is true — leaving it at the 0 default renders a valid but useless MachineDeployment that can never scale up."
+  }
 }
 
 variable "cluster_autoscaler_worker_template" {
@@ -289,4 +288,9 @@ variable "cluster_autoscaler_worker_template" {
     proxmox_node           = string
   })
   default = null
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_template != null
+    error_message = "cluster_autoscaler_worker_template is required when cluster_autoscaler_enabled is true."
+  }
 }
