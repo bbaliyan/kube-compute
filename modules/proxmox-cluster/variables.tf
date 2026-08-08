@@ -355,6 +355,5 @@ variable "node_pools" {
     tsig_key_algorithm      = optional(string, "hmac-sha256")
     tsig_key_secret         = optional(string)
   }))
-  default   = {}
-  sensitive = true # object type can't mark trusted_ca_pem/tsig_key_secret sensitive per-field; the whole map is sensitive instead, matching how those two fields are already sensitive on proxmox-node-pool itself.
+  default = {}
 }
