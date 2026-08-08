@@ -218,6 +218,28 @@ if [ "$ACTIVE" -ne 1 ]; then
 fi
 %{ endif ~}
 
+%{ if cluster_autoscaler_enabled ~}
+# ---- CAPI/CAPMOX/CAPRKE2 install + autoscaler MachineDeployment: genesis
+#      only, after the node is Ready. Applied before the Argo CD platform/
+#      workloads Applications below (and independent of whether either of
+#      those is even enabled): CAPI's own CRDs must exist before anything
+#      that references them, and Argo CD ownership is irrelevant to this
+#      one-time genesis install. ----
+KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
+$KUBECTL apply -f "$KC/manifests/capi-install.yaml"
+# Wait for CAPI's core CRDs to be Established before applying anything that
+# references them — same "CRD-established vs controller-running" race this
+# project already hit and fixed for Argo CD's own bootstrap (see the
+# CoreDNS-wait / argocd-application-controller-wait loops below).
+for attempt in $(seq 1 60); do
+  if $KUBECTL get crd machinedeployments.cluster.x-k8s.io >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+$KUBECTL apply -f "$KC/manifests/20-cluster-autoscaler-workers.yaml"
+%{ endif ~}
+
 %{ if argocd_needed ~}
 # ---- GitOps/Argo CD bootstrap: genesis only, after the node is Ready ----
 KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"

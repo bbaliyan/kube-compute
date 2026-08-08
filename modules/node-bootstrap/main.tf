@@ -69,6 +69,22 @@ locals {
   render_cilium = var.cni == "cilium" && var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
+  # Genesis-only, same as render_cilium/render_argocd — but deliberately NOT
+  # gated on argocd_needed/render_argocd: the CAPI/CAPMOX/CAPRKE2 install and
+  # its MachineDeployment are applied by bootstrap.sh itself (a one-time
+  # genesis step), independent of whether this cluster also runs a platform
+  # or workloads Argo CD Application. Tying it to render_argocd would mean a
+  # cluster_autoscaler_enabled = true, gitops_platform_enabled = false
+  # cluster never gets the write_files entry bootstrap.sh's unconditional
+  # (on cluster_autoscaler_enabled alone) apply step expects to exist.
+  render_cluster_autoscaler = var.cluster_autoscaler_enabled && var.node_role == "server-init"
+
+  # RKE2 release stamped into the genesis-rendered RKE2ConfigTemplate for
+  # CAPI-provisioned autoscaler workers. Falls back to component-versions'
+  # own pin, the same source cluster-facts already uses, when the caller
+  # doesn't override it.
+  effective_k8s_version = coalesce(var.k8s_version, module.component_versions.k8s_version)
+
   # ---- GitOps Application manifests ----
   # Rendered by templatefile()/yamlencode() here, not by Ansible's template
   # module on the node — consistent with how the Cilium/Argo values above are
@@ -157,6 +173,28 @@ locals {
         automated: { prune: true, selfHeal: true }
         syncOptions: ["CreateNamespace=true"]
   EOT
+
+  # ---- cluster-autoscaler-workers.yaml (MachineDeployment + ProxmoxMachineTemplate + RKE2ConfigTemplate) ----
+  # See templates/cluster-autoscaler-workers.yaml.tftpl for field-source
+  # commentary. vm_memory_mb -> memoryMiB unit mismatch (research spike §3):
+  # ProxmoxMachineTemplate wants MiB, this module's/proxmox-node-pool's own
+  # convention is MB, so the conversion happens here, not in the template.
+  cluster_autoscaler_workers_yaml = !var.cluster_autoscaler_enabled ? "" : templatefile(
+    "${path.module}/templates/cluster-autoscaler-workers.yaml.tftpl",
+    {
+      cluster_name           = var.cluster_name
+      min_size               = var.cluster_autoscaler_worker_min_size
+      max_size               = var.cluster_autoscaler_worker_max_size
+      vm_cores               = var.cluster_autoscaler_worker_template.vm_cores
+      vm_memory_mib          = ceil(var.cluster_autoscaler_worker_template.vm_memory_mb * 1000000 / 1048576)
+      vm_disk_gb             = var.cluster_autoscaler_worker_template.vm_disk_gb
+      proxmox_node           = var.cluster_autoscaler_worker_template.proxmox_node
+      proxmox_template_vm_id = var.cluster_autoscaler_worker_template.proxmox_template_vm_id
+      disk_datastore_id      = var.cluster_autoscaler_worker_template.disk_datastore_id
+      network_bridge         = var.cluster_autoscaler_worker_template.network_bridge
+      k8s_version            = local.effective_k8s_version
+    }
+  )
 
   # ---- registries.yaml ----
   # Faithful port of registries.yaml.j2, including the belt-and-suspenders
@@ -269,6 +307,7 @@ locals {
     argocd_needed                 = local.render_argocd
     platform_app_enabled          = local.platform_app_enabled
     workloads_app_enabled         = local.workloads_app_enabled
+    cluster_autoscaler_enabled    = local.render_cluster_autoscaler
   })
 
   # ---- secrets.env ----
@@ -350,6 +389,13 @@ locals {
       owner       = "root:root"
       encoding    = "b64"
       content     = base64encode(local.workloads_app_yaml)
+    }],
+    !local.render_cluster_autoscaler ? [] : [{
+      path        = "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      permissions = "0600"
+      owner       = "root:root"
+      encoding    = "b64"
+      content     = base64encode(local.cluster_autoscaler_workers_yaml)
     }],
     !local.is_server ? [] : [
       for name in sort(keys(var.extra_server_manifests)) : {
