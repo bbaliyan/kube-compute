@@ -92,3 +92,13 @@ output "node_pools" {
     }
   }
 }
+
+output "orchestrator_playbook_path" {
+  description = "Absolute path to the cross-node OS-patch orchestrator playbook (node-os-patch). Run it with -e \"$(tofu output -raw orchestrator_extra_vars_json)\". Resource-less — applying this module creates nothing; OS patching is an operator-triggered action run on whatever schedule the operator chooses, never implied by a plain apply."
+  value       = module.os_patch.orchestrator_playbook_path
+}
+
+output "orchestrator_extra_vars_json" {
+  description = "JSON-encoded extra-vars for orchestrator_playbook_path: this cluster's control-plane and worker node refs (across every node_pools entry), SSH connection facts, and per-role RKE2 service names."
+  value       = module.os_patch.orchestrator_extra_vars_json
+}
