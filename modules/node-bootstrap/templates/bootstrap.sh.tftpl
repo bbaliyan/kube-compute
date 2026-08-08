@@ -264,6 +264,27 @@ $KUBECTL apply --server-side -f "$KC/manifests/00-argocd.yaml"
 # worker pool joins, it has nowhere to schedule yet and converges once capacity
 # exists.
 $KUBECTL wait --for=condition=established --timeout=120s crd/applications.argoproj.io
+%{ if platform_app_enabled || workloads_app_enabled ~}
+# condition=established above only proves the CRD *type* exists — not that
+# argocd-application-controller has started reconciling yet. It's what
+# creates the built-in "default" AppProject on its own startup, and an
+# Application applied before that exists fails with a transient
+# InvalidSpecError ("referencing project default which does not exist"),
+# confirmed on a real apply. Argo CD's own requeue/backoff clears it
+# eventually, but that's wasted time the same way the CoreDNS wait above
+# avoids it — wait for the controller itself instead of the CRD alone.
+APP_CONTROLLER_READY=0
+for attempt in $(seq 1 60); do
+  if $KUBECTL wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=5s >/dev/null 2>&1; then
+    APP_CONTROLLER_READY=1
+    break
+  fi
+  sleep 2
+done
+if [ "$APP_CONTROLLER_READY" -ne 1 ]; then
+  echo "kube-compute: argocd-application-controller did not report Ready within ~150s, proceeding anyway" >&2
+fi
+%{ endif ~}
 %{ if platform_app_enabled ~}
 $KUBECTL apply -f "$KC/manifests/10-platform-app.yaml"
 %{ endif ~}
