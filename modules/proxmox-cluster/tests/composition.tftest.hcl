@@ -17,13 +17,13 @@ mock_provider "dns" {}
 
 variables {
   cluster_name          = "bharat"
-  proxmox_node           = "pve"
-  vm_cores               = 4
-  vm_memory_mb            = 8192
-  vm_disk_gb              = 50
-  allowed_ingress_cidrs   = ["192.168.1.0/24"]
-  os_image_url            = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-  os_image_file_name      = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+  proxmox_node          = "pve"
+  vm_cores              = 4
+  vm_memory_mb          = 8192
+  vm_disk_gb            = 50
+  allowed_ingress_cidrs = ["192.168.1.0/24"]
+  os_image_url          = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+  os_image_file_name    = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
 }
 
 run "no_pools_creates_only_control_plane" {
