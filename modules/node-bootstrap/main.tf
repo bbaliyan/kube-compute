@@ -151,6 +151,16 @@ locals {
     { extraTags = var.extra_tags },
   )
 
+  # Multi-source Application (not the single-source form the API also
+  # supports): the second source (ref: values, no chart) makes
+  # platform-versions/values.yaml's content available to the first source's
+  # `helm.valueFiles`, so bootstrap's own chart templates (cilium-app.yaml,
+  # argocd-app.yaml) can read .Values.ciliumVersion/.Values.argocdVersion at
+  # every sync — the same mechanism system-upgrade-plans-app.yaml already
+  # uses for .Values.k8sVersion. This is what makes bumping
+  # platform-versions/values.yaml alone enough to roll Cilium/Argo CD forward
+  # kube-platform-wide, no per-cluster terragrunt apply and no editing the
+  # Application templates' own literals.
   platform_app_yaml = <<-EOT
     apiVersion: argoproj.io/v1alpha1
     kind: Application
@@ -159,30 +169,35 @@ locals {
       namespace: argocd
     spec:
       project: default
-      source:
-        repoURL: ${local.effective_gitops_platform_repo_url}
-        targetRevision: ${local.effective_gitops_platform_revision}
-        path: bootstrap
-        helm:
-          parameters:
-            - name: platformRepoURL
-              value: "${local.effective_gitops_platform_repo_url}"
-            - name: platformRevision
-              value: "${local.effective_gitops_platform_revision}"
-            - name: certMode
-              value: "${var.cert_mode}"
-            - name: clusterName
-              value: "${var.cluster_name}"
-            - name: clusterFqdnSuffix
-              value: "${var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""}"
-            - name: trustedCaPemB64
-              value: "${base64encode(var.trusted_ca_pem != null ? var.trusted_ca_pem : "")}"
+      sources:
+        - repoURL: ${local.effective_gitops_platform_repo_url}
+          targetRevision: ${local.effective_gitops_platform_revision}
+          path: bootstrap
+          helm:
+            valueFiles:
+              - $values/platform/platform-versions/values.yaml
+            parameters:
+              - name: platformRepoURL
+                value: "${local.effective_gitops_platform_repo_url}"
+              - name: platformRevision
+                value: "${local.effective_gitops_platform_revision}"
+              - name: certMode
+                value: "${var.cert_mode}"
+              - name: clusterName
+                value: "${var.cluster_name}"
+              - name: clusterFqdnSuffix
+                value: "${var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""}"
+              - name: trustedCaPemB64
+                value: "${base64encode(var.trusted_ca_pem != null ? var.trusted_ca_pem : "")}"
     %{~for name, val in var.platform_extra_helm_parameters~}
-            - name: ${name}
-              value: "${val}"
+              - name: ${name}
+                value: "${val}"
     %{~endfor~}
-          valuesObject:
-            ${indent(8, yamlencode(local.platform_values_object))}
+            valuesObject:
+              ${indent(10, yamlencode(local.platform_values_object))}
+        - repoURL: ${local.effective_gitops_platform_repo_url}
+          targetRevision: ${local.effective_gitops_platform_revision}
+          ref: values
       destination:
         server: https://kubernetes.default.svc
         namespace: argocd
