@@ -57,6 +57,11 @@ module "control_plane" {
   tsig_key_name                     = var.tsig_key_name
   tsig_key_algorithm                = var.tsig_key_algorithm
   tsig_key_secret                   = var.tsig_key_secret
+
+  cluster_autoscaler_enabled         = var.cluster_autoscaler_enabled
+  cluster_autoscaler_worker_min_size = var.cluster_autoscaler_worker_min_size
+  cluster_autoscaler_worker_max_size = var.cluster_autoscaler_worker_max_size
+  cluster_autoscaler_worker_template = var.cluster_autoscaler_worker_template
 }
 
 module "node_pools" {

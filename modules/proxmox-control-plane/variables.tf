@@ -320,3 +320,35 @@ variable "tsig_key_secret" {
   default     = null
   sensitive   = true
 }
+
+variable "cluster_autoscaler_enabled" {
+  description = "Whether to genesis-apply CAPI/CAPMOX/CAPRKE2's MachineDeployment + cluster-autoscaler for this cluster. false (the default) means zero autoscaler-related resources exist — no CAPI install, no MachineDeployment, nothing for cluster-autoscaler to manage."
+  type        = bool
+  default     = false
+}
+
+variable "cluster_autoscaler_worker_min_size" {
+  description = "Minimum worker count cluster-autoscaler maintains. Only meaningful when cluster_autoscaler_enabled is true."
+  type        = number
+  default     = 0
+}
+
+variable "cluster_autoscaler_worker_max_size" {
+  description = "Maximum worker count cluster-autoscaler will scale to. Only meaningful when cluster_autoscaler_enabled is true."
+  type        = number
+  default     = 0
+}
+
+variable "cluster_autoscaler_worker_template" {
+  description = "VM shape for CAPI-provisioned autoscaled workers — same fields proxmox-node-pool's own node_pools objects carry, mapped to ProxmoxMachineTemplate fields per the research spike's field-mapping table. Null (default) is valid only when cluster_autoscaler_enabled is false."
+  type = object({
+    vm_cores               = number
+    vm_memory_mb           = number
+    vm_disk_gb             = number
+    proxmox_template_vm_id = number
+    network_bridge         = string
+    disk_datastore_id      = string
+    proxmox_node           = string
+  })
+  default = null
+}
