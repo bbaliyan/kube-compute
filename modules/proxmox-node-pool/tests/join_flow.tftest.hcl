@@ -99,8 +99,8 @@ run "worker_fqdn_set_when_cluster_domain_present" {
   assert {
     condition = alltrue([
       for k, snippet in proxmox_virtual_environment_file.node_init :
-      yamldecode(snippet.source_raw[0].data).fqdn == "bharat-worker-${k}.bharat.example.com"
+      yamldecode(snippet.source_raw[0].data).fqdn == "worker-${k}.bharat.example.com"
     ])
-    error_message = "each worker must get an explicit fqdn (node_name.cluster_name.cluster_domain) whenever cluster_domain is set, not just hostname"
+    error_message = "each worker must get an explicit fqdn (worker-<k>.cluster_name.cluster_domain) whenever cluster_domain is set, not just hostname -- the fqdn label is deliberately shorter than node_name/hostname (no cluster_name prefix), since cluster_fqdn_suffix already carries that identity"
   }
 }

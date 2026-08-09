@@ -414,7 +414,7 @@ locals {
     },
     var.set_hostname ? { hostname = var.node_name } : {},
     var.set_hostname && var.cluster_fqdn_suffix != null && var.cluster_fqdn_suffix != "" ? {
-      fqdn = "${var.node_name}.${var.cluster_fqdn_suffix}"
+      fqdn = "${coalesce(var.node_fqdn_label, var.node_name)}.${var.cluster_fqdn_suffix}"
     } : {},
   )
 

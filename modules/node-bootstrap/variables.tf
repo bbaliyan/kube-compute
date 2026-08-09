@@ -21,6 +21,12 @@ variable "cluster_fqdn_suffix" {
   default     = null
 }
 
+variable "node_fqdn_label" {
+  description = "Optional override for the fqdn's leftmost label (before cluster_fqdn_suffix), when it should differ from node_name. node_name is also this node's OS hostname and (on Proxmox) its VM/tag name in the provider UI, where a cluster-name prefix is genuinely useful for telling clusters apart at a glance; the fqdn already carries that same cluster identity in its suffix (cluster_fqdn_suffix embeds cluster_name), so repeating the prefix in the label too is redundant there. Null (the default) uses node_name for the label as before, preserving today's behavior for every caller that hasn't opted into a shorter label."
+  type        = string
+  default     = null
+}
+
 variable "set_hostname" {
   description = "Whether this node's cloud-init sets an explicit hostname/fqdn. true (the default, preserving today's behavior for every existing caller) writes hostname: <node_name> into cloud-config, required because RKE2/kubelet registers the node by OS hostname and every Terraform-provisioned node already gets a distinct node_name. false omits hostname/fqdn from cloud-config entirely, relying on the VM platform's own per-instance metadata (e.g. a NoCloud datasource's local-hostname) to supply a unique hostname instead — needed when the SAME rendered cloud-init is shared across multiple VMs the way CAPI-provisioned MachineDeployment replicas are (see proxmox-cluster's cluster_autoscaler_enabled, which sets this false for its shared worker-bootstrap render — this module itself no longer knows anything about the autoscaler). Unverified assumption for the false case: that the underlying VM platform's metadata actually provides a usable per-VM hostname when cloud-config doesn't set one explicitly — real-hardware check required before trusting this in production."
   type        = bool

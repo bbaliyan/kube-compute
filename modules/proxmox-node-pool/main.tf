@@ -264,6 +264,7 @@ module "node_bootstrap" {
 
   cluster_name              = var.cluster_name
   node_name                 = "${var.cluster_name}-worker-${each.key}"
+  node_fqdn_label           = "worker-${each.key}"
   cluster_fqdn_suffix       = local.fqdn_suffix
   node_role                 = "worker"
   registration_address      = local.effective_registration_address
