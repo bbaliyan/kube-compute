@@ -16,6 +16,21 @@ locals {
   dns_zone                 = var.cluster_domain != null ? "${trimsuffix(var.cluster_domain, ".")}." : null
   dns_wildcard_record_name = "*.${var.cluster_name}"
 
+  # Same formula as proxmox-control-plane's identical local, passed to
+  # node-bootstrap below so a worker's cloud-init sets a real fqdn (not just
+  # hostname). Without this, cloud-init's cc_set_hostname has only a bare
+  # hostname key (no domain) to work with; on this distro it then prefers a
+  # derived fqdn over the literal hostname, and since there's no domain to
+  # derive one from, it falls back to reflecting the VM's own current (still
+  # template-baked) hostname back at itself -- so every worker clone from the
+  # same template ends up applying that SAME baked hostname instead of its
+  # own unique node_name. RKE2 registers nodes by hostname, so this collided
+  # every worker in a pool onto the exact same hostname; at most one can hold
+  # that registration, and the rest loop forever rejected with "Node password
+  # rejected, duplicate hostname" -- confirmed on a real 3-worker Proxmox
+  # apply, where all three workers stayed stuck (none had won the race yet).
+  fqdn_suffix = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
+
   # Same fully-qualified-TSIG-key-name quirk as proxmox-control-plane — see
   # its identical local for why.
   tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
@@ -249,6 +264,7 @@ module "node_bootstrap" {
 
   cluster_name              = var.cluster_name
   node_name                 = "${var.cluster_name}-worker-${each.key}"
+  cluster_fqdn_suffix       = local.fqdn_suffix
   node_role                 = "worker"
   registration_address      = local.effective_registration_address
   agent_token_fetch_command = local.agent_token_fetch_command

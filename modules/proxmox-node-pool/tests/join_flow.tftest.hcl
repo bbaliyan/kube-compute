@@ -71,3 +71,36 @@ run "worker_pool_wiring" {
     error_message = "each worker must get a distinct hostname — rke2/kubelet register the Kubernetes node under the OS hostname"
   }
 }
+
+run "worker_fqdn_set_when_cluster_domain_present" {
+  command = plan
+  variables {
+    cluster_name         = "bharat"
+    proxmox_node         = "pve"
+    vm_cores             = 2
+    vm_memory_mb         = 4096
+    vm_disk_gb           = 30
+    desired_count        = 2
+    registration_address = "192.168.1.5"
+    cluster_agent_token  = "agent-secret-abc123"
+    os_image_url         = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+    os_image_file_name   = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+    cluster_domain       = "example.com"
+  }
+
+  # Regression test: without an explicit fqdn key, cloud-init's cc_set_hostname
+  # (this distro prefers fqdn over the literal hostname key when both are
+  # ambiguous) falls back to deriving one from the VM's own current, still
+  # template-baked hostname -- silently colliding every worker in the pool
+  # onto that one shared hostname instead of its own distinct node_name.
+  # RKE2 registers nodes by hostname, so only one worker could ever join; the
+  # rest looped forever rejected with "Node password rejected, duplicate
+  # hostname" (confirmed on a real 3-worker Proxmox apply).
+  assert {
+    condition = alltrue([
+      for k, snippet in proxmox_virtual_environment_file.node_init :
+      yamldecode(snippet.source_raw[0].data).fqdn == "bharat-worker-${k}.bharat.example.com"
+    ])
+    error_message = "each worker must get an explicit fqdn (node_name.cluster_name.cluster_domain) whenever cluster_domain is set, not just hostname"
+  }
+}
