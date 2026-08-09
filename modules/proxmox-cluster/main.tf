@@ -218,8 +218,8 @@ module "node_pools" {
 module "os_patch" {
   source = "../node-os-patch"
 
-  control_plane_node_refs      = module.control_plane.control_plane_node_refs
-  worker_node_refs             = merge([for p in module.node_pools : p.worker_node_refs]...)
-  ansible_ssh_user             = module.control_plane.ansible_ssh_user
-  ansible_ssh_private_key_file = module.control_plane.ansible_ssh_private_key_file
+  control_plane_node_refs = module.control_plane.control_plane_node_refs
+  worker_node_refs        = merge([for p in module.node_pools : p.worker_node_refs]...)
+  ssh_user                = module.control_plane.ansible_ssh_user
+  ssh_private_key_file    = module.control_plane.ansible_ssh_private_key_file
 }

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Cross-node OS-patch orchestrator, rendered by node-os-patch's own
+# orchestrator_script output. Plain SSH, no Ansible/Ansible-core dependency —
+# only `ssh`/`bash` on the machine that runs this.
+#
+# Patches control-plane nodes one at a time (etcd tolerates losing at most
+# one control-plane node at once), then worker nodes one at a time. For each
+# node: `dnf update -y` (retry + self-heal on transient dnf/rpm lock
+# contention), a `dnf needs-restarting -r` check, and — only if a reboot is
+# actually needed — a reboot, a wait for the node to come back on a new boot
+# (compares /proc/sys/kernel/random/boot_id before/after), then a wait for
+# the node's RKE2 systemd unit to report active (non-fatal if it doesn't
+# within the wait window — the run continues rather than aborting the whole
+# rollout over one slow node).
+#
+# Connects as the same account/key node-bootstrap itself already uses on
+# Proxmox (a deliberate, evidenced exception to this project's usual
+# no-SSH stance) — this orchestrator is Proxmox-only, matching every
+# provider this project's node-os-patch composition currently targets.
+#
+# Usage: bash <(tofu output -raw orchestrator_script)
+#    or: tofu output -raw orchestrator_script > upgrade-os.sh && bash upgrade-os.sh
+
+set -euo pipefail
+
+ssh_user="${ssh_user}"
+ssh_key="${ssh_private_key_file}"
+ssh_opts=(-i "$ssh_key" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
+
+patch_node() {
+  local name="$1" ip="$2" rke2_service="$3"
+  echo "==> [$name] patching ($ip)"
+
+  ssh "$${ssh_opts[@]}" "$ssh_user@$ip" 'sudo bash -s' <<'REMOTE'
+set -euo pipefail
+for attempt in 1 2 3 4 5; do
+  sudo dnf update -y && exit 0
+  [ "$attempt" -eq 5 ] && exit 1
+  sleep 15
+  sudo pkill -x dnf 2>/dev/null || true
+  sudo pkill -x rpm 2>/dev/null || true
+done
+REMOTE
+
+  local rc=0
+  set +e
+  ssh "$${ssh_opts[@]}" "$ssh_user@$ip" 'sudo dnf install -y dnf-utils >/dev/null 2>&1; sudo dnf needs-restarting -r'
+  rc=$?
+  set -e
+
+  local reboot_needed
+  case "$rc" in
+  0) reboot_needed=false ;;
+  # dnf needs-restarting -r exits 1 when a reboot IS needed, 0 when it's
+  # not — inverted from the usual success/fail convention.
+  1) reboot_needed=true ;;
+  *)
+    echo "==> [$name] needs-restarting check failed unexpectedly (ssh rc=$rc)" >&2
+    exit 1
+    ;;
+  esac
+
+  if [ "$reboot_needed" != true ]; then
+    echo "==> [$name] no reboot needed"
+    return 0
+  fi
+
+  echo "==> [$name] reboot needed, rebooting"
+  local boot_id_before
+  boot_id_before="$(ssh "$${ssh_opts[@]}" "$ssh_user@$ip" 'cat /proc/sys/kernel/random/boot_id')"
+  ssh "$${ssh_opts[@]}" "$ssh_user@$ip" 'sudo bash -c "sleep 2 && reboot"' || true
+
+  echo "==> [$name] waiting for the node to come back on a new boot"
+  local reconnected=false boot_id_after
+  for _ in $(seq 1 60); do
+    sleep 10
+    boot_id_after="$(ssh -o ConnectTimeout=5 "$${ssh_opts[@]}" "$ssh_user@$ip" 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)"
+    if [ -n "$boot_id_after" ] && [ "$boot_id_after" != "$boot_id_before" ]; then
+      reconnected=true
+      break
+    fi
+  done
+  if [ "$reconnected" != true ]; then
+    echo "==> [$name] did not come back within 600s" >&2
+    exit 1
+  fi
+  echo "==> [$name] back up on a new boot"
+
+  if [ -n "$rke2_service" ]; then
+    echo "==> [$name] waiting for $rke2_service to report active"
+    local active=false
+    for _ in $(seq 1 30); do
+      if ssh "$${ssh_opts[@]}" "$ssh_user@$ip" "systemctl is-active $rke2_service" >/dev/null 2>&1; then
+        active=true
+        break
+      fi
+      sleep 10
+    done
+    if [ "$active" != true ]; then
+      echo "==> [$name] $rke2_service did not report active within the wait window, continuing anyway" >&2
+    else
+      echo "==> [$name] $rke2_service is active"
+    fi
+  fi
+}
+
+echo "=== Control-plane nodes (one at a time) ==="
+%{ for name, node in control_plane_node_refs ~}
+patch_node "${name}" "${node.ip}" "${rke2_server_service}"
+%{ endfor ~}
+
+echo "=== Worker nodes (one at a time) ==="
+%{ for name, node in worker_node_refs ~}
+patch_node "${name}" "${node.ip}" "${rke2_agent_service}"
+%{ endfor ~}
+
+echo "=== Done ==="

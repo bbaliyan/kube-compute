@@ -19,24 +19,24 @@ variable "worker_node_refs" {
   default = {}
 }
 
-variable "ansible_ssh_user" {
-  description = "SSH user Ansible connects as, passed straight through from the same *-control-plane module's ansible_ssh_user output node-bootstrap itself already connects with."
+variable "ssh_user" {
+  description = "SSH user the orchestrator script connects as, passed straight through from the same *-control-plane module's ansible_ssh_user output node-bootstrap itself already connects with."
   type        = string
 }
 
-variable "ansible_ssh_private_key_file" {
+variable "ssh_private_key_file" {
   description = "Path to the SSH private key, passed straight through from the same *-control-plane module's ansible_ssh_private_key_file output. Not marked sensitive: a path, not the key material itself."
   type        = string
 }
 
 variable "rke2_server_service" {
-  description = "systemd unit name reboot.yml waits on for control-plane nodes."
+  description = "systemd unit name the orchestrator script waits on after rebooting a control-plane node."
   type        = string
   default     = "rke2-server"
 }
 
 variable "rke2_agent_service" {
-  description = "systemd unit name reboot.yml waits on for worker nodes."
+  description = "systemd unit name the orchestrator script waits on after rebooting a worker node."
   type        = string
   default     = "rke2-agent"
 }
