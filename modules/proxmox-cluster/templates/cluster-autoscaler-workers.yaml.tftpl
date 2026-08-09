@@ -11,18 +11,46 @@
 # CAPRKE2-owned RKE2ControlPlane object, incompatible with this project's
 # Terraform-owned control plane).
 #
-# Cluster.spec deliberately omits both infrastructureRef and controlPlaneRef
-# — confirmed safe in the research spike backing this plan
-# (cluster-adoption.md §1, §5.4). If CAPMOX's ProxmoxMachine controller turns
-# out to hard-require a real ProxmoxCluster object by name (an explicitly
-# flagged-but-unchecked unknown in the plan), add one here with
-# metadata.annotations["cluster.x-k8s.io/managed-by"] and wire
-# infrastructureRef to it instead — not yet known to be necessary.
+# Cluster.spec.controlPlaneRef is omitted — confirmed safe (cluster-adoption.md
+# §1, §5.4). Cluster.spec.infrastructureRef, however, points at a real
+# ProxmoxCluster object below: a kube-image Task 1 spike read CAPMOX's actual
+# source (ProxmoxMachineReconciler.getInfraCluster, ionos-cloud/
+# cluster-api-provider-proxmox) and confirmed a hard client.Get() for
+# ProxmoxCluster keyed on Cluster.spec.infrastructureRef.Name, with NO
+# nil-tolerant fallback — an omitted infrastructureRef resolves to an empty
+# name, the Get fails, and ProxmoxMachineReconciler silently no-ops forever
+# ("ProxmoxCluster is not ready yet", no error, no VM ever created). The
+# managed-by annotation below (confirmed real and implemented by CAPMOX's own
+# controller via predicates.ResourceIsNotExternallyManaged — cluster-adoption.md
+# §3) stops CAPMOX from trying to reconcile/own this object's own fields, so it
+# exists purely to satisfy the Get(), not to let CAPMOX manage cluster-level
+# Proxmox infrastructure Terraform already owns.
+#
+# UNVERIFIED: whether ProxmoxClusterSpec has other required (non-optional)
+# fields beyond what's set here that CRD admission would reject an empty/
+# minimal object for — not checked against the live OpenAPI schema in either
+# research pass. If a real apply's `kubectl apply` rejects this object,
+# that's the first thing to check.
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
   name: ${cluster_name}
   namespace: default
+spec:
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: ProxmoxCluster
+    name: ${cluster_name}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxCluster
+metadata:
+  name: ${cluster_name}
+  namespace: default
+  annotations:
+    cluster.x-k8s.io/managed-by: ""
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
 spec: {}
 ---
 apiVersion: v1
