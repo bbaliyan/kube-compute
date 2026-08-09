@@ -239,10 +239,17 @@ for attempt in $(seq 1 60); do
   fi
   sleep 2
 done
+%{ endif ~}
 %{ for manifest_path in genesis_apply_manifest_paths ~}
+# Not nested inside the cluster_autoscaler_crd_wait_enabled block above:
+# genesis_apply_manifests is a generic mechanism, not autoscaler-specific,
+# so its own apply must not silently depend on that flag being set too —
+# a caller passing manifests with the wait flag left false would otherwise
+# get them written to disk (write_files runs unconditionally) but never
+# applied, with no error anywhere.
+KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
 $KUBECTL apply -f "${manifest_path}"
 %{ endfor ~}
-%{ endif ~}
 
 %{ if argocd_needed ~}
 # ---- GitOps/Argo CD bootstrap: genesis only, after the node is Ready ----

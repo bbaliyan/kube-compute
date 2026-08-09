@@ -26,11 +26,19 @@
 # exists purely to satisfy the Get(), not to let CAPMOX manage cluster-level
 # Proxmox infrastructure Terraform already owns.
 #
-# UNVERIFIED: whether ProxmoxClusterSpec has other required (non-optional)
-# fields beyond what's set here that CRD admission would reject an empty/
-# minimal object for — not checked against the live OpenAPI schema in either
-# research pass. If a real apply's `kubectl apply` rejects this object,
-# that's the first thing to check.
+# UNVERIFIED (check these first if no worker VM ever appears, in this order):
+# 1. Readiness, not just existence: the managed-by annotation stops CAPMOX's
+#    ProxmoxCluster controller from reconciling this object at all — nothing
+#    ever sets its status.ready. If ProxmoxMachineReconciler's own quoted log
+#    line ("ProxmoxCluster is not ready yet") means it gates on readiness
+#    AFTER the Get() succeeds, satisfying the Get() alone doesn't fully fix
+#    the silent-no-op problem this object exists to solve — it would just
+#    move the no-op from "object missing" to "object never ready". Not
+#    checked in either research pass; this project has no mechanism today
+#    that would ever patch that status field.
+# 2. Whether ProxmoxClusterSpec has other required (non-optional) fields
+#    beyond what's set here that CRD admission would reject an empty/minimal
+#    object for — not checked against the live OpenAPI schema either.
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:

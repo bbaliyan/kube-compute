@@ -173,8 +173,9 @@ run "cluster_autoscaler_enabled_without_dns_registration_fails_check" {
   }
 
   # cluster_domain/dns_server_address are both unset here, so
-  # cluster_autoscaler_registration_address is null and the check block's
-  # assertion fails — tofu test treats that as a checkable-object failure,
-  # targetable via expect_failures the same as a variable validation.
-  expect_failures = [check.cluster_autoscaler_registration_address_configured]
+  # cluster_autoscaler_registration_address is null and the
+  # terraform_data resource's lifecycle precondition fails — a real
+  # apply-blocking failure, not just a warning (see main.tf's comment on
+  # why terraform_data is used here instead of a plain check block).
+  expect_failures = [terraform_data.cluster_autoscaler_registration_address_configured]
 }

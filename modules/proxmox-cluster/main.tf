@@ -101,12 +101,23 @@ module "cluster_autoscaler_worker_bootstrap" {
 }
 
 # Module calls don't support lifecycle preconditions (only resources/data
-# sources do) — a top-level check block is this module's equivalent of
-# proxmox-node-pool's own registration_address precondition.
-check "cluster_autoscaler_registration_address_configured" {
-  assert {
-    condition     = !var.cluster_autoscaler_enabled || local.cluster_autoscaler_registration_address != null
-    error_message = "cluster_autoscaler_enabled = true requires both cluster_domain and dns_server_address to be set — autoscaled workers join through the genesis node's self-registered DNS name, computed from those two, same as proxmox-node-pool's own default registration_address."
+# sources do). A plain `check` block only warns, not blocks, at apply time
+# (real gap: a misconfigured cluster_autoscaler_enabled = true would apply
+# cleanly with a broken join address baked into every worker's Secret,
+# discoverable only in a warning scrolled past during apply). terraform_data
+# is a real, provider-less resource that DOES support lifecycle
+# preconditions, so it's used here purely to get a hard-stop precondition,
+# matching proxmox-node-pool's own registration_address precondition in
+# strictness even though this module has no other resources of its own to
+# attach one to.
+resource "terraform_data" "cluster_autoscaler_registration_address_configured" {
+  count = var.cluster_autoscaler_enabled ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.cluster_autoscaler_registration_address != null
+      error_message = "cluster_autoscaler_enabled = true requires both cluster_domain and dns_server_address to be set — autoscaled workers join through the genesis node's self-registered DNS name, computed from those two, same as proxmox-node-pool's own default registration_address."
+    }
   }
 }
 

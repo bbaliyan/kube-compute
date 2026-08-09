@@ -360,7 +360,7 @@ variable "node_pools" {
 
 # ---- Cluster autoscaler (optional, passed through to proxmox-control-plane/node-bootstrap) ----
 variable "cluster_autoscaler_enabled" {
-  description = "Whether to genesis-apply CAPI/CAPMOX/CAPRKE2's MachineDeployment + cluster-autoscaler for this cluster. false (the default) means zero autoscaler-related resources exist — no CAPI install, no MachineDeployment, nothing for cluster-autoscaler to manage."
+  description = "Whether to genesis-apply CAPI/CAPMOX's MachineDeployment + cluster-autoscaler for this cluster. false (the default) means zero autoscaler-related resources exist — no CAPI install, no MachineDeployment, nothing for cluster-autoscaler to manage."
   type        = bool
   default     = false
 }
