@@ -241,10 +241,8 @@ module "node_bootstrap" {
   platform_helm_values_object    = var.platform_helm_values_object
   extra_tags                     = var.extra_tags
 
-  cluster_autoscaler_enabled         = var.cluster_autoscaler_enabled
-  cluster_autoscaler_worker_min_size = var.cluster_autoscaler_worker_min_size
-  cluster_autoscaler_worker_max_size = var.cluster_autoscaler_worker_max_size
-  cluster_autoscaler_worker_template = var.cluster_autoscaler_worker_template
+  genesis_apply_manifests             = var.genesis_apply_manifests
+  cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_crd_wait_enabled
 
   dns_self_register_zone        = var.dns_server_address != null ? local.dns_zone : null
   dns_self_register_record_name = "genesis.${var.cluster_name}"

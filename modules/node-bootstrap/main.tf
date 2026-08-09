@@ -70,14 +70,19 @@ locals {
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
   # Genesis-only, same as render_cilium/render_argocd — but deliberately NOT
-  # gated on argocd_needed/render_argocd: the CAPI/CAPMOX/CAPRKE2 install and
-  # its MachineDeployment are applied by bootstrap.sh itself (a one-time
-  # genesis step), independent of whether this cluster also runs a platform
-  # or workloads Argo CD Application. Tying it to render_argocd would mean a
-  # cluster_autoscaler_enabled = true, gitops_platform_enabled = false
-  # cluster never gets the write_files entry bootstrap.sh's unconditional
-  # (on cluster_autoscaler_enabled alone) apply step expects to exist.
-  render_cluster_autoscaler = var.cluster_autoscaler_enabled && var.node_role == "server-init"
+  # gated on argocd_needed/render_argocd: an arbitrary genesis-apply manifest
+  # (e.g. proxmox-cluster's CAPI/CAPMOX cluster-autoscaler bundle) is applied
+  # by bootstrap.sh itself (a one-time genesis step), independent of whether
+  # this cluster also runs a platform or workloads Argo CD Application. Tying
+  # it to render_argocd would mean a caller passing genesis_apply_manifests
+  # with gitops_platform_enabled = false never gets the write_files entries
+  # bootstrap.sh's apply step expects to exist. This module does not render
+  # or interpret genesis_apply_manifests' content — that now happens in the
+  # composing module (e.g. proxmox-cluster), which has access to inputs (like
+  # module.control_plane's own outputs) this leaf module does not.
+  effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
+  effective_crd_wait_enabled        = var.node_role == "server-init" && var.cluster_autoscaler_crd_wait_enabled
+  genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
   # ---- GitOps Application manifests ----
   # Rendered by templatefile()/yamlencode() here, not by Ansible's template
@@ -89,6 +94,17 @@ locals {
     { extraTags = var.extra_tags },
   )
 
+  # kube-platform's own bootstrap chart reads a clusterAutoscalerEnabled Helm
+  # value to decide whether to deploy the cluster-autoscaler Argo CD
+  # Application at all (bootstrap/templates/cluster-autoscaler-app.yaml in
+  # kube-platform). This module no longer owns that decision (proxmox-cluster
+  # does — see genesis_apply_manifests/cluster_autoscaler_crd_wait_enabled
+  # above), so it is no longer a hardcoded parameter here: the composing
+  # module that DOES own the decision passes it through the existing generic
+  # platform_extra_helm_parameters map below instead. Omitting it entirely
+  # falls back to kube-platform's own chart default (false), so a caller that
+  # doesn't set it is unaffected.
+  #
   # Multi-source Application (not the single-source form the API also
   # supports): the second source (ref: values, no chart) makes
   # platform-versions/values.yaml's content available to the first source's
@@ -123,8 +139,6 @@ locals {
                 value: "${var.cert_mode}"
               - name: clusterName
                 value: "${var.cluster_name}"
-              - name: clusterAutoscalerEnabled
-                value: "${var.cluster_autoscaler_enabled}"
               - name: clusterFqdnSuffix
                 value: "${var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""}"
               - name: trustedCaPemB64
@@ -169,28 +183,6 @@ locals {
         automated: { prune: true, selfHeal: true }
         syncOptions: ["CreateNamespace=true"]
   EOT
-
-  # ---- cluster-autoscaler-workers.yaml (MachineDeployment + ProxmoxMachineTemplate + RKE2ConfigTemplate) ----
-  # See templates/cluster-autoscaler-workers.yaml.tftpl for field-source
-  # commentary. vm_memory_mb -> memoryMiB unit mismatch (research spike §3):
-  # ProxmoxMachineTemplate wants MiB, this module's/proxmox-node-pool's own
-  # convention is MB, so the conversion happens here, not in the template.
-  cluster_autoscaler_workers_yaml = !var.cluster_autoscaler_enabled ? "" : templatefile(
-    "${path.module}/templates/cluster-autoscaler-workers.yaml.tftpl",
-    {
-      cluster_name           = var.cluster_name
-      min_size               = var.cluster_autoscaler_worker_min_size
-      max_size               = var.cluster_autoscaler_worker_max_size
-      vm_cores               = var.cluster_autoscaler_worker_template.vm_cores
-      vm_memory_mib          = ceil(var.cluster_autoscaler_worker_template.vm_memory_mb * 1000000 / 1048576)
-      vm_disk_gb             = var.cluster_autoscaler_worker_template.vm_disk_gb
-      proxmox_node           = var.cluster_autoscaler_worker_template.proxmox_node
-      proxmox_template_vm_id = var.cluster_autoscaler_worker_template.proxmox_template_vm_id
-      disk_datastore_id      = var.cluster_autoscaler_worker_template.disk_datastore_id
-      network_bridge         = var.cluster_autoscaler_worker_template.network_bridge
-      k8s_version            = module.component_versions.k8s_version
-    }
-  )
 
   # ---- registries.yaml ----
   # Faithful port of registries.yaml.j2, including the belt-and-suspenders
@@ -283,27 +275,28 @@ locals {
 
   # ---- runtime bootstrap script ----
   bootstrap_sh = templatefile("${path.module}/templates/bootstrap.sh.tftpl", {
-    node_role                     = var.node_role
-    cni                           = var.cni
-    registration_address          = var.registration_address != null ? var.registration_address : ""
-    trusted_ca_enabled            = var.trusted_ca_pem != null
-    registry_mirror_url           = var.registry_mirror_url != null ? var.registry_mirror_url : ""
-    dns_self_register_zone        = local.dns_self_register_zone
-    dns_self_register_record_name = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
-    dns_self_register_ttl         = var.dns_self_register_ttl
-    dns_server_address            = var.dns_server_address != null ? var.dns_server_address : ""
-    dns_server_port               = var.dns_server_port
-    nsupdate_flags                = local.nsupdate_flags
-    tsig_key_name                 = var.tsig_key_name != null ? var.tsig_key_name : ""
-    tsig_key_algorithm            = var.tsig_key_algorithm
-    node_label_block              = local.node_label_block
-    static_tls_san_block          = local.static_tls_san_block
-    server_static_block           = local.server_static_block
-    kubelet_resolv_conf_block     = local.kubelet_resolv_conf_block
-    argocd_needed                 = local.render_argocd
-    platform_app_enabled          = local.platform_app_enabled
-    workloads_app_enabled         = local.workloads_app_enabled
-    cluster_autoscaler_enabled    = local.render_cluster_autoscaler
+    node_role                           = var.node_role
+    cni                                 = var.cni
+    registration_address                = var.registration_address != null ? var.registration_address : ""
+    trusted_ca_enabled                  = var.trusted_ca_pem != null
+    registry_mirror_url                 = var.registry_mirror_url != null ? var.registry_mirror_url : ""
+    dns_self_register_zone              = local.dns_self_register_zone
+    dns_self_register_record_name       = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
+    dns_self_register_ttl               = var.dns_self_register_ttl
+    dns_server_address                  = var.dns_server_address != null ? var.dns_server_address : ""
+    dns_server_port                     = var.dns_server_port
+    nsupdate_flags                      = local.nsupdate_flags
+    tsig_key_name                       = var.tsig_key_name != null ? var.tsig_key_name : ""
+    tsig_key_algorithm                  = var.tsig_key_algorithm
+    node_label_block                    = local.node_label_block
+    static_tls_san_block                = local.static_tls_san_block
+    server_static_block                 = local.server_static_block
+    kubelet_resolv_conf_block           = local.kubelet_resolv_conf_block
+    argocd_needed                       = local.render_argocd
+    platform_app_enabled                = local.platform_app_enabled
+    workloads_app_enabled               = local.workloads_app_enabled
+    cluster_autoscaler_crd_wait_enabled = local.effective_crd_wait_enabled
+    genesis_apply_manifest_paths        = local.genesis_apply_manifest_paths
   })
 
   # ---- secrets.env ----
@@ -386,13 +379,15 @@ locals {
       encoding    = "b64"
       content     = base64encode(local.workloads_app_yaml)
     }],
-    !local.render_cluster_autoscaler ? [] : [{
-      path        = "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
-      permissions = "0600"
-      owner       = "root:root"
-      encoding    = "b64"
-      content     = base64encode(local.cluster_autoscaler_workers_yaml)
-    }],
+    [
+      for m in local.effective_genesis_apply_manifests : {
+        path        = m.path
+        permissions = "0600"
+        owner       = "root:root"
+        encoding    = "b64"
+        content     = base64encode(m.content)
+      }
+    ],
     !local.is_server ? [] : [
       for name in sort(keys(var.extra_server_manifests)) : {
         path        = "/opt/kube-compute/server-manifests/${name}"
@@ -407,15 +402,18 @@ locals {
   # RKE2/kubelet default the registered Kubernetes node name to the OS
   # hostname, so every node in a cluster MUST get a distinct value here — this
   # single key replaces the standalone hostname-only cloud-init snippet the
-  # Proxmox modules used to carry separately.
+  # Proxmox modules used to carry separately. var.set_hostname = false omits
+  # both keys entirely (see that variable's description) — needed only when
+  # this same rendered payload is shared across multiple VMs, e.g. a CAPI
+  # MachineDeployment's replicas.
   cloud_config = merge(
     {
-      hostname          = var.node_name
       preserve_hostname = false
       write_files       = local.write_files
       runcmd            = [["/opt/kube-compute/bootstrap.sh"]]
     },
-    var.cluster_fqdn_suffix != null && var.cluster_fqdn_suffix != "" ? {
+    var.set_hostname ? { hostname = var.node_name } : {},
+    var.set_hostname && var.cluster_fqdn_suffix != null && var.cluster_fqdn_suffix != "" ? {
       fqdn = "${var.node_name}.${var.cluster_fqdn_suffix}"
     } : {},
   )

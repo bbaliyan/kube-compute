@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the cluster_autoscaler_* variable validation added alongside the
-# clusterAutoscalerEnabled pass-through: enabling the toggle without a
-# complete configuration must fail at plan time with a clear message, not a
-# raw "Attempt to get attribute from null value" error deep in node-bootstrap.
+# Guards the cluster_autoscaler_* variable validation (fails fast, not a raw
+# "Attempt to get attribute from null value" deep in node-bootstrap), and the
+# CAPI-core-only bundle this module now renders and threads through to
+# proxmox-control-plane's genesis_apply_manifests: no CAPRKE2/RKE2ConfigTemplate
+# anywhere in the rendered output — a direct regression check that the drop
+# from the plan's revision actually took, not merely that new content was
+# added alongside the old.
 mock_provider "proxmox" {
   mock_resource "proxmox_download_file" {
     defaults = { id = "local:iso/bharat.img" }
@@ -33,6 +36,11 @@ variables {
 run "cluster_autoscaler_enabled_without_template_fails_validation" {
   command = plan
   variables {
+    cluster_domain                     = "example.test"
+    dns_server_address                 = "10.0.0.53"
+    tsig_key_name                      = "test-key"
+    tsig_key_secret                    = "dGVzdC1zZWNyZXQ="
+    control_plane_count                = 1
     cluster_autoscaler_enabled         = true
     cluster_autoscaler_worker_min_size = 1
     cluster_autoscaler_worker_max_size = 3
@@ -43,6 +51,12 @@ run "cluster_autoscaler_enabled_without_template_fails_validation" {
 run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
   command = plan
   variables {
+    cluster_domain      = "example.test"
+    dns_server_address  = "10.0.0.53"
+    tsig_key_name       = "test-key"
+    tsig_key_secret     = "dGVzdC1zZWNyZXQ="
+    control_plane_count = 1
+
     cluster_autoscaler_enabled = true
     cluster_autoscaler_worker_template = {
       vm_cores               = 4
@@ -55,4 +69,112 @@ run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
     }
   }
   expect_failures = [var.cluster_autoscaler_worker_max_size]
+}
+
+run "cluster_autoscaler_disabled_by_default_produces_no_bundle" {
+  command = plan
+
+  assert {
+    condition     = length(local.genesis_apply_manifests) == 0
+    error_message = "cluster_autoscaler_enabled defaults to false — genesis_apply_manifests must be empty"
+  }
+  assert {
+    condition     = length(module.cluster_autoscaler_worker_bootstrap) == 0
+    error_message = "cluster_autoscaler_enabled defaults to false — no cluster_autoscaler_worker_bootstrap instance should exist"
+  }
+}
+
+run "cluster_autoscaler_enabled_renders_capi_core_bundle_no_caprke2" {
+  # apply (not plan): the shared worker bootstrap's agent_token_fetch_command
+  # embeds module.control_plane's random_password-backed cluster_agent_token
+  # output, unknown at plan time — same precedent as composition.tftest.hcl's
+  # "one_pool_creates_its_workers_and_shares_the_agent_token" run.
+  command = apply
+
+  variables {
+    cluster_domain      = "example.test"
+    dns_server_address  = "10.0.0.53"
+    tsig_key_name       = "test-key"
+    tsig_key_secret     = "dGVzdC1zZWNyZXQ="
+    control_plane_count = 1
+
+    cluster_autoscaler_enabled         = true
+    cluster_autoscaler_worker_min_size = 1
+    cluster_autoscaler_worker_max_size = 3
+    cluster_autoscaler_worker_template = {
+      vm_cores               = 4
+      vm_memory_mb            = 4096
+      vm_disk_gb              = 40
+      proxmox_template_vm_id  = 9100
+      network_bridge          = "vmbr0"
+      disk_datastore_id       = "local-lvm"
+      proxmox_node            = "pve1"
+    }
+  }
+
+  assert {
+    condition     = length(local.genesis_apply_manifests) == 1
+    error_message = "cluster_autoscaler_enabled = true must produce exactly one genesis_apply_manifests entry"
+  }
+  assert {
+    condition     = length(module.cluster_autoscaler_worker_bootstrap) == 1
+    error_message = "cluster_autoscaler_enabled = true must render exactly one shared worker cloud-init payload"
+  }
+  assert {
+    condition = anytrue([
+      for m in local.genesis_apply_manifests :
+      strcontains(m.content, "kind: Cluster") &&
+      strcontains(m.content, "kind: Secret") &&
+      strcontains(m.content, "kind: ProxmoxMachineTemplate") &&
+      strcontains(m.content, "kind: MachineDeployment")
+    ])
+    error_message = "the bundle must carry Cluster + Secret + ProxmoxMachineTemplate + MachineDeployment"
+  }
+  assert {
+    condition = alltrue([
+      for m in local.genesis_apply_manifests : !strcontains(m.content, "kind: RKE2ConfigTemplate")
+    ])
+    error_message = "regression check: no object of kind RKE2ConfigTemplate must ever appear in the rendered bundle — CAPRKE2 is dropped entirely in favor of Machine.spec.bootstrap.dataSecretName"
+  }
+  assert {
+    condition = anytrue([
+      for m in local.genesis_apply_manifests : strcontains(m.content, "dataSecretName: bharat-autoscaler-worker-bootstrap")
+    ])
+    error_message = "the MachineDeployment must reference the plain Secret via dataSecretName, not a bootstrap-provider configRef"
+  }
+  assert {
+    condition     = local.cluster_autoscaler_bundle_yaml == local.genesis_apply_manifests[0].content
+    error_message = "the genesis_apply_manifests entry content must match the rendered bundle"
+  }
+  assert {
+    condition = anytrue([
+      for m in local.genesis_apply_manifests : strcontains(m.content, "memoryMiB: 3907")
+    ])
+    error_message = "vm_memory_mb = 4096 must convert to memoryMiB = ceil(4096 * 1000000 / 1048576) = 3907"
+  }
+}
+
+run "cluster_autoscaler_enabled_without_dns_registration_fails_check" {
+  command = plan
+
+  variables {
+    cluster_autoscaler_enabled         = true
+    cluster_autoscaler_worker_min_size = 1
+    cluster_autoscaler_worker_max_size = 3
+    cluster_autoscaler_worker_template = {
+      vm_cores               = 4
+      vm_memory_mb            = 4096
+      vm_disk_gb              = 40
+      proxmox_template_vm_id  = 9100
+      network_bridge          = "vmbr0"
+      disk_datastore_id       = "local-lvm"
+      proxmox_node            = "pve1"
+    }
+  }
+
+  # cluster_domain/dns_server_address are both unset here, so
+  # cluster_autoscaler_registration_address is null and the check block's
+  # assertion fails — tofu test treats that as a checkable-object failure,
+  # targetable via expect_failures the same as a variable validation.
+  expect_failures = [check.cluster_autoscaler_registration_address_configured]
 }

@@ -21,6 +21,12 @@ variable "cluster_fqdn_suffix" {
   default     = null
 }
 
+variable "set_hostname" {
+  description = "Whether this node's cloud-init sets an explicit hostname/fqdn. true (the default, preserving today's behavior for every existing caller) writes hostname: <node_name> into cloud-config, required because RKE2/kubelet registers the node by OS hostname and every Terraform-provisioned node already gets a distinct node_name. false omits hostname/fqdn from cloud-config entirely, relying on the VM platform's own per-instance metadata (e.g. a NoCloud datasource's local-hostname) to supply a unique hostname instead — needed when the SAME rendered cloud-init is shared across multiple VMs the way CAPI-provisioned MachineDeployment replicas are (see cluster_autoscaler_enabled). Unverified assumption for the false case: that the underlying VM platform's metadata actually provides a usable per-VM hostname when cloud-config doesn't set one explicitly — real-hardware check required before trusting this in production."
+  type        = bool
+  default     = true
+}
+
 variable "node_role" {
   description = "Bootstrap role this node is being installed for: 'server-init' (first control-plane node — forms the etcd cluster), 'server-join' (an additional control-plane node), or 'worker' (joins as an agent only, no control plane)."
   type        = string
@@ -253,44 +259,17 @@ variable "tsig_key_secret" {
   }
 }
 
-variable "cluster_autoscaler_enabled" {
-  description = "Whether to genesis-apply CAPI/CAPMOX/CAPRKE2's MachineDeployment + cluster-autoscaler for this cluster. false (the default) means zero autoscaler-related resources exist — no CAPI install, no MachineDeployment, nothing for cluster-autoscaler to manage."
+variable "genesis_apply_manifests" {
+  description = "Ordered list of {path, content} manifests to write under /opt/kube-compute/manifests/ and apply via bootstrap.sh, each gated on its own readiness-wait if the caller's content needs one (this module does not interpret content — callers needing a wait embed it via a separate mechanism; see cluster_autoscaler_crd_wait_enabled below). Empty list (default) applies nothing beyond the existing platform/workloads Applications. Only meaningful for node_role = server-init — genesis-only, mirroring render_cilium/render_argocd."
+  type = list(object({
+    path    = string
+    content = string
+  }))
+  default = []
+}
+
+variable "cluster_autoscaler_crd_wait_enabled" {
+  description = "Whether bootstrap.sh applies capi-install.yaml and waits for CAPI's core CRDs (machinedeployments.cluster.x-k8s.io) to be Established before applying genesis_apply_manifests entries. Only meaningful when genesis_apply_manifests is non-empty and contains CAPI-dependent content, and only takes effect for node_role = server-init."
   type        = bool
   default     = false
-}
-
-variable "cluster_autoscaler_worker_min_size" {
-  description = "Minimum worker count cluster-autoscaler maintains. Only meaningful when cluster_autoscaler_enabled is true."
-  type        = number
-  default     = 0
-}
-
-variable "cluster_autoscaler_worker_max_size" {
-  description = "Maximum worker count cluster-autoscaler will scale to. Only meaningful when cluster_autoscaler_enabled is true."
-  type        = number
-  default     = 0
-
-  validation {
-    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_max_size > 0
-    error_message = "cluster_autoscaler_worker_max_size must be > 0 when cluster_autoscaler_enabled is true — leaving it at the 0 default renders a valid but useless MachineDeployment that can never scale up."
-  }
-}
-
-variable "cluster_autoscaler_worker_template" {
-  description = "VM shape for CAPI-provisioned autoscaled workers — same fields proxmox-node-pool's own node_pools objects carry, mapped to ProxmoxMachineTemplate fields per the research spike's field-mapping table. Null (default) is valid only when cluster_autoscaler_enabled is false."
-  type = object({
-    vm_cores               = number
-    vm_memory_mb           = number
-    vm_disk_gb             = number
-    proxmox_template_vm_id = number
-    network_bridge         = string
-    disk_datastore_id      = string
-    proxmox_node           = string
-  })
-  default = null
-
-  validation {
-    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_template != null
-    error_message = "cluster_autoscaler_worker_template is required when cluster_autoscaler_enabled is true."
-  }
 }

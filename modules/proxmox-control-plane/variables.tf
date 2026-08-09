@@ -321,44 +321,17 @@ variable "tsig_key_secret" {
   sensitive   = true
 }
 
-variable "cluster_autoscaler_enabled" {
-  description = "Whether to genesis-apply CAPI/CAPMOX/CAPRKE2's MachineDeployment + cluster-autoscaler for this cluster. false (the default) means zero autoscaler-related resources exist — no CAPI install, no MachineDeployment, nothing for cluster-autoscaler to manage."
+variable "genesis_apply_manifests" {
+  description = "Ordered list of {path, content} manifests forwarded verbatim to node-bootstrap's own identically-named variable — see that module's description for the full contract. proxmox-cluster is the actual owner of what goes in this list (e.g. the CAPI/CAPMOX cluster-autoscaler bundle, when cluster_autoscaler_enabled is true there); this module is a pure pass-through to its own genesis node_bootstrap call."
+  type = list(object({
+    path    = string
+    content = string
+  }))
+  default = []
+}
+
+variable "cluster_autoscaler_crd_wait_enabled" {
+  description = "Forwarded verbatim to node-bootstrap's own identically-named variable. Only meaningful when genesis_apply_manifests is non-empty and contains CAPI-dependent content."
   type        = bool
   default     = false
-}
-
-variable "cluster_autoscaler_worker_min_size" {
-  description = "Minimum worker count cluster-autoscaler maintains. Only meaningful when cluster_autoscaler_enabled is true."
-  type        = number
-  default     = 0
-}
-
-variable "cluster_autoscaler_worker_max_size" {
-  description = "Maximum worker count cluster-autoscaler will scale to. Only meaningful when cluster_autoscaler_enabled is true."
-  type        = number
-  default     = 0
-
-  validation {
-    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_max_size > 0
-    error_message = "cluster_autoscaler_worker_max_size must be > 0 when cluster_autoscaler_enabled is true — leaving it at the 0 default renders a valid but useless MachineDeployment that can never scale up."
-  }
-}
-
-variable "cluster_autoscaler_worker_template" {
-  description = "VM shape for CAPI-provisioned autoscaled workers — same fields proxmox-node-pool's own node_pools objects carry, mapped to ProxmoxMachineTemplate fields per the research spike's field-mapping table. Null (default) is valid only when cluster_autoscaler_enabled is false."
-  type = object({
-    vm_cores               = number
-    vm_memory_mb           = number
-    vm_disk_gb             = number
-    proxmox_template_vm_id = number
-    network_bridge         = string
-    disk_datastore_id      = string
-    proxmox_node           = string
-  })
-  default = null
-
-  validation {
-    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_template != null
-    error_message = "cluster_autoscaler_worker_template is required when cluster_autoscaler_enabled is true."
-  }
 }

@@ -54,36 +54,59 @@ returned. The node writes its own progress to
 bootstrap progress. There is no Terraform-visible signal, no provisioner
 output, and no `bootstrap_log_path`-style output to depend on.
 
-## Cluster autoscaler (optional, Proxmox-only today)
+## Genesis-apply manifests (generic; cluster-autoscaler is the one caller today)
 
-`cluster_autoscaler_enabled = true` has this module render an extra genesis-only
-manifest (`ProxmoxMachineTemplate` + `MachineDeployment` + `RKE2ConfigTemplate`) and
-the `bootstrap.sh` apply steps that install CAPI/CAPMOX/CAPRKE2 and hand the
-MachineDeployment to cluster-autoscaler. It is genesis-only (rendered on
-`server-init` nodes only) and independent of `gitops_platform_enabled` — the CAPI
-install/apply is a one-time step, not tied to whether a platform Argo CD
-Application also exists on this cluster.
+This module no longer knows anything about cluster-autoscaler, CAPI, or
+CAPMOX specifically. It exposes two generic inputs instead:
 
-Two things to get right when enabling it:
+- `genesis_apply_manifests` — an ordered list of `{path, content}` entries,
+  written verbatim under `/opt/kube-compute/manifests/` via `write_files` and
+  `kubectl apply -f`'d in order by `bootstrap.sh`. This module does not
+  interpret `content` at all.
+- `cluster_autoscaler_crd_wait_enabled` — gates a `bootstrap.sh` block that
+  applies the kube-image-baked `capi-install.yaml` (CAPI core + CAPMOX
+  manifests) and waits for CAPI's core CRDs to be `Established` **before**
+  applying the `genesis_apply_manifests` entries. Despite the name, it is not
+  cluster-autoscaler-specific — any caller needing CAPI's CRDs to exist first
+  can use it.
 
-- `cluster_autoscaler_worker_template.proxmox_template_vm_id` must point at the
-  **`proxmox-autoscaler-worker`** kube-image variant, not the normal
-  control-plane/pool image — CAPMOX full-clones this template for every
-  autoscaled worker it provisions, so it needs to already carry the RKE2 agent
-  bits and CAPI-facing bootstrap contract that variant bakes in. Pointing it at
-  a control-plane or ordinary node-pool template will not fail at `plan` time
-  but produces workers that never join correctly.
-- `cluster_autoscaler_worker_max_size` must be set above its `0` default, and
-  `cluster_autoscaler_worker_template` must be set, whenever
-  `cluster_autoscaler_enabled = true` — both are enforced by variable
-  `validation` blocks so a misconfiguration fails at `plan` with a clear
-  message instead of a raw "Attempt to get attribute from null value" error
-  (or a MachineDeployment that can never scale up).
-- `gitops_platform_enabled = true` clusters also get a `clusterAutoscalerEnabled`
-  Helm parameter passed to the `platform` Argo CD Application, mirrored from
-  this same `cluster_autoscaler_enabled` value — that's what gates
-  kube-platform's own `cluster-autoscaler` Application so it only syncs on
-  clusters that opted in.
+Both are genesis-only (`server-init` only) and independent of
+`gitops_platform_enabled` — a one-time step, not tied to whether a platform
+Argo CD Application also exists on this cluster.
+
+The one real caller today is `modules/proxmox-cluster`, which owns the
+`cluster_autoscaler_enabled` toggle and everything cluster-autoscaler-specific:
+it renders a `Cluster` + `Secret` (containing this same module's own shared
+worker `cloud_init_user_data`, via a second `node_bootstrap` instantiation
+with `set_hostname = false`) + `ProxmoxMachineTemplate` + `MachineDeployment`
+bundle (see that module's README/`templates/cluster-autoscaler-workers.yaml.tftpl`),
+passes it in as a single `genesis_apply_manifests` entry, and sets
+`cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_enabled`. There
+is deliberately no `RKE2ConfigTemplate`/CAPRKE2 anywhere in that bundle —
+workers join via a plain `Secret` referenced by
+`Machine.spec.bootstrap.dataSecretName`, reusing this project's existing
+worker cloud-init logic rather than a second bootstrap-provider mechanism.
+
+`proxmox-cluster` also merges a `clusterAutoscalerEnabled` Helm parameter
+into `platform_extra_helm_parameters` before it reaches this module — that is
+what gates kube-platform's own `cluster-autoscaler` Argo CD Application so it
+only syncs on clusters that opted in. This module has no hardcoded knowledge
+of that parameter; it is just another entry in the generic
+`platform_extra_helm_parameters` map.
+
+## `set_hostname` (for shared, byte-identical cloud-init payloads)
+
+Every caller gets `set_hostname = true` (the default): `hostname`/`fqdn` are
+written into cloud-config from `node_name`, required because RKE2/kubelet
+registers the node by OS hostname. `set_hostname = false` omits both keys
+entirely — the only reason to do this is when the exact same rendered
+`cloud_init_user_data` is shared across multiple VMs that cannot each get
+their own render (e.g. every replica of a CAPI `MachineDeployment`, via one
+Secret referenced by `dataSecretName`). The VM platform's own per-instance
+metadata (e.g. CAPMOX/cloud-init's NoCloud `local-hostname`) is relied on
+instead to supply a unique hostname — **this specific assumption is
+unverified against real hardware**, flagged explicitly as a first
+real-cluster check for any `set_hostname = false` caller.
 
 ## Interface notes
 

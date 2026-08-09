@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: Apache-2.0
+# Cluster + Secret + ProxmoxMachineTemplate + MachineDeployment for
+# CAPI/CAPMOX-managed autoscaler workers. No bootstrap-provider CRD at all:
+# the Secret carries the exact same cloud-init this project's node-bootstrap
+# already renders for proxmox-node-pool's own workers (rendered by the
+# sibling module.cluster_autoscaler_worker_bootstrap instantiation in
+# ../main.tf), referenced via Machine.spec.bootstrap.dataSecretName —
+# CAPRKE2 and its RKE2ConfigTemplate are deliberately not used here (see
+# kube-claude's 2026-08-09-cluster-autoscaler-proxmox-capi.md plan's revision
+# note for why: CAPRKE2's worker-join path hard-requires a live,
+# CAPRKE2-owned RKE2ControlPlane object, incompatible with this project's
+# Terraform-owned control plane).
+#
+# Cluster.spec deliberately omits both infrastructureRef and controlPlaneRef
+# — confirmed safe in the research spike backing this plan
+# (cluster-adoption.md §1, §5.4). If CAPMOX's ProxmoxMachine controller turns
+# out to hard-require a real ProxmoxCluster object by name (an explicitly
+# flagged-but-unchecked unknown in the plan), add one here with
+# metadata.annotations["cluster.x-k8s.io/managed-by"] and wire
+# infrastructureRef to it instead — not yet known to be necessary.
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: ${cluster_name}
+  namespace: default
+spec: {}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${cluster_name}-autoscaler-worker-bootstrap
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+type: Opaque
+data:
+  value: ${bootstrap_secret_b64}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: ProxmoxMachineTemplate
+metadata:
+  name: ${cluster_name}-autoscaler-workers
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+spec:
+  template:
+    spec:
+      numCores: ${vm_cores}
+      memoryMiB: ${vm_memory_mib}
+      disks:
+        bootVolume:
+          disk: scsi0
+          sizeGb: ${vm_disk_gb}
+      sourceNode: ${proxmox_node}
+      templateID: ${proxmox_template_vm_id}
+      storage: ${disk_datastore_id}
+      network:
+        default:
+          bridge: ${network_bridge}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: ${cluster_name}-autoscaler-workers
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+  annotations:
+    cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "${min_size}"
+    cluster.x-k8s.io/cluster-api-autoscaler-node-group-max-size: "${max_size}"
+spec:
+  clusterName: ${cluster_name}
+  replicas: ${min_size}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${cluster_name}
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: ${cluster_name}
+    spec:
+      clusterName: ${cluster_name}
+      bootstrap:
+        dataSecretName: ${cluster_name}-autoscaler-worker-bootstrap
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: ProxmoxMachineTemplate
+        name: ${cluster_name}-autoscaler-workers

@@ -218,13 +218,15 @@ if [ "$ACTIVE" -ne 1 ]; then
 fi
 %{ endif ~}
 
-%{ if cluster_autoscaler_enabled ~}
-# ---- CAPI/CAPMOX/CAPRKE2 install + autoscaler MachineDeployment: genesis
-#      only, after the node is Ready. Applied before the Argo CD platform/
-#      workloads Applications below (and independent of whether either of
-#      those is even enabled): CAPI's own CRDs must exist before anything
-#      that references them, and Argo CD ownership is irrelevant to this
-#      one-time genesis install. ----
+%{ if cluster_autoscaler_crd_wait_enabled ~}
+# ---- CAPI/CAPMOX install + genesis_apply_manifests entries: genesis only,
+#      after the node is Ready. Applied before the Argo CD platform/workloads
+#      Applications below (and independent of whether either of those is even
+#      enabled): CAPI's own CRDs must exist before anything that references
+#      them, and Argo CD ownership is irrelevant to this one-time genesis
+#      install. This module does not interpret genesis_apply_manifests'
+#      content — the composing module (e.g. proxmox-cluster) decides what
+#      goes in the list; this is just the ordered apply. ----
 KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
 $KUBECTL apply -f "$KC/manifests/capi-install.yaml"
 # Wait for CAPI's core CRDs to be Established before applying anything that
@@ -237,7 +239,9 @@ for attempt in $(seq 1 60); do
   fi
   sleep 2
 done
-$KUBECTL apply -f "$KC/manifests/20-cluster-autoscaler-workers.yaml"
+%{ for manifest_path in genesis_apply_manifest_paths ~}
+$KUBECTL apply -f "${manifest_path}"
+%{ endfor ~}
 %{ endif ~}
 
 %{ if argocd_needed ~}

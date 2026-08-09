@@ -120,21 +120,49 @@ for more pools (e.g. `pool-b` with a different sizing) — the map has no fixed 
 
 ## Cluster autoscaler (optional)
 
+This module — not `proxmox-control-plane` or `node-bootstrap` — owns
 `cluster_autoscaler_enabled`, `cluster_autoscaler_worker_min_size`,
-`cluster_autoscaler_worker_max_size`, and `cluster_autoscaler_worker_template` pass
-straight through to `proxmox-control-plane` (and from there to `node-bootstrap`,
-which renders the actual `MachineDeployment`/CAPI manifests — see
-[`node-bootstrap`'s README](../node-bootstrap/README.md#cluster-autoscaler-optional-proxmox-only-today)
-for the full mechanics). `false` (the default) is a no-op — no CAPI install, no
-MachineDeployment, no change to what this module already provisions.
+`cluster_autoscaler_worker_max_size`, and `cluster_autoscaler_worker_template`.
+`false` (the default) is a no-op: no CAPI install, no `MachineDeployment`, no
+change to what this module already provisions.
 
-When enabling it, `cluster_autoscaler_worker_template.proxmox_template_vm_id` must
-point at the **`proxmox-autoscaler-worker`** kube-image variant — a different
-template than the `proxmox_template_vm_id` used above for control-plane/node-pool
-VMs. `cluster_autoscaler_worker_max_size` must be greater than its `0` default, and
+When enabled, this module:
+
+- Renders a `Cluster` + `Secret` + `ProxmoxMachineTemplate` + `MachineDeployment`
+  bundle (`templates/cluster-autoscaler-workers.yaml.tftpl`) — no
+  `RKE2ConfigTemplate`/CAPRKE2 anywhere in it. Workers join via a plain `Secret`
+  referenced by `Machine.spec.bootstrap.dataSecretName`; the `Secret`'s content
+  is this project's own existing worker cloud-init, rendered by a second,
+  dedicated `node-bootstrap` instantiation (`module.cluster_autoscaler_worker_bootstrap`,
+  `set_hostname = false` — the payload is shared byte-for-byte across every
+  `MachineDeployment` replica, so it cannot carry a node-unique hostname;
+  CAPMOX's own per-VM metadata is relied on for that instead, unverified
+  against real hardware).
+- Passes the rendered bundle through to `proxmox-control-plane` as a single
+  `genesis_apply_manifests` entry (a generic node-bootstrap mechanism — see
+  [`node-bootstrap`'s README](../node-bootstrap/README.md#genesis-apply-manifests-generic-cluster-autoscaler-is-the-one-caller-today)),
+  with `cluster_autoscaler_crd_wait_enabled = true` so `bootstrap.sh` waits for
+  CAPI's core CRDs before applying it.
+  `proxmox-control-plane`/`node-bootstrap` have no cluster-autoscaler-specific
+  code left in them at all.
+  `proxmox_template_vm_id` for `cluster_autoscaler_worker_template` points at
+  the **same** kube-image template used everywhere else in this module — there
+  is only one image variant (dropping CAPRKE2 removed the only reason a
+  second, lighter variant existed).
+- Merges a `clusterAutoscalerEnabled` Helm parameter into
+  `platform_extra_helm_parameters`, which is what gates kube-platform's own
+  `cluster-autoscaler` Argo CD Application.
+- Requires `cluster_domain` and `dns_server_address` to both be set — autoscaled
+  workers join through the genesis node's self-registered DNS name
+  (`genesis.<cluster_name>.<cluster_domain>`), the same single-target address
+  `proxmox-node-pool`'s own workers default to, computed independently here to
+  avoid a dependency cycle through the control plane's own cloud-init render.
+  Enforced by a `check` block, not a hard `plan`-time error.
+
+`cluster_autoscaler_worker_max_size` must be greater than its `0` default, and
 `cluster_autoscaler_worker_template` must be set; both are enforced by `plan`-time
 validation so an incomplete configuration fails with a clear error rather than
-producing a MachineDeployment that can never scale.
+producing a `MachineDeployment` that can never scale.
 
 ## Existing standalone modules remain fully supported
 
