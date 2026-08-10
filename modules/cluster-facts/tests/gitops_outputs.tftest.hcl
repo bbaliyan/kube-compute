@@ -29,10 +29,6 @@ run "set_overrides_pass_through_verbatim" {
     platform_repo_url_override = "https://example.test/fork.git"
     platform_revision_override = "v1.2.3"
     workloads_repo_url         = "https://example.test/workloads.git"
-    # Not what this test verifies — set explicitly so the k8s_version fetch
-    # (which would otherwise target the fake platform_repo_url_override
-    # above) is skipped entirely, no network dependency for this test.
-    k8s_version = "v1.99.0+test"
   }
 
   assert {

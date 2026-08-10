@@ -1,15 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-variable "k8s_version" {
-  description = "K8s distro version to install (an RKE2 release string, e.g. v1.36.1+rke2r1). Null falls back to the platform default from component-versions. Neutral name so a future distro hop does not change the interface."
-  type        = string
-  default     = null
-}
-
 # ---- GitOps config surface: the one place a consumer configures what a cluster
-# runs, alongside the tokens/k8s_version above. control-plane threads these into
-# genesis's node-bootstrap call; node-pool ignores them (they're only meaningful on
-# the server-init node), same as it already ignores other control-plane-only
-# outputs from this module. ----
+# runs, alongside the tokens above. control-plane threads these into genesis's
+# node-bootstrap call; node-pool ignores them (they're only meaningful on the
+# server-init node), same as it already ignores other control-plane-only outputs
+# from this module. ----
 
 variable "platform_enabled" {
   description = "Whether to bootstrap kube-platform at all. false = a bare RKE2+Cilium cluster, no Argo CD/platform Application. Passed straight through to node-bootstrap's gitops_platform_enabled."

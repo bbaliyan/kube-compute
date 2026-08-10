@@ -11,11 +11,6 @@ output "agent_token" {
   sensitive   = true
 }
 
-output "k8s_version" {
-  description = "K8s distro version every unit in this cluster should install — control-plane and node-pool both consume this instead of computing their own default, so a version-skew guard between them is enforced by construction."
-  value       = local.k8s_version
-}
-
 output "platform_enabled" {
   description = "Whether control-plane's genesis node should bootstrap kube-platform at all. Re-exported verbatim from the input of the same name."
   value       = var.platform_enabled

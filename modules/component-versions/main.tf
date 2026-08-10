@@ -6,22 +6,17 @@
 # module's own copy of the same literal.
 
 locals {
-  # renovate: datasource=github-releases depName=rancher/rke2
-  k8s_version = "v1.36.2+rke2r1"
-
   # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
   cilium_version = "1.19.5"
 
   # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
   argocd_version = "10.3.0"
 
-  # Single source of truth for the kube-platform pin — every module that needs
-  # it (node-bootstrap for the Argo CD Application's repo/revision,
-  # cluster-facts for its live k8s_version fetch from platform-versions.yaml)
-  # reads it from here instead of keeping its own copy. Tracks kube-platform's
-  # protected `main` branch (required PR review before merge), not a pinned
-  # commit SHA — see node-bootstrap's use of this for the reproducibility/
-  # currency tradeoff that implies.
+  # Single source of truth for the kube-platform pin — node-bootstrap reads it
+  # for the Argo CD Application's repo/revision instead of keeping its own
+  # copy. Tracks kube-platform's protected `main` branch (required PR review
+  # before merge), not a pinned commit SHA — see node-bootstrap's use of this
+  # for the reproducibility/currency tradeoff that implies.
   pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
   pinned_platform_revision = "main"
 }
