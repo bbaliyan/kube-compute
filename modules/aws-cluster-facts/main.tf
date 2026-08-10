@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-module "cluster_facts" {
-  source = "../cluster-facts"
+# Join-token flow: generated here (not in aws-control-plane) so both aws-control-plane
+# and aws-node-pool can depend on this one fast-applying unit instead of on each other.
+# Two tokens, least privilege: the server token grants joining etcd/control-plane; the
+# agent token is all a worker ever receives, so a compromised worker cannot rejoin as a
+# control-plane/etcd member.
+resource "random_password" "server_token" {
+  length  = 48
+  special = false
+}
 
-  platform_enabled           = var.platform_enabled
-  platform_repo_url_override = var.platform_repo_url_override
-  platform_revision_override = var.platform_revision_override
-  workloads_repo_url         = var.workloads_repo_url
-  workloads_revision         = var.workloads_revision
-  workloads_path             = var.workloads_path
+resource "random_password" "agent_token" {
+  length  = 48
+  special = false
 }
 
 locals {
@@ -28,7 +32,7 @@ locals {
 resource "aws_ssm_parameter" "agent_token" {
   name  = "/kube-compute/${var.cluster_name}/agent-token"
   type  = "SecureString"
-  value = module.cluster_facts.agent_token
+  value = random_password.agent_token.result
   tags  = local.common_tags
 }
 
