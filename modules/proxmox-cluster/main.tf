@@ -125,8 +125,8 @@ module "control_plane" {
   source    = "../proxmox-control-plane"
   providers = { dns = dns }
 
-  ansible_ssh_private_key_file      = var.ansible_ssh_private_key_file
-  ansible_ssh_user                  = var.ansible_ssh_user
+  ssh_private_key_file              = var.ssh_private_key_file
+  ssh_user                          = var.ssh_user
   cluster_name                      = var.cluster_name
   trusted_ca_pem                    = var.trusted_ca_pem
   registry_mirror_url               = var.registry_mirror_url
@@ -220,6 +220,6 @@ module "os_patch" {
 
   control_plane_node_refs = module.control_plane.control_plane_node_refs
   worker_node_refs        = merge([for p in module.node_pools : p.worker_node_refs]...)
-  ssh_user                = module.control_plane.ansible_ssh_user
-  ssh_private_key_file    = module.control_plane.ansible_ssh_private_key_file
+  ssh_user                = module.control_plane.ssh_user
+  ssh_private_key_file    = module.control_plane.ssh_private_key_file
 }

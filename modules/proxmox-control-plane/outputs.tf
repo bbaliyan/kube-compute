@@ -55,14 +55,14 @@ output "proxmox_node" {
   value       = var.proxmox_node
 }
 
-output "ansible_ssh_user" {
-  description = "SSH user for guest access (os-patch and any other ops tooling connecting to the node directly) — node-bootstrap itself no longer connects to the node at all; this account exists for day-2 tooling only."
-  value       = var.ansible_ssh_user
+output "ssh_user" {
+  description = "SSH user for guest access (os-patch and any other ops tooling connecting to the node directly) — node-bootstrap itself never connects to the node at all; this account exists for day-2 tooling only."
+  value       = var.ssh_user
 }
 
-output "ansible_ssh_private_key_file" {
-  description = "Path to the SSH private key for guest access — same key node-bootstrap itself connects with. Not marked sensitive: a path, not the key material itself."
-  value       = var.ansible_ssh_private_key_file
+output "ssh_private_key_file" {
+  description = "Path to the SSH private key for guest access, for the same day-2 tooling. Not marked sensitive: a path, not the key material itself."
+  value       = var.ssh_private_key_file
 }
 
 output "cluster_token" {

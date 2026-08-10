@@ -20,12 +20,12 @@ variable "worker_node_refs" {
 }
 
 variable "ssh_user" {
-  description = "SSH user the orchestrator script connects as, passed straight through from the same *-control-plane module's ansible_ssh_user output node-bootstrap itself already connects with."
+  description = "SSH user the orchestrator script connects as, passed straight through from the same *-control-plane module's ssh_user output — day-2 guest access only, node-bootstrap itself never connects to the node."
   type        = string
 }
 
 variable "ssh_private_key_file" {
-  description = "Path to the SSH private key, passed straight through from the same *-control-plane module's ansible_ssh_private_key_file output. Not marked sensitive: a path, not the key material itself."
+  description = "Path to the SSH private key, passed straight through from the same *-control-plane module's ssh_private_key_file output. Not marked sensitive: a path, not the key material itself."
   type        = string
 }
 

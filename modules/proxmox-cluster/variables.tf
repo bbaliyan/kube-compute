@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to node-bootstrap) ----
-variable "ansible_ssh_private_key_file" {
-  description = "Path to the SSH private key Ansible uses to reach the node (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
+# ---- Day-2 guest-access credentials (node-bootstrap itself never connects to the
+# node — these exist for node-os-patch and any other operator tooling that does) ----
+variable "ssh_private_key_file" {
+  description = "Path to the SSH private key for guest access (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
   type        = string
   default     = "~/.ssh/id_ed25519_kube_cluster"
 }
 
-variable "ansible_ssh_user" {
-  description = "SSH user Ansible connects as. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 10 image."
+variable "ssh_user" {
+  description = "SSH user for guest access. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 10 image."
   type        = string
   default     = "almalinux"
 }

@@ -55,14 +55,14 @@ output "proxmox_node" {
   value       = module.control_plane.proxmox_node
 }
 
-output "ansible_ssh_user" {
+output "ssh_user" {
   description = "SSH user for guest access."
-  value       = module.control_plane.ansible_ssh_user
+  value       = module.control_plane.ssh_user
 }
 
-output "ansible_ssh_private_key_file" {
+output "ssh_private_key_file" {
   description = "Path to the SSH private key for guest access."
-  value       = module.control_plane.ansible_ssh_private_key_file
+  value       = module.control_plane.ssh_private_key_file
 }
 
 output "cluster_token" {
