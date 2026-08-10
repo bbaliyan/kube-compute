@@ -1,53 +1,42 @@
 # azure-node-pool
 
-A fixed-size node pool for a `azure-control-plane` cluster, pinned to a single availability zone
-(one pool = one zone, matching `aws-node-pool`'s one-pool-per-subnet-per-AZ convention).
-Backed by discrete `azurerm_linux_virtual_machine` instances (one per index, each with its own
-NIC and system-assigned identity) — no autoscaling, no auto-healing (scale by changing
-`desired_count`; replace a bad worker by tainting/recreating it), a fixed pool being the safe
-default for stateful workloads, same rationale as `aws-node-pool`. Each worker gets a stable node
-name (`<cluster>-worker-<index>`).
+**Placeholder — not implemented.** Azure is one of this project's three target
+providers (AWS, Proxmox, Azure), but there is currently no working
+`azure-node-pool` module. This directory intentionally contains no `.tf`
+files.
 
-Each worker is bootstrapped by the shared `node-bootstrap` module in `on_node` mode: an
-`azurerm_virtual_machine_run_command` delivers the self-contained bundle and Ansible runs on the
-node itself (`-c local`). No inbound port is opened — the `deny-ssh` NSG rule stays — and secrets
-ride as run-command protected parameters, never in state or `custom_data`.
+## Why
 
-## Join flow
+An earlier implementation existed here: a fixed, AZ-pinned Azure node pool
+(discrete VMs) joining an existing `azure-control-plane` cluster, using live
+Ansible pushed at apply time via `azurerm_virtual_machine_run_command`. It was
+removed alongside `modules/azure-control-plane` because it was never validated
+against real Azure infrastructure — the development environment this project
+is built in has no Azure connectivity, so nothing in that implementation
+(including its `tofu test` mocks) was ever exercised against an actual
+subscription. Carrying an unvalidated implementation forward as if it were
+trustworthy was judged worse than removing it and starting clean.
 
-Every worker's system-assigned managed identity is granted `Key Vault Secrets User`,
-scoped to exactly `azure-cluster-facts`'s `agent-token` secret (never the whole vault). At join, the
-worker fetches an OAuth token from Azure's Instance Metadata Service and calls the Key
-Vault Secrets REST API directly via `curl` + `python3` — no Azure CLI dependency, since
-the AlmaLinux 10 image is not guaranteed to ship it.
+## Intended future direction
 
-## Firewall
+When Azure support is revisited, the plan is to follow the same pattern
+`aws-node-pool`/`proxmox-node-pool` now use rather than reintroduce live
+Ansible:
 
-This pool owns a small NSG of its own (deny-ssh at priority 100, allow-cluster-self at
-priority 110), attached to every worker NIC — mirroring the control plane's firewall model.
-Joining `azure-cluster-facts`'s `cluster_asg_id` (via `application_security_group_ids` on the NIC)
-is only ASG *membership*, a label that NSG rules reference; on Azure it does not by
-itself block or allow anything, so the pool's own NSG is what actually enforces
-no-inbound-SSH and cluster-only east-west access on worker NICs.
+- Boot from a pre-baked `kube-image` template (RKE2 binaries, prerequisites,
+  and the Cilium manifest already on disk) instead of installing at boot.
+- Attach a lean `#cloud-config` payload rendered by `modules/node-bootstrap`
+  (its current, post-cutover interface) to configure and join RKE2 —
+  no execution engine, no inbound connection to the node.
+- Fetch the agent join token from Azure Key Vault via Managed Identity, the
+  Azure-native equivalent of AWS's SSM `SecureString` fetch, instead of
+  `azurerm_virtual_machine_run_command`'s protected parameters.
 
-## What this module never creates
+This module also depended on `modules/azure-cluster-facts` (now deleted, since
+its only consumers were `azure-control-plane`/`azure-node-pool`) for the
+cluster's Key Vault, Application Security Group, and join tokens. Any future
+Azure implementation should re-evaluate whether that split is still the right
+shape once the kube-image/lean-cloud-init pattern is in use.
 
-VNets, subnets, or the cluster's Application Security Group — it joins `azure-cluster-facts`'s
-`cluster_asg_id` by reference and creates no ASG of its own (only the node-scoped NSG
-described above).
-
-## Known limitations
-
-- **No working example provided.** Azure validation is manual-tier — this repo has no
-  live Azure subscription to test `init`/`plan`/`apply` against. `examples/basic/main.tf`
-  is unverified beyond `tofu validate`.
-- **One pool = one zone**, by design — spreading a single pool across zones is out of
-  scope; create one `azure-node-pool` module instance per zone instead, same as
-  `aws-node-pool`.
-- **`registration_address` must resolve to a real address.** This module is intended to
-  pair with an HA control plane (`control_plane_count > 1`), whose `registration_address` output
-  is a real LB frontend IP. A control plane with `control_plane_count = 1` has no registration
-  endpoint and exposes `registration_address = null`; wiring this module
-  against such a control plane by passing that `null` through will not work. If you must pair
-  this pool with a single-node control plane, pass that control plane's `cluster_ip` output explicitly
-  instead of its `registration_address` output.
+This work should not start until AWS and Proxmox are fully proven (validated
+against real infrastructure, not just `tofu test` mocks).

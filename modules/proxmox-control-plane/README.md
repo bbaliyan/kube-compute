@@ -62,8 +62,9 @@ still creates a VM and still validates/applies cleanly, but the node will fail
 at `systemctl enable --now rke2-server.service` during first-boot cloud-init —
 `tofu apply` reports success while the cluster never actually comes up. This
 is a direct, previously-undocumented consequence of the same node-bootstrap
-cutover that intentionally left `aws-control-plane`/`azure-control-plane`
-non-functional (see `../node-bootstrap/README.md`) — Proxmox's own stock-image
+cutover that intentionally left `aws-control-plane` non-functional (Azure has
+since been reduced to a placeholder rather than carried forward unvalidated —
+see `../node-bootstrap/README.md`) — Proxmox's own stock-image
 path is just as affected, for the identical reason (no more live Ansible
 install step anywhere). `os_image_url`/`os_image_file_id` remain supported at
 the Terraform level (unchanged variables, no new validation added) so a

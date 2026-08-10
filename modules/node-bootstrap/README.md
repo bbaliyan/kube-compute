@@ -151,8 +151,8 @@ real-cluster check for any `set_hostname = false` caller.
   launch template calls this module with `set_hostname = false` since every
   pool member shares one rendered payload — the same pattern
   `proxmox-cluster`'s cluster-autoscaler workers already established.
-  `modules/azure-*` still reference the pre-cutover interface (`node_provider`,
-  `ansible_playbook_path`, `invocation_mode`, `ansible_connection_vars`,
-  `bootstrap_id`, `on_node_bundle`, `on_node_secret_env`) and do not currently
-  validate against this module — Azure's cloud-init/`on_node` transport story
-  is separate, deferred work (see the `aws-kube-image-cutover` map).
+  `modules/azure-control-plane`/`modules/azure-node-pool` no longer exist as
+  working code — they were reduced to placeholders (their prior implementation
+  called this module's pre-cutover interface and was never validated against
+  real Azure infrastructure). A future Azure implementation should call this
+  module's current interface directly rather than resurrect the old one.
