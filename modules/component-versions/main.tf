@@ -10,7 +10,7 @@ locals {
   k8s_version = "v1.36.2+rke2r1"
 
   # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
-  cilium_version = "1.19.5"
+  cilium_version = "1.20.0"
 
   # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
   argocd_version = "10.3.0"
