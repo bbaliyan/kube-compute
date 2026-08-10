@@ -13,7 +13,7 @@ locals {
   cilium_version = "1.19.5"
 
   # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
-  argocd_version = "10.1.3"
+  argocd_version = "10.3.0"
 
   # Single source of truth for the kube-platform pin — every module that needs
   # it (node-bootstrap for the Argo CD Application's repo/revision,
