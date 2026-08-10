@@ -8,12 +8,6 @@ variable "cluster_name" {
   }
 }
 
-variable "k8s_version" {
-  description = "K8s distro version to install. Null falls back to the platform default from component-versions (via the shared cluster-facts core)."
-  type        = string
-  default     = null
-}
-
 variable "vpc_id" {
   description = "VPC ID the cluster security group belongs to. Unlike aws-control-plane (which can default to the account's default VPC for a single-node cluster), this module has no subnet/AMI context to derive a default VPC from, so one of vpc_id or vpc_name is required. Alternative to vpc_name — pass the literal ID."
   type        = string

@@ -5,7 +5,6 @@ run "node_resources" {
   command = plan
   variables {
     cluster_name              = "bharat"
-    k8s_version               = "v1.36.2+rke2r1"
     aws_region                = "eu-west-1"
     instance_type             = "m7g.large"
     allowed_ingress_cidrs     = ["10.0.0.0/8", "192.168.0.0/16"]

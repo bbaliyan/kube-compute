@@ -24,11 +24,6 @@ output "cluster_agent_token" {
   sensitive   = true
 }
 
-output "k8s_version" {
-  description = "K8s distro version every unit in this cluster should install. Re-exported from the shared cluster-facts core."
-  value       = module.cluster_facts.k8s_version
-}
-
 output "cluster_security_group_id" {
   description = "Self-referencing security group id shared by every cluster member. Both aws-control-plane's own instances and aws-node-pool's workers attach to this by id."
   value       = aws_security_group.cluster.id

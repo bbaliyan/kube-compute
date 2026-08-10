@@ -2,8 +2,6 @@
 module "cluster_facts" {
   source = "../cluster-facts"
 
-  k8s_version = var.k8s_version
-
   platform_enabled           = var.platform_enabled
   platform_repo_url_override = var.platform_repo_url_override
   platform_revision_override = var.platform_revision_override

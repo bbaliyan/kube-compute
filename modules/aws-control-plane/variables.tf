@@ -10,11 +10,6 @@ variable "cluster_name" {
   }
 }
 
-variable "k8s_version" {
-  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Accepted but currently UNUSED: node-bootstrap no longer has a k8s_version input (the kube-image AMI bakes the installed RKE2 version at build time — see effective_ami_id/os_image_ami_id), so this module has nothing left to thread it through to. Left declared, not removed, so the aws-cluster-facts wiring at the Terragrunt layer keeps working unchanged until Ticket 03 (retire aws-cluster-facts/k8s_version) decides its fate for real."
-  type        = string
-}
-
 variable "cluster_token" {
   description = "Join token from this cluster's cluster-facts unit. Passed straight through to every node-bootstrap call (server-init and server-join alike)."
   type        = string

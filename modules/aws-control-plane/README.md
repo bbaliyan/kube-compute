@@ -87,9 +87,7 @@ genesis `server-init` and every additional `server-join` node) and `cluster_agen
 **agent token**, mirrored by `aws-cluster-facts` into an SSM `SecureString` that workers fetch via
 their own instance IAM role). Both are required, sensitive inputs here. Workers receive only the
 agent token — never the server token — so a compromised worker cannot rejoin as a
-control-plane/etcd member. `k8s_version` is required for the same reason: both this module and
-`aws-node-pool` consume the one resolved value from `aws-cluster-facts`, so version skew between
-them is prevented by construction.
+control-plane/etcd member.
 
 Two security groups carry the cluster's east-west traffic. The self-referencing, every-member one
 is created by `aws-cluster-facts` and passed in as `cluster_security_group_id` (this module
@@ -99,10 +97,6 @@ does not re-export it). The second, created here, is control-plane-only and scop
 `--server` flag targets — for `control_plane_count = 1` this is simply the control-plane node's
 private IP; it is still this module's own output, the one join value `aws-node-pool` continues to
 source from the control plane rather than from `aws-cluster-facts`.
-
-`k8s_version` was previously required here so this module and `aws-node-pool` would consume the
-same resolved value by construction. It is still accepted for wiring continuity, but no longer
-threaded anywhere — see "Boot flow" above for why (the kube-image AMI bakes the version instead).
 
 ## HA control plane (`control_plane_count` > 1)
 
@@ -164,10 +158,7 @@ is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `ro
 baked in — see "Boot flow" above); pass a kube-image-baked AMI id to get a working cluster. Three
 inputs come from this cluster's `aws-cluster-facts` unit and are required: `cluster_token`,
 `cluster_agent_token`, and `cluster_security_group_id` (wire them via a terragrunt `dependency`
-block in a real consumer repo) — see "Join flow" above. `k8s_version` is still accepted (kept for
-`aws-cluster-facts` wiring continuity) but currently unused by this module — node-bootstrap has no
-`k8s_version` input anymore, since the kube-image AMI bakes the installed RKE2 version at build
-time; see `k8s_version`'s own description in `variables.tf`.
+block in a real consumer repo) — see "Join flow" above.
 
 ## Outputs
 

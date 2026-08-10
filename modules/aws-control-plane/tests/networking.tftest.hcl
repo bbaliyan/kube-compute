@@ -13,7 +13,6 @@ mock_provider "aws" {
 variables {
   aws_region                = "eu-west-1"
   allowed_ingress_cidrs     = ["10.0.0.0/8"]
-  k8s_version               = "v1.36.2+rke2r1"
   cluster_token             = "test-cluster-token-0123456789"
   cluster_agent_token       = "test-agent-token-0123456789"
   cluster_security_group_id = "sg-mock-cluster"
@@ -23,7 +22,6 @@ run "explicit_subnet_and_arm64" {
   command = plan
   variables {
     cluster_name  = "bharat"
-    k8s_version   = "v1.36.2+rke2r1"
     instance_type = "m7g.large"
     subnet_id     = "subnet-explicit123"
   }
@@ -57,7 +55,6 @@ run "default_vpc_fallback" {
   command = plan
   variables {
     cluster_name  = "bharat"
-    k8s_version   = "v1.36.2+rke2r1"
     instance_type = "m7g.large"
     # subnet_id omitted -> null -> default-VPC fallback
   }
@@ -76,7 +73,6 @@ run "x86_64_derivation" {
   }
   variables {
     cluster_name  = "x86"
-    k8s_version   = "v1.36.2+rke2r1"
     instance_type = "m7i.large"
     subnet_id     = "subnet-x"
   }
@@ -90,7 +86,6 @@ run "explicit_ami_overrides_lookup" {
   command = plan
   variables {
     cluster_name    = "amitest"
-    k8s_version     = "v1.36.2+rke2r1"
     instance_type   = "m7g.large"
     subnet_id       = "subnet-x"
     os_image_ami_id = "ami-0explicit123"
@@ -108,7 +103,6 @@ run "storage_graviton_arm64" {
   command = plan
   variables {
     cluster_name  = "storage"
-    k8s_version   = "v1.36.2+rke2r1"
     instance_type = "im4gn.large"
     subnet_id     = "subnet-x"
   }

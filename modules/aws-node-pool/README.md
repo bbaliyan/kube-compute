@@ -72,8 +72,7 @@ tag:aws:autoscaling:groupName=<name>`), not a Terraform-visible instance-id list
 See `variables.tf`. Compute sizing is AWS-native: `instance_type`, `root_volume_size_gb`,
 `root_volume_type`. `os_image_ami_id` defaults to the latest stock AlmaLinux 10 for the derived
 architecture (no RKE2 baked in — see "Boot flow" above); pass a kube-image-baked AMI id to get
-workers that actually join. `k8s_version` is still accepted (kept for `aws-cluster-facts` wiring
-continuity) but currently unused by this module — see its description in `variables.tf`.
+workers that actually join.
 
 ## Outputs
 
