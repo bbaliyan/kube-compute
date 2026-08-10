@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Resource-less "data module" (like ../component-versions): renders the
-# orchestrator script, but creates nothing and runs nothing itself. OS
+# Resource-less "data module": renders the orchestrator script, but creates
+# nothing and runs nothing itself. OS
 # patching is an operator-triggered action, not a desired-state resource —
 # it must never fire just because an unrelated `tofu apply` touched this
 # module's inputs, the way node-bootstrap's own null_resource does for

@@ -5,8 +5,8 @@ so any consumer of these modules gets it without re-writing it themselves.
 
 ## What's here
 
-A resource-less module (like `../component-versions`): it creates nothing and runs
-nothing itself, it only renders a script. `main.tf` templates
+A resource-less module: it creates nothing and runs nothing itself, it only renders a
+script. `main.tf` templates
 `templates/upgrade-os.sh.tftpl` into the `orchestrator_script` output — a
 self-contained bash script, plain SSH, no Ansible/Ansible-core dependency. The caller
 runs it themselves (`bash <(tofu output -raw orchestrator_script)`), on whatever

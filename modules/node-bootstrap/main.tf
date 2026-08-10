@@ -5,27 +5,22 @@
 # modules, guest agent) is baked into a kube-image template; what is left here
 # is per-cluster identity, per-cluster secrets, and join logic — the things
 # that can never be baked into a shared image.
-module "component_versions" {
-  source = "../component-versions"
-}
-
 locals {
-  # Single source of truth for the kube-platform pin is component-versions
-  # (shared with cluster-facts, which needs the same pin for its own
-  # k8s_version-from-platform-versions.yaml fetch) — NOT the
-  # gitops_platform_repo_url/_revision variables' own defaults: a caller (a
-  # *-control-plane module) passing an explicit null/"" to override-back-to-
-  # the-pin does NOT fall through to a variable's own default the way an
-  # omitted argument would — that "explicit null uses the callee's default"
-  # convenience is specific to optional() object-type attributes, not plain
-  # string variables passed through a module call. Verified the hard way on a
-  # real apply; the regression test in tests/platform_pin.tftest.hcl locks it
-  # in. coalesce() is the actual fix — it treats null and "" identically.
-  # Tracks kube-platform's protected `main` branch, not a pinned commit SHA:
-  # branch protection is the safeguard replacing the reproducibility guarantee
-  # a SHA pin would provide.
-  pinned_platform_repo_url = module.component_versions.pinned_platform_repo_url
-  pinned_platform_revision = module.component_versions.pinned_platform_revision
+  # Single source of truth for the kube-platform pin, held directly here — this
+  # is node-bootstrap's only remaining consumer, so a separate component-versions
+  # module was pure indirection. NOT the gitops_platform_repo_url/_revision
+  # variables' own defaults: a caller (a *-control-plane module) passing an
+  # explicit null/"" to override-back-to-the-pin does NOT fall through to a
+  # variable's own default the way an omitted argument would — that "explicit
+  # null uses the callee's default" convenience is specific to optional()
+  # object-type attributes, not plain string variables passed through a module
+  # call. Verified the hard way on a real apply; the regression test in
+  # tests/platform_pin.tftest.hcl locks it in. coalesce() is the actual fix —
+  # it treats null and "" identically. Tracks kube-platform's protected `main`
+  # branch, not a pinned commit SHA: branch protection is the safeguard
+  # replacing the reproducibility guarantee a SHA pin would provide.
+  pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
+  pinned_platform_revision = "main"
 
   # gitops_platform_enabled = false clears the repo URL to "" regardless of the
   # pin, so every gate downstream can keep testing "repo_url non-empty" as the
