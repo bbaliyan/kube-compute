@@ -14,13 +14,10 @@ mock_provider "aws" {
 }
 
 variables {
-  cluster_name              = "bharat"
-  aws_region                = "eu-west-1"
-  allowed_ingress_cidrs     = ["10.0.0.0/8"]
-  subnet_id                 = "subnet-abc"
-  cluster_token             = "test-cluster-token-0123456789"
-  cluster_agent_token       = "test-agent-token-0123456789"
-  cluster_security_group_id = "sg-mock-cluster"
+  cluster_name          = "bharat"
+  aws_region            = "eu-west-1"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
+  subnet_id             = "subnet-abc"
 }
 
 run "control_plane_count_3_places_one_per_az_behind_nlb" {
@@ -61,12 +58,10 @@ run "control_plane_count_3_places_one_per_az_behind_nlb" {
     condition     = length(aws_lb_target_group_attachment.genesis) == 1
     error_message = "the genesis control-plane node must attach to the NLB target group too"
   }
-  # NOTE: this run block used to assert that aws_security_group.cluster.vpc_id matched
-  # the real control-plane subnets' VPC in HA mode. Now that cluster_security_group_id
-  # is a caller-supplied string (sourced from aws-cluster-facts), it has no vpc_id
-  # attribute this module's plan can observe — that VPC-consistency invariant is now
-  # an operational convention owned by the caller/aws-cluster-facts, not something
-  # this module's own plan can check anymore.
+  assert {
+    condition     = aws_security_group.cluster.vpc_id == data.aws_subnet.control_plane_genesis[0].vpc_id
+    error_message = "in HA mode, the cluster SG must be created in the same VPC as the control-plane subnets, not the unused single-node fallback"
+  }
 }
 
 run "control_plane_count_5_places_one_per_az" {

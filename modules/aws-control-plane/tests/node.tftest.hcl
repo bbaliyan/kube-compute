@@ -2,16 +2,16 @@
 mock_provider "aws" {}
 
 run "node_resources" {
-  command = plan
+  # apply (not plan): random_password's result (embedded in node-bootstrap's rendered
+  # cloud-init payload) is unknown at plan time, which makes user_data_base64 unknown
+  # too — matching proxmox-control-plane's own precedent for the same reason.
+  command = apply
   variables {
-    cluster_name              = "bharat"
-    aws_region                = "eu-west-1"
-    instance_type             = "m7g.large"
-    allowed_ingress_cidrs     = ["10.0.0.0/8", "192.168.0.0/16"]
-    subnet_id                 = "subnet-abc"
-    cluster_token             = "test-cluster-token-0123456789"
-    cluster_agent_token       = "test-agent-token-0123456789"
-    cluster_security_group_id = "sg-mock-cluster"
+    cluster_name          = "bharat"
+    aws_region            = "eu-west-1"
+    instance_type         = "m7g.large"
+    allowed_ingress_cidrs = ["10.0.0.0/8", "192.168.0.0/16"]
+    subnet_id             = "subnet-abc"
   }
 
   assert {

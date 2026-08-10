@@ -10,23 +10,6 @@ variable "cluster_name" {
   }
 }
 
-variable "cluster_token" {
-  description = "Join token from this cluster's cluster-facts unit. Passed straight through to every node-bootstrap call (server-init and server-join alike)."
-  type        = string
-  sensitive   = true
-}
-
-variable "cluster_agent_token" {
-  description = "Agent token from this cluster's cluster-facts unit. Passed to the genesis (server-init) node-bootstrap call only, which needs the raw value; aws-node-pool never needs it directly, since workers fetch it themselves via agent_token_ssm_parameter."
-  type        = string
-  sensitive   = true
-}
-
-variable "cluster_security_group_id" {
-  description = "Self-referencing cluster security group id, from this cluster's cluster-facts unit. This module's own instances attach to it by id, same as aws-node-pool's workers."
-  type        = string
-}
-
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) added to the node OS trust store. Null = none. Sensitive."
   type        = string

@@ -1,4 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
+# Join-token flow: generated here directly (not in a separate cluster-facts-style
+# module) — matches proxmox-control-plane's own precedent of owning its join tokens
+# via random_password resources. Two tokens, least privilege: the server token grants
+# joining etcd/control-plane; the agent token is all a worker ever receives, so a
+# compromised worker cannot rejoin as a control-plane/etcd member.
+resource "random_password" "server_token" {
+  length  = 48
+  special = false
+}
+
+resource "random_password" "agent_token" {
+  length  = 48
+  special = false
+}
+
 locals {
   # AWS's own docs list AlmaLinux among AMIs that "likely" ship the SSM
   # Agent pre-installed (Community/Marketplace AMIs, not AWS-guaranteed, can
@@ -128,6 +143,50 @@ locals {
   })
 }
 
+# ---- Delivery: the agent token is mirrored into an SSM SecureString and fetched at
+# boot via the worker's own instance IAM role — never rendered into user_data.
+resource "aws_ssm_parameter" "agent_token" {
+  name  = "/kube-compute/${var.cluster_name}/agent-token"
+  type  = "SecureString"
+  value = random_password.agent_token.result
+  tags  = local.common_tags
+}
+
+# ---- Cluster security group: self-referencing, every cluster member (east-west) ----
+# All-protocol among members rather than pinning to today's CNI ports: this SG is
+# meant to outlive a CNI switch without an edit. Owned here (not a separate
+# cluster-facts-style module) since aws-node-pool attaches to it by real ID
+# (vpc_security_group_ids) — a hard AWS API dependency, unlike Proxmox's
+# name-based/existence-tolerant ipsets — and aws-control-plane's own VPC resolution
+# (local.module_vpc_id, with its default-VPC fallback) already covers what this SG
+# needs.
+resource "aws_security_group" "cluster" {
+  name_prefix = "kube-compute-${var.cluster_name}-cluster-"
+  description = "kube-compute ${var.cluster_name}: east-west traffic among cluster members only."
+  vpc_id      = local.module_vpc_id
+  tags        = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster" })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cluster_self" {
+  security_group_id            = aws_security_group.cluster.id
+  description                  = "all traffic among cluster members"
+  ip_protocol                  = "-1"
+  referenced_security_group_id = aws_security_group.cluster.id
+  tags                         = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-self" })
+}
+
+resource "aws_vpc_security_group_egress_rule" "cluster_all" {
+  security_group_id = aws_security_group.cluster.id
+  description       = "all egress"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+  tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-egress-all" })
+}
+
 # ---- etcd security group: control-plane members only, never joined by workers ----
 resource "aws_security_group" "control_plane_etcd" {
   name_prefix = "kube-compute-${var.cluster_name}-etcd-"
@@ -168,8 +227,8 @@ module "node_bootstrap" {
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
-  cluster_token                  = var.cluster_token
-  cluster_agent_token            = var.cluster_agent_token
+  cluster_token                  = random_password.server_token.result
+  cluster_agent_token            = random_password.agent_token.result
   registration_address           = local.registration_address
   extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   trusted_ca_pem                 = var.trusted_ca_pem
@@ -208,7 +267,7 @@ module "node_bootstrap_additional" {
   cni                  = local.effective_cni
   registration_address = local.registration_address
   extra_tls_sans       = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  cluster_token        = var.cluster_token
+  cluster_token        = random_password.server_token.result
   trusted_ca_pem       = var.trusted_ca_pem
   registry_mirror_url  = var.registry_mirror_url
   cert_mode            = var.cert_mode
@@ -223,7 +282,7 @@ resource "aws_instance" "control_plane_additional" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = each.value
-  vpc_security_group_ids = [aws_security_group.node.id, var.cluster_security_group_id, aws_security_group.control_plane_etcd.id]
+  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
   # hop_limit 3, not AWS's generally-documented 2: confirmed live that 2 isn't
@@ -450,7 +509,7 @@ resource "aws_instance" "control_plane" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = local.genesis_subnet_id
-  vpc_security_group_ids = [aws_security_group.node.id, var.cluster_security_group_id, aws_security_group.control_plane_etcd.id]
+  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
   # hop_limit 3, not the commonly-documented 2 (AWS's own docs say 2 is enough

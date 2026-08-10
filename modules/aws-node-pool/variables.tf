@@ -35,12 +35,12 @@ variable "registration_address" {
 }
 
 variable "agent_token_ssm_parameter" {
-  description = "This cluster's cluster-facts agent_token_ssm_parameter output. This module's IAM role is scoped to read only this one SSM parameter."
+  description = "This cluster's aws-control-plane agent_token_ssm_parameter output. This module's IAM role is scoped to read only this one SSM parameter."
   type        = string
 }
 
 variable "cluster_security_group_id" {
-  description = "This cluster's cluster-facts cluster_security_group_id output. Attached to every worker instance for east-west cluster access; this module owns no other ingress security group in this slice (workers accept no traffic from outside the cluster yet)."
+  description = "This cluster's aws-control-plane cluster_security_group_id output. Attached to every worker instance for east-west cluster access; this module owns no other ingress security group in this slice (workers accept no traffic from outside the cluster yet)."
   type        = string
 }
 

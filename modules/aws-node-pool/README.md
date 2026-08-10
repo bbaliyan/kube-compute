@@ -28,7 +28,7 @@ bake.
 
 The module provisions **workers and only what is intrinsic to them** — the launch template, the
 ASG, their IAM role/instance-profile. It **never creates network fabric** and owns **no security
-group of its own** in this slice: workers attach only `aws-cluster-facts`'s
+group of its own** in this slice: workers attach only `aws-control-plane`'s
 `cluster_security_group_id` (east-west among cluster members) and accept no traffic from outside
 the cluster. An ingress-facing SG for workers that serve external traffic is a deliberate gap,
 left for whichever later slice wires up an ingress load balancer.
@@ -44,9 +44,9 @@ an actual autoscaler to drive `min_size`/`max_size` for real is out of scope for
 
 ## Joining the control plane
 
-`agent_token_ssm_parameter` and `cluster_security_group_id` come from this cluster's
-`aws-cluster-facts` outputs; `registration_address` still comes from the control plane's own
-output (wire all three via terragrunt `dependency` blocks in a real consumer repo). The module's
+`agent_token_ssm_parameter`, `cluster_security_group_id`, and `registration_address` all come from
+this cluster's `aws-control-plane` outputs (wire them via a terragrunt `dependency` block in a real
+consumer repo). The module's
 IAM role is scoped to `ssm:GetParameter` on that one parameter (plus `kms:Decrypt` via the SSM
 service) — it cannot read any other parameter in the account. The agent token is fetched on the
 node at join time (node-bootstrap's `agent_token_fetch_command` runs the SSM `get-parameter`

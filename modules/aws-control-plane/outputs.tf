@@ -94,6 +94,16 @@ output "control_plane_node_refs" {
   )
 }
 
+output "cluster_security_group_id" {
+  description = "Self-referencing security group id shared by every cluster member. This module's own instances attach to it by id; a future aws-node-pool unit would depend on this module to attach its workers the same way."
+  value       = aws_security_group.cluster.id
+}
+
+output "agent_token_ssm_parameter" {
+  description = "SSM Parameter Store name (SecureString) holding the agent join token. A future aws-node-pool unit's workers would fetch it at boot via their own instance IAM role — never embedded in user_data."
+  value       = aws_ssm_parameter.agent_token.name
+}
+
 output "connectivity_user_data_base64" {
   description = "base64gzip of the genesis node's combined user-data (the AWS-only SSM-agent-enable script MIME-multipart-joined with node-bootstrap's #cloud-config payload). Exposed for tests and debugging."
   value       = base64gzip(local.combined_user_data["0"])
