@@ -5,6 +5,14 @@ using the `hashicorp/dns` provider. That's the whole scope — this module
 neither creates the zone nor the TSIG key; both must already exist on the
 target DNS server before this module runs.
 
+**Provider-neutral, not Proxmox-specific**, despite currently only being wired
+in by `proxmox-control-plane`/`proxmox-node-pool`. AWS and Azure have their own
+native DNS APIs (Route53, Azure DNS) as their optional-DNS path instead, and
+Proxmox has no managed-DNS equivalent — that's why Proxmox is the only current
+caller, not because RFC2136 is Proxmox-bound. Any provider whose consumer runs
+their own RFC2136-compliant DNS server (self-hosted, Technitium, BIND, PowerDNS,
+etc.) is a legitimate future caller of this module without a rename.
+
 ## What this module does
 
 One `dns_a_record_set` resource: given a zone, a record name, a list of
