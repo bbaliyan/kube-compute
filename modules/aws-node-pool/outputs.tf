@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-output "instance_ids" {
-  description = "EC2 instance IDs of every worker in this pool, in index order. Control-plane verb-scripts target these via SSM (aws ssm send-command/start-session)."
-  value       = aws_instance.worker[*].id
+output "autoscaling_group_name" {
+  description = "Name of the fixed-size ASG backing this pool. Terraform never sees individual pool members (the ASG creates them directly from the launch template), so instance discovery for the control-plane verb-scripts/SSM targeting goes through this name (e.g. 'aws autoscaling describe-auto-scaling-groups' or 'aws ec2 describe-instances --filters tag:aws:autoscaling:groupName=<this>'), not a Terraform-visible instance id list."
+  value       = aws_autoscaling_group.worker.name
 }
 
-output "private_ips" {
-  description = "Private IPv4 address of every worker in this pool, in index order."
-  value       = aws_instance.worker[*].private_ip
+output "launch_template_id" {
+  description = "Launch template id used by the ASG."
+  value       = aws_launch_template.worker.id
 }
 
 output "node_provider" {

@@ -1,8 +1,28 @@
 # aws-control-plane
 
 Provisions the AWS control plane for an RKE2 cluster — its control-plane node(s) plus the
-cluster-wide resources — consuming `node-bootstrap` (over SSM) for the RKE2 install/join. A
-control plane with `control_plane_count = 1` is a complete single-node cluster.
+cluster-wide resources — consuming `node-bootstrap` for per-cluster identity, join tokens, and
+GitOps bootstrap. A control plane with `control_plane_count = 1` is a complete single-node
+cluster.
+
+## Boot flow: pre-baked AMI + lean cloud-init, no live connection
+
+This module runs **no live Ansible** at `apply` time. It renders `node-bootstrap`'s
+`#cloud-config` payload (node identity, join tokens, registries/CA, GitOps Application
+manifests — see `modules/node-bootstrap/README.md`) and attaches it as `user_data_base64`,
+combined via a cloud-init MIME multipart document with a small AWS-only shell-script part that
+enables the SSM Agent (SSM stays this module's operator-access path — break-glass shell,
+verb-scripts — independent of bootstrap). Nothing in this module connects to the node, waits on
+it, or observes it converge; `apply` returns as soon as the instance and its user-data exist.
+
+The heavy half of RKE2 bootstrap (RKE2 binaries, SELinux policy, kernel modules, the genesis
+Cilium/Argo CD manifests) is expected to already be baked into the AMI, via `kube-image`'s
+`packer/aws/` template (see the `kube-image` repo). **`os_image_ami_id` is opt-in**: pass a
+kube-image-baked AMI id to get a fully working cluster. The default fallback — the latest stock
+AlmaLinux 10 AMI, when `os_image_ami_id` is left null — has **no RKE2 baked in**, so a node
+booted from it will not join a cluster; it exists only so `effective_ami_id`/the AMI lookup keep
+resolving to something for plan-time testing and as a base image for your own bake. This mirrors
+`proxmox-control-plane`'s already-established `proxmox_template_vm_id` convention.
 
 ## Scope
 
@@ -80,6 +100,10 @@ does not re-export it). The second, created here, is control-plane-only and scop
 private IP; it is still this module's own output, the one join value `aws-node-pool` continues to
 source from the control plane rather than from `aws-cluster-facts`.
 
+`k8s_version` was previously required here so this module and `aws-node-pool` would consume the
+same resolved value by construction. It is still accepted for wiring continuity, but no longer
+threaded anywhere — see "Boot flow" above for why (the kube-image AMI bakes the version instead).
+
 ## HA control plane (`control_plane_count` > 1)
 
 `control_plane_subnets` (a map of availability zone -> subnet id) is required once
@@ -136,10 +160,14 @@ endpoint at all.
 
 See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing
 is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `root_volume_type`.
-`os_image_ami_id` defaults to the latest AlmaLinux 10 for the derived architecture. Four inputs
-come from this cluster's `aws-cluster-facts` unit and are required: `cluster_token`,
-`cluster_agent_token`, `cluster_security_group_id`, and `k8s_version` (wire them via a terragrunt
-`dependency` block in a real consumer repo) — see "Join flow" above.
+`os_image_ami_id` defaults to the latest stock AlmaLinux 10 for the derived architecture (no RKE2
+baked in — see "Boot flow" above); pass a kube-image-baked AMI id to get a working cluster. Three
+inputs come from this cluster's `aws-cluster-facts` unit and are required: `cluster_token`,
+`cluster_agent_token`, and `cluster_security_group_id` (wire them via a terragrunt `dependency`
+block in a real consumer repo) — see "Join flow" above. `k8s_version` is still accepted (kept for
+`aws-cluster-facts` wiring continuity) but currently unused by this module — node-bootstrap has no
+`k8s_version` input anymore, since the kube-image AMI bakes the installed RKE2 version at build
+time; see `k8s_version`'s own description in `variables.tf`.
 
 ## Outputs
 

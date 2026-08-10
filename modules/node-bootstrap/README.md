@@ -141,10 +141,18 @@ real-cluster check for any `set_hostname = false` caller.
   way `server-init` does; only `worker` uses the fetch-command pattern, since
   a worker joins an already-existing cluster and pulls its token from the
   provider's own secret store instead.
-- `modules/aws-*` and `modules/azure-*` still reference the pre-cutover
-  interface (`node_provider`, `ansible_playbook_path`, `invocation_mode`,
-  `ansible_connection_vars`, `bootstrap_id`, `on_node_bundle`,
-  `on_node_secret_env`) and do not currently validate against this module.
-  Proxmox is the only provider with an end-to-end working path today;
-  updating AWS/Azure is tracked as separate follow-up work, not part of this
-  module's current interface.
+- `modules/aws-control-plane` and `modules/aws-node-pool` are now cut over to
+  this interface too (AWS cutover, Ticket 02): both call this module with no
+  `node_provider`/`ansible_playbook_path`/`ansible_connection_vars` and attach
+  `cloud_init_user_data` via AWS's own `user_data_base64 = base64gzip(...)`
+  convention, combined via a cloud-init MIME multipart document with a small
+  AWS-only SSM-agent-enable script (see those modules' own `main.tf`/README
+  for why the MIME combine lives there, not here). `aws-node-pool`'s ASG
+  launch template calls this module with `set_hostname = false` since every
+  pool member shares one rendered payload — the same pattern
+  `proxmox-cluster`'s cluster-autoscaler workers already established.
+  `modules/azure-*` still reference the pre-cutover interface (`node_provider`,
+  `ansible_playbook_path`, `invocation_mode`, `ansible_connection_vars`,
+  `bootstrap_id`, `on_node_bundle`, `on_node_secret_env`) and do not currently
+  validate against this module — Azure's cloud-init/`on_node` transport story
+  is separate, deferred work (see the `aws-kube-image-cutover` map).

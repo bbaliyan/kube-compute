@@ -1,12 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ---- Common inputs (pass through to node-bootstrap) ----
-variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook node-bootstrap runs. Defaults to the bundled AlmaLinux-10-only playbook. Override only for a consumer-supplied playbook targeting a different OS (no compatibility guarantee)."
-  type        = string
-  default     = null
-}
-
 variable "cluster_name" {
   description = "Cluster identity this pool joins. Must match the control plane's cluster_name. Lowercase, starts with a letter."
   type        = string
@@ -17,7 +11,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version this pool's workers install (an RKE2 release string, e.g. v1.36.1+rke2r1). The caller is expected to pass the same cluster-facts k8s_version given to aws-control-plane, preventing version skew by construction. Null uses the platform default (module.component_versions.k8s_version)."
+  description = "K8s distro version this pool's workers install (an RKE2 release string, e.g. v1.36.1+rke2r1). Accepted but currently UNUSED: node-bootstrap no longer has a k8s_version input (the kube-image AMI bakes the installed RKE2 version at build time), so this module has nothing left to thread it through to. Left declared, not removed, so the aws-cluster-facts wiring at the Terragrunt layer keeps working unchanged until Ticket 03 (retire aws-cluster-facts/k8s_version) decides its fate for real."
   type        = string
   default     = null
 }

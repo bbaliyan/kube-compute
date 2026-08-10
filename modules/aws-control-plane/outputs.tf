@@ -95,11 +95,7 @@ output "control_plane_node_refs" {
 }
 
 output "connectivity_user_data_base64" {
-  description = "base64gzip of the minimal, RKE2-agnostic connectivity-only user-data (defensively enables/starts the SSM Agent) attached to every node's actual user_data_base64. Exposed for tests and debugging."
-  value       = base64gzip(local.connectivity_user_data)
-}
-
-output "ansible_ssm_bucket_name" {
-  description = "S3 bucket used by amazon.aws.aws_ssm's Ansible connection plugin to stage file transfers during node-bootstrap. New infrastructure this project didn't need before the Ansible-bootstrap swap — see the ansible_ssm_bucket_name local for why it's mandatory, not optional."
-  value       = aws_s3_bucket.ansible_ssm.id
+  description = "base64gzip of the genesis node's combined user-data (the AWS-only SSM-agent-enable script MIME-multipart-joined with node-bootstrap's #cloud-config payload). Exposed for tests and debugging."
+  value       = base64gzip(local.combined_user_data["0"])
+  sensitive   = true
 }

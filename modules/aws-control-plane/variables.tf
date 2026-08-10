@@ -1,12 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ---- Common inputs (pass through to node-bootstrap) ----
-variable "ansible_playbook_path" {
-  description = "Absolute path to the Ansible playbook to run. Defaults to the bundled AlmaLinux 10 playbook. Supply your own path for other distributions — no compatibility guarantee is made for untested distributions."
-  type        = string
-  default     = null
-}
-
 variable "cluster_name" {
   description = "Cluster identity. Used in tags, the FQDN, and the kubeconfig SAN. Lowercase, starts with a letter."
   type        = string
@@ -17,7 +11,7 @@ variable "cluster_name" {
 }
 
 variable "k8s_version" {
-  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Neutral name. Sourced from this cluster's cluster-facts unit — both control-plane and node-pool consume the same resolved value, so version-skew between them is prevented by construction rather than checked at runtime."
+  description = "K8s distro version (an RKE2 release string today, e.g. v1.36.1+rke2r1). Accepted but currently UNUSED: node-bootstrap no longer has a k8s_version input (the kube-image AMI bakes the installed RKE2 version at build time — see effective_ami_id/os_image_ami_id), so this module has nothing left to thread it through to. Left declared, not removed, so the aws-cluster-facts wiring at the Terragrunt layer keeps working unchanged until Ticket 03 (retire aws-cluster-facts/k8s_version) decides its fate for real."
   type        = string
 }
 

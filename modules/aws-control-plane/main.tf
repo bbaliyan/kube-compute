@@ -1,23 +1,51 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  # Connectivity-only user-data replacing cloud-init's full RKE2 payload.
   # AWS's own docs list AlmaLinux among AMIs that "likely" ship the SSM
   # Agent pre-installed (Community/Marketplace AMIs, not AWS-guaranteed, can
   # be present-but-not-running) — so this defensively enables/starts it
   # rather than installing it; `|| true` tolerates the rare case it's
-  # genuinely absent (Ansible's own SSM connection attempt then fails with a
-  # clear error, rather than this user-data script failing instance boot).
+  # genuinely absent. Kept independent of RKE2/node-bootstrap: SSM is this
+  # module's ongoing operator-access path (break-glass shell, verb-scripts —
+  # see node_control_ref below), not merely a bootstrap-time transport, so it
+  # stays enabled even though nothing runs live Ansible over it anymore.
   connectivity_user_data = <<-EOT
     #!/bin/bash
     systemctl enable --now amazon-ssm-agent 2>/dev/null || true
   EOT
 
-  # amazon.aws.aws_ssm's connection plugin mandatorily stages every file
-  # transfer through an S3 bucket, "required even for modules which do not
-  # explicitly send files" (no bucketless mode exists) — this bucket is new
-  # infrastructure the Ansible-bootstrap swap needs; nothing in this
-  # project used S3-backed SSM file transfer before.
-  ansible_ssm_bucket_name = "kube-compute-${var.cluster_name}-ansible-ssm-${data.aws_caller_identity.current.account_id}"
+  # AWS accepts only one user_data string per instance. Cloud-init's own
+  # MIME multipart/mixed convention combines this AWS-only SSM-agent-enable
+  # script with node-bootstrap's #cloud-config payload without this module
+  # needing to know node-bootstrap's internal cloud-config shape (decoding
+  # and re-merging the YAML would create exactly that coupling). Every
+  # control-plane node — genesis and each additional server — gets its own
+  # combined document, keyed the same way the per-node module calls below
+  # already are ("0" for genesis, node_bootstrap_additional's own keys for
+  # the rest).
+  mime_boundary = "MIMEBOUNDARY"
+
+  cloud_init_payloads = merge(
+    { "0" = module.node_bootstrap.cloud_init_user_data },
+    { for k, m in module.node_bootstrap_additional : k => m.cloud_init_user_data }
+  )
+
+  combined_user_data = {
+    for k, payload in local.cloud_init_payloads : k => join("\n", [
+      "Content-Type: multipart/mixed; boundary=\"${local.mime_boundary}\"",
+      "MIME-Version: 1.0",
+      "",
+      "--${local.mime_boundary}",
+      "Content-Type: text/x-shellscript; charset=\"us-ascii\"",
+      "",
+      local.connectivity_user_data,
+      "--${local.mime_boundary}",
+      "Content-Type: text/cloud-config; charset=\"us-ascii\"",
+      "",
+      payload,
+      "--${local.mime_boundary}--",
+      "",
+    ])
+  }
 
   # Arch from AWS's own metadata — covers all present and future instance types.
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
@@ -82,12 +110,6 @@ locals {
   # node-bootstrap's cni variable). null means "use the default".
   effective_cni = coalesce(var.cni, "cilium")
 
-  # Cilium chart default (2 operator replicas, pod anti-affinity) leaves one replica
-  # permanently Pending on a genuinely single-node cluster. Same "node pools are
-  # invisible to this module" caveat as control_plane_taint above: a 1-CP-plus-workers
-  # topology still resolves via control_plane_count alone.
-  effective_cilium_operator_replicas = var.control_plane_count > 1 ? null : 1
-
   # dns mode's shared record name — distinct from cluster_fqdn (api.<...>), which is the
   # kubeconfig/API-cert name; this is the join-time registration name. Null unless a domain is
   # configured, enforced by the precondition on aws_instance.control_plane below.
@@ -136,77 +158,16 @@ resource "aws_vpc_security_group_egress_rule" "etcd_all" {
   tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd-egress-all" })
 }
 
-# ---- S3 staging bucket for amazon.aws.aws_ssm's Ansible connection plugin ----
-# Mandatory infrastructure for the AWS transport (see the local above) — not optional,
-# not just for large files. Blocks all public access; SSE by default; a short lifecycle
-# expiration since staged objects are transient per-task artifacts, not meant to persist.
-resource "aws_s3_bucket" "ansible_ssm" {
-  bucket        = local.ansible_ssm_bucket_name
-  force_destroy = true
-  tags          = local.common_tags
-}
-
-resource "aws_s3_bucket_public_access_block" "ansible_ssm" {
-  bucket                  = aws_s3_bucket.ansible_ssm.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "ansible_ssm" {
-  bucket = aws_s3_bucket.ansible_ssm.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "ansible_ssm" {
-  bucket = aws_s3_bucket.ansible_ssm.id
-  rule {
-    id     = "expire-staged-objects"
-    status = "Enabled"
-    filter {}
-    expiration {
-      days = 1
-    }
-  }
-}
-
-# Grants the NODE's IAM role (not the operator's own credentials, which use their
-# ambient AWS auth) read/write on the staging bucket — the SSM Agent running on the
-# instance itself uploads/downloads through this bucket as part of a session.
-resource "aws_iam_role_policy" "ansible_ssm_s3" {
-  name = "kube-compute-${var.cluster_name}-ansible-ssm-s3"
-  role = aws_iam_role.node.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject", "s3:GetEncryptionConfiguration"]
-        Resource = ["${aws_s3_bucket.ansible_ssm.arn}", "${aws_s3_bucket.ansible_ssm.arn}/*"]
-      }
-    ]
-  })
-}
-
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
-  node_provider                  = "aws"
-  ansible_playbook_path          = var.ansible_playbook_path
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-1"
-  k8s_version                    = var.k8s_version
   cluster_fqdn                   = local.cluster_fqdn
   cluster_fqdn_suffix            = local.fqdn_suffix
   node_role                      = "server-init"
   control_plane_taint            = local.control_plane_taint
   cni                            = local.effective_cni
-  cilium_operator_replicas       = local.effective_cilium_operator_replicas
   cluster_token                  = var.cluster_token
   cluster_agent_token            = var.cluster_agent_token
   registration_address           = local.registration_address
@@ -223,73 +184,37 @@ module "node_bootstrap" {
   platform_extra_helm_parameters = var.platform_extra_helm_parameters
   platform_helm_values_object    = var.platform_helm_values_object
   extra_tags                     = var.extra_tags
-
-  ansible_connection_vars = {
-    ansible_connection          = "amazon.aws.aws_ssm"
-    ansible_aws_ssm_instance_id = aws_instance.control_plane.id
-    ansible_aws_ssm_region      = var.aws_region
-    ansible_aws_ssm_bucket_name = aws_s3_bucket.ansible_ssm.id
-    # Pinned rather than left to Ansible's auto-discovery: every node this
-    # project targets is always AlmaLinux 10 (this project's only supported
-    # OS, no compatibility claim for others), so there's nothing to actually
-    # discover, and pinning avoids the "future installation of another Python
-    # interpreter could cause a different interpreter to be discovered"
-    # warning on every run. /usr/bin/python3 is AlmaLinux's own stable
-    # symlink to whatever the current default Python actually is (3.12 as of
-    # AlmaLinux 10.2) — pin the symlink, not the specific version, so a minor
-    # OS bump doesn't silently break this. (Same reasoning applies to
-    # node_bootstrap_additional's identical block below.)
-    ansible_python_interpreter = "/usr/bin/python3"
-  }
 }
 
 # ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
-# Deliberately NOT depends_on module.node_bootstrap: that previously forced every
-# additional server's OS-prep/RKE2-install to wait for genesis's entire Ansible run —
-# including genesis's post-Ready GitOps/Argo CD bootstrap, which has nothing to do
-# with etcd join safety — adding minutes of pure dead time before a sibling's install
-# even started. Mirrors aws-node-pool's already-established pattern: RKE2's server
-# process natively retries against the `server:` line the same way its agent process
-# does against a worker's join target, so a sibling starting concurrently with genesis
-# just waits out genesis's install via its own connection retry, not a Terraform-level
-# barrier. Ordering *among* the additional nodes themselves (the real constraint — one
-# non-voting etcd learner at a time) remains handled by node-bootstrap's own staggered,
-# self-healing join-race retry (see modules/node-bootstrap/ansible/roles/rke2_bootstrap/
-# tasks/main.yml's "server-join | staggered, self-healing join" task).
+# node-bootstrap renders a plan-time-only cloud-init payload now (no live connection,
+# no run to wait for), so there is no ordering concern here beyond what RKE2's own
+# join retry already absorbs: a sibling starting concurrently with genesis just waits
+# out genesis's install via its own connection retry, the same way a worker retries
+# its join target. Ordering *among* the additional nodes themselves (the real
+# constraint — one non-voting etcd learner at a time) is handled by node-bootstrap's
+# own staggered, self-healing join-race retry inside bootstrap.sh.
 module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
   source = "../node-bootstrap"
 
-  node_provider            = "aws"
-  ansible_playbook_path    = var.ansible_playbook_path
-  cluster_name             = var.cluster_name
-  node_name                = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
-  k8s_version              = var.k8s_version
-  cluster_fqdn             = local.cluster_fqdn
-  cluster_fqdn_suffix      = local.fqdn_suffix
-  node_role                = "server-join"
-  control_plane_taint      = local.control_plane_taint
-  cni                      = local.effective_cni
-  cilium_operator_replicas = local.effective_cilium_operator_replicas
-  registration_address     = local.registration_address
-  extra_tls_sans           = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  cluster_token            = var.cluster_token
-  trusted_ca_pem           = var.trusted_ca_pem
-  registry_mirror_url      = var.registry_mirror_url
-  cert_mode                = var.cert_mode
-  extra_tags               = var.extra_tags
+  cluster_name         = var.cluster_name
+  node_name            = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
+  cluster_fqdn         = local.cluster_fqdn
+  cluster_fqdn_suffix  = local.fqdn_suffix
+  node_role            = "server-join"
+  control_plane_taint  = local.control_plane_taint
+  cni                  = local.effective_cni
+  registration_address = local.registration_address
+  extra_tls_sans       = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  cluster_token        = var.cluster_token
+  trusted_ca_pem       = var.trusted_ca_pem
+  registry_mirror_url  = var.registry_mirror_url
+  cert_mode            = var.cert_mode
+  extra_tags           = var.extra_tags
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
   # first server only — node-bootstrap also enforces this at the task level.
-
-  ansible_connection_vars = {
-    ansible_connection          = "amazon.aws.aws_ssm"
-    ansible_aws_ssm_instance_id = aws_instance.control_plane_additional[each.key].id
-    ansible_aws_ssm_region      = var.aws_region
-    ansible_aws_ssm_bucket_name = aws_s3_bucket.ansible_ssm.id
-    # Pinned for the same reason as module.node_bootstrap's identical block above.
-    ansible_python_interpreter = "/usr/bin/python3"
-  }
 }
 
 resource "aws_instance" "control_plane_additional" {
@@ -319,7 +244,7 @@ resource "aws_instance" "control_plane_additional" {
     tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}-root" })
   }
 
-  user_data_base64            = base64gzip(local.connectivity_user_data)
+  user_data_base64            = base64gzip(local.combined_user_data[each.key])
   user_data_replace_on_change = true
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}" })
@@ -554,7 +479,7 @@ resource "aws_instance" "control_plane" {
     tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-root" })
   }
 
-  user_data_base64            = base64gzip(local.connectivity_user_data)
+  user_data_base64            = base64gzip(local.combined_user_data["0"])
   user_data_replace_on_change = true # disposable nodes: replace on bootstrap change
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}" })
