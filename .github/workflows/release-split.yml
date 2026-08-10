@@ -24,7 +24,7 @@ env:
 jobs:
   release-split-proxmox:
     runs-on: ubuntu-latest
-    container: ghcr.io/bbaliyan/kube-devenv:0.1.6
+    container: ghcr.io/bbaliyan/kube-devenv:0.7.0
     defaults:
       run:
         shell: bash
