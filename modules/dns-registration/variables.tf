@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 variable "enabled" {
-  description = "Whether to actually publish the record. false is a no-op (no resource created) — lets a caller decide at plan time not to register DNS without wrapping this module call in count/for_each, which this module cannot accept alongside depends_on (see the caller's own provider \"dns\" block for why)."
+  description = "Whether to publish the record. false is a no-op (no resource created) — lets a caller skip DNS registration without wrapping this module call in count/for_each, which it can't accept alongside depends_on (see the caller's provider \"dns\" block for why)."
   type        = bool
   default     = true
 }

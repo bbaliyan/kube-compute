@@ -1,18 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 locals {
-  # Same formula as proxmox-control-plane's/proxmox-node-pool's own
-  # identical local — needed here too because this module now owns the
-  # dns provider both of them used to self-configure (see Task 3b).
+  # Same formula as proxmox-control-plane's/proxmox-node-pool's own local —
+  # needed here too since this module now owns the dns provider both used to
+  # self-configure.
   tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
 
-  # kube-platform's own bootstrap chart gates deploying the cluster-autoscaler
-  # Argo CD Application on this Helm value (bootstrap/templates/
-  # cluster-autoscaler-app.yaml) — this module is the one that actually owns
-  # cluster_autoscaler_enabled, so it injects the parameter via
-  # node-bootstrap's existing generic platform_extra_helm_parameters map
-  # (see node-bootstrap/main.tf's platform_app_yaml local for why the
-  # dedicated hardcoded parameter was removed there).
+  # kube-platform's bootstrap chart gates the cluster-autoscaler Argo CD
+  # Application on this Helm value. This module owns
+  # cluster_autoscaler_enabled, so it injects it via node-bootstrap's generic
+  # platform_extra_helm_parameters map rather than a dedicated parameter.
   platform_extra_helm_parameters = merge(
     var.platform_extra_helm_parameters,
     { clusterAutoscalerEnabled = tostring(var.cluster_autoscaler_enabled) },
@@ -20,9 +17,9 @@ locals {
 
   # ---- cluster-autoscaler-workers.yaml (Cluster + Secret + ProxmoxMachineTemplate + MachineDeployment) ----
   # See templates/cluster-autoscaler-workers.yaml.tftpl for field-source
-  # commentary. vm_memory_mb -> memoryMiB unit mismatch (research spike §3):
-  # ProxmoxMachineTemplate wants MiB, this module's/proxmox-node-pool's own
-  # convention is MB, so the conversion happens here, not in the template.
+  # commentary. vm_memory_mb -> memoryMiB: ProxmoxMachineTemplate wants MiB,
+  # this module's/proxmox-node-pool's own convention is MB, so the conversion
+  # happens here, not in the template.
   cluster_autoscaler_bundle_yaml = !var.cluster_autoscaler_enabled ? "" : templatefile(
     "${path.module}/templates/cluster-autoscaler-workers.yaml.tftpl",
     {
@@ -47,19 +44,16 @@ locals {
 
   # Deliberately NOT module.control_plane.cluster_fqdn/cluster_ip: this
   # bundle's Secret is written into the CONTROL PLANE's own cloud-init
-  # (genesis_apply_manifests, below), so if this module's registration
-  # address referenced either of those two outputs, it would create a
-  # dependency cycle — cluster_ip in particular resolves from the
-  # control-plane VM resource itself, which needs its own cloud-init (the
-  # thing this bundle feeds into) rendered first. Instead this mirrors
-  # proxmox-node-pool's own default exactly (see that module's
-  # registration_address variable doc): the genesis node's single-target
-  # self-registered DNS name, computed here from this module's own
-  # cluster_domain/dns_server_address variables, no control_plane output
-  # involved. Requires DNS registration to be configured (both variables
-  # set) — validated below. cluster_fqdn (the round-robin api.* record) is
-  # deliberately avoided even where it wouldn't cycle, per that same
-  # variable's doc: round-robin causes 10-20+ minute join hangs.
+  # (genesis_apply_manifests, below), so referencing either output would
+  # create a dependency cycle (cluster_ip resolves from the control-plane VM
+  # resource, which needs this bundle's cloud-init rendered first). Instead
+  # this mirrors proxmox-node-pool's own default: the genesis node's
+  # single-target self-registered DNS name, computed from this module's own
+  # cluster_domain/dns_server_address, no control_plane output involved.
+  # Requires both variables set — validated below. cluster_fqdn (the
+  # round-robin api.* record) is avoided even where it wouldn't cycle: it
+  # causes 10-20+ minute join hangs (see proxmox-node-pool's
+  # registration_address doc).
   cluster_autoscaler_registration_address = var.cluster_domain != null && var.dns_server_address != null ? (
     "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}"
   ) : null
@@ -67,24 +61,21 @@ locals {
 
 # Shared worker cloud-init payload for every CAPI-provisioned autoscaler
 # Machine: rendered once, referenced by every MachineDeployment replica via
-# the same Secret (Machine.spec.bootstrap.dataSecretName) — not a full
-# node-bootstrap instantiation per replica the way proxmox-node-pool's own
-# static workers get one each, since CAPMOX/cluster-autoscaler (not this
-# module) creates the actual VMs. set_hostname = false: this payload is
-# shared byte-for-byte across every replica, so it cannot carry a
-# node-unique hostname — see node-bootstrap's set_hostname variable for the
-# still-unverified assumption this relies on (CAPMOX's own per-VM cloud-init
-# metadata supplying a usable hostname instead). node_name is still required
-# by node-bootstrap's interface even though set_hostname = false means it is
-# never written into cloud-config: purely a Terraform-internal label here,
-# not a real hostname, so it does not need to be unique on disk.
-# agent_token_fetch_command mirrors proxmox-node-pool's own module
-# "node_bootstrap" call exactly (see that module's identical local) — every
-# worker replica in a pool already gets byte-identical values for it, which
-# is exactly why a single shared render works for CAPI-provisioned replicas
-# too. cluster_agent_token itself is safe to read from module.control_plane
-# here (unlike cluster_fqdn/cluster_ip) — it comes from a random_password
-# resource with no dependency on the control plane's own cloud-init render.
+# the same Secret (Machine.spec.bootstrap.dataSecretName) — not one
+# node-bootstrap instantiation per replica, since CAPMOX/cluster-autoscaler
+# (not this module) creates the actual VMs. set_hostname = false: the payload
+# is shared byte-for-byte across replicas, so it cannot carry a node-unique
+# hostname — see node-bootstrap's set_hostname variable for the still-
+# unverified assumption this relies on (CAPMOX's per-VM cloud-init metadata
+# supplying a usable hostname instead). node_name is still required by the
+# interface even though set_hostname = false means it's never written to
+# cloud-config — purely a Terraform-internal label, need not be unique.
+# agent_token_fetch_command mirrors proxmox-node-pool's own module call:
+# every worker replica in a pool gets byte-identical values, which is why a
+# single shared render works here too. cluster_agent_token is safe to read
+# from module.control_plane (unlike cluster_fqdn/cluster_ip) — it comes from
+# a random_password resource with no dependency on the control plane's own
+# cloud-init render.
 module "cluster_autoscaler_worker_bootstrap" {
   source = "../node-bootstrap"
   count  = var.cluster_autoscaler_enabled ? 1 : 0
@@ -101,15 +92,12 @@ module "cluster_autoscaler_worker_bootstrap" {
 }
 
 # Module calls don't support lifecycle preconditions (only resources/data
-# sources do). A plain `check` block only warns, not blocks, at apply time
-# (real gap: a misconfigured cluster_autoscaler_enabled = true would apply
-# cleanly with a broken join address baked into every worker's Secret,
-# discoverable only in a warning scrolled past during apply). terraform_data
-# is a real, provider-less resource that DOES support lifecycle
-# preconditions, so it's used here purely to get a hard-stop precondition,
-# matching proxmox-node-pool's own registration_address precondition in
-# strictness even though this module has no other resources of its own to
-# attach one to.
+# sources do), and a plain `check` block only warns rather than blocks at
+# apply time (a misconfigured cluster_autoscaler_enabled = true would apply
+# cleanly with a broken join address baked into every worker's Secret).
+# terraform_data is a provider-less resource that DOES support lifecycle
+# preconditions, used here purely to get a hard-stop precondition, matching
+# proxmox-node-pool's own registration_address precondition in strictness.
 resource "terraform_data" "cluster_autoscaler_registration_address_configured" {
   count = var.cluster_autoscaler_enabled ? 1 : 0
 

@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
-  # Naming convention only, no shared resource — proxmox-node-pool computes the
-  # identical formula independently from its own var.cluster_name so it can
-  # reference this module's ipset by name ("+<name>") with zero Terraform
-  # dependency between the two sibling modules. This module still owns the
-  # ipset *resources* themselves (below); node-pool never creates one.
+  # Naming convention only — node-pool computes the identical formula from its own
+  # cluster_name to reference this module's ipset by name, with no Terraform
+  # dependency between the two modules. This module owns the ipset resources;
+  # node-pool never creates one.
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
   etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
 
@@ -13,27 +12,22 @@ locals {
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
 
-  # The join address for this cluster's own additional-CP joins (module.node_bootstrap_additional
-  # below). A single-target DNS name — distinct from cluster_fqdn's round-robin
-  # api.* record — genesis self-registers via node-bootstrap's dns_self_register_*
-  # inputs (wired below) as soon as it knows its own IP, so this is a plain
-  # zero-resource-dependency string whenever DNS is configured; falls back to genesis's
-  # raw IP (a real resource dependency, unavoidable without DNS) only when
+  # Join address for additional-CP joins (module.node_bootstrap_additional below). A
+  # single-target DNS name — distinct from cluster_fqdn's round-robin api.* record.
+  # Genesis self-registers this via node-bootstrap's dns_self_register_* inputs as
+  # soon as it knows its own IP, so it's a zero-dependency string when DNS is
+  # configured; falls back to genesis's raw IP (a real resource dependency) when
   # dns_server_address is null.
   genesis_dns_name = local.has_domain ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
-  # Deliberately NOT local.cp_ips["0"]: local.cp_ips is a single merged map
-  # built from BOTH proxmox_virtual_environment_vm.control_plane AND
-  # proxmox_virtual_environment_vm.control_plane_additional (all instances),
-  # so any reference to it — even just the "0" key — makes the referencing
-  # expression depend on the whole control_plane_additional resource in
-  # OpenTofu's (resource-grained, not key-grained) dependency graph. Once
-  # Task 5 wired each additional node's own cloud-init to
-  # module.node_bootstrap_additional's output (which needs
-  # registration_address), that closed a real cycle: control_plane_additional
-  # -> local.cp_ips -> registration_address -> node_bootstrap_additional ->
-  # node_init_additional -> control_plane_additional. genesis_ip below reads
-  # only proxmox_virtual_environment_vm.control_plane (never _additional),
-  # producing the identical value without the cycle.
+  # Deliberately NOT local.cp_ips["0"]: cp_ips is a merged map built from BOTH
+  # control_plane and control_plane_additional resources, so referencing it — even
+  # just the "0" key — makes OpenTofu's (resource-grained) dependency graph depend on
+  # the whole control_plane_additional resource. That closed a real cycle once
+  # node_bootstrap_additional's registration_address started depending on this value:
+  # control_plane_additional -> cp_ips -> registration_address ->
+  # node_bootstrap_additional -> node_init_additional -> control_plane_additional.
+  # genesis_ip reads only control_plane (never _additional), producing the same value
+  # without the cycle.
   genesis_ip = local.static_ips ? split("/", var.control_plane_ip_addresses[0])[0] : try(
     [for ip in flatten(proxmox_virtual_environment_vm.control_plane.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
   )
@@ -41,82 +35,65 @@ locals {
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")
-  # Cilium's operator replica count is no longer a per-cluster knob here:
-  # kube-image bakes the genesis manifest with a fixed replicas: 1 (matching
-  # kube-platform's own cilium-app.yaml default, which has no topology signal
-  # of its own either and would overwrite any other value within moments of
-  # Argo CD's first selfHeal reconcile anyway — this was already the
-  # effective end state on every topology, just with an extra transient
-  # Pending pod on a multi-node genesis beforehand).
+  # Cilium operator replica count isn't a per-cluster knob here: kube-image bakes the
+  # genesis manifest with a fixed replicas: 1, matching kube-platform's own
+  # cilium-app.yaml default (which Argo CD's selfHeal would overwrite anyway) — already
+  # the effective end state on every topology.
 
   # DNS registration (RFC2136): publishes cluster_fqdn -> every resolved control-plane
   # IP, the HA registration/access endpoint (Proxmox has no load-balancer/VIP
-  # primitive). Gated on both a domain (cluster_fqdn must exist) and a DNS server
-  # being supplied — genuinely optional per this module's "DNS is optional and
-  # name-only" rule.
+  # primitive). Gated on both a domain and a DNS server being supplied — optional per
+  # this module's "DNS is optional and name-only" rule.
   dns_registration_enabled = local.has_domain && var.dns_server_address != null
   dns_zone                 = local.has_domain ? "${trimsuffix(var.cluster_domain, ".")}." : null
   dns_record_name          = "api.${var.cluster_name}"
 
-  # Wildcard ingress record (*.<cluster_name>.<cluster_domain>): only this
-  # module's job on an all_in_one cluster, where the control-plane node is
-  # also the only place ingress can run. On a dedicated_control_plane cluster
-  # the control plane is tainted — ingress runs on proxmox-node-pool's
-  # workers instead, so that module publishes the wildcard record itself,
-  # using its own worker IPs. Registering it here too for that case would
-  # both be wrong (points at the wrong nodes) and race node-pool's own write.
+  # Wildcard ingress record: only this module's job on an all_in_one cluster, where
+  # the control-plane node is the only place ingress can run. On a
+  # dedicated_control_plane cluster the control plane is tainted — proxmox-node-pool
+  # publishes the wildcard itself, against its own worker IPs. Registering it here too
+  # would point at the wrong nodes and race node-pool's write.
   wildcard_registration_enabled = local.dns_registration_enabled && var.cluster_type == "all_in_one"
   dns_wildcard_record_name      = "*.${var.cluster_name}"
 
-  # dns-registration's provider requires a fully-qualified (trailing-dot)
-  # TSIG key name, but DNS servers commonly configure key names without one
-  # (e.g. Technitium's own UI accepts a bare name like "kube-compute") —
-  # qualify here so the caller of this module doesn't need to know that
-  # provider-specific quirk. Idempotent whether or not var.tsig_key_name
-  # already ends in a dot. Only meaningful when dns_registration_enabled;
-  # coalesced to a harmless placeholder otherwise so the (unused) provider
-  # block below always has a syntactically valid value.
+  # dns-registration's provider requires a fully-qualified (trailing-dot) TSIG key
+  # name, but DNS servers commonly configure bare names (e.g. Technitium's UI). Qualify
+  # here so callers don't need to know this provider quirk. Idempotent either way;
+  # coalesced to a placeholder when unused so the (unused) provider block stays valid.
   tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
 
-  # One IP per control-plane node; index 0 is genesis. DHCP (control_plane_ip_addresses left
-  # null) works at any control_plane_count — every additional control-plane VM shares the
-  # same network_data_dhcp[0] content (see control_plane_additional's initialization block
-  # below), resolved individually post-apply via the Proxmox guest agent same as genesis.
+  # One IP per control-plane node; index 0 is genesis. DHCP works at any
+  # control_plane_count — every additional control-plane VM shares the same
+  # network_data_dhcp[0] content, resolved individually post-apply via the Proxmox
+  # guest agent same as genesis.
   static_ips  = var.control_plane_ip_addresses != null
   cp_ip_cidrs = local.static_ips ? var.control_plane_ip_addresses : []
 
   _dns_list = join(", ", var.dns_servers)
 
-  # Netplan v2 network-config, one per control-plane index. OpenTofu forbids heredocs inside
-  # ternaries, so both branches are precomputed and selected per-index below.
-  # "to: 0.0.0.0/0" (not Netplan's own "to: default" shorthand): AlmaLinux 9's
-  # stock cloud-init package doesn't parse the "default" keyword in a route's
-  # `to:` field (network_state.py's route normalizer expects a real
-  # address/CIDR there) — fails the whole init-local stage with "Address
-  # default is not a valid ip address", silently falling back to
-  # NetworkManager's own DHCP profile instead of ever raising an apply-time
-  # error. The explicit CIDR form is understood by every cloud-init version.
+  # Netplan v2 network-config, one per control-plane index. OpenTofu forbids heredocs
+  # inside ternaries, so both branches are precomputed and selected per-index below.
   #
-  # "eth0" as the ethernets key directly (not a "primary" alias + match:
-  # {name: "en*"}): verified this does not work on AlmaLinux 9 — the image's kernel cmdline sets
-  # net.ifnames=0 biosdevname=0, so its NIC is always legacy-named eth0/eth1,
-  # never systemd-predictable ens*/enp* (the pattern "en*" was written for).
-  # Separately, cloud-init's RHEL/NetworkManager renderer doesn't honor
-  # `match` at all — it writes the config's key verbatim as DEVICE=, so a
-  # "primary" key produced an unbindable ifcfg-primary (DEVICE=primary,
-  # no real interface has that name) that NetworkManager silently left
-  # inactive, never erroring, while its own auto-DHCP profile stayed up.
+  # "to: 0.0.0.0/0" not Netplan's "to: default": AlmaLinux 9's stock cloud-init doesn't
+  # parse "default" in a route's `to:` field — fails init-local with "Address default
+  # is not a valid ip address" and silently falls back to NetworkManager's own DHCP
+  # profile, no apply-time error. Explicit CIDR is understood by every cloud-init
+  # version.
   #
-  # NOT independently re-verified against AlmaLinux 10 (the template this
-  # module now points at) — both bugs live in cloud-init/NetworkManager
-  # internals and the GenericCloud kernel cmdline convention, not RKE2, so
-  # they're likely unchanged, but that's an assumption. Both workarounds are
-  # a superset of what stock config would need (explicit CIDR strictly
-  # generalizes "default"; keying "eth0" directly only breaks if AlmaLinux 10
-  # switched to predictable ens*/enp* naming) — confirm on a real Proxmox
-  # apply against AlmaLinux 10 before relying on this in production, and
-  # revert to a "match: {name: en*}" primary key if it turns out AlmaLinux 10
-  # NIC naming did change.
+  # "eth0" as the ethernets key directly, not a "primary" alias + match: {name: "en*"}:
+  # verified this doesn't work on AlmaLinux 9 — its kernel cmdline sets net.ifnames=0
+  # biosdevname=0, so its NIC is always legacy eth0/eth1, never predictable ens*/enp*.
+  # Separately, cloud-init's RHEL/NetworkManager renderer ignores `match` entirely,
+  # writing the key verbatim as DEVICE= — so a "primary" key produced an unbindable
+  # ifcfg-primary that NetworkManager silently left inactive, never erroring, while its
+  # own auto-DHCP profile stayed up.
+  #
+  # NOT independently re-verified against AlmaLinux 10 (the template this module now
+  # points at) — both bugs live in cloud-init/NetworkManager internals, not RKE2, so
+  # likely unchanged, but that's an assumption. Both workarounds are a superset of
+  # stock config's needs — confirm on a real Proxmox apply against AlmaLinux 10 before
+  # relying on this in production, and revert to a "match: {name: en*}" primary key if
+  # AlmaLinux 10's NIC naming did change.
   network_data_static = { for i, cidr in local.cp_ip_cidrs : i => <<-EOT
     version: 2
     ethernets:
@@ -139,13 +116,12 @@ locals {
     EOT
 }
 
-# ---- Join tokens: generated here (not in a shared cluster-facts unit) — this module is
-# the only Proxmox unit that ever needs the server token, and proxmox-node-pool takes
-# the agent token as a plain input (wired by the consumer's Terragrunt config from this
-# module's own cluster_agent_token output), so there is no other Terraform unit for a
-# shared pre-generation step to save. Two tokens, least privilege: the server token
-# grants joining etcd/control-plane; the agent token is all a worker ever receives, so a
-# compromised worker cannot rejoin as a control-plane/etcd member.
+# ---- Join tokens: generated here, not a shared cluster-facts unit — this is the only
+# Proxmox unit that ever needs the server token, and node-pool takes the agent token as
+# a plain input wired via Terragrunt, so there's no other unit to share generation
+# with. Two tokens, least privilege: the server token grants joining etcd/control-plane;
+# the agent token is all a worker ever gets, so a compromised worker can't rejoin as
+# control-plane/etcd.
 resource "random_password" "server_token" {
   length  = 48
   special = false
@@ -156,7 +132,7 @@ resource "random_password" "agent_token" {
   special = false
 }
 
-# ---- Cluster firewall: an ipset scoped to the cluster's L2 subnet CIDR (see plan design note 2) ----
+# ---- Cluster firewall: ipset scoped to the cluster's L2 subnet CIDR ----
 resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
   name    = local.cluster_ipset_name
   comment = "kube-compute ${var.cluster_name}: east-west traffic among cluster members (subnet-scoped — see module README)."
@@ -261,15 +237,11 @@ module "node_bootstrap" {
   tsig_key_secret    = var.tsig_key_secret
 }
 
-# node-bootstrap no longer executes anything, so there is no run to order
-# against: this is a pure render, and both calls are plan-time-only. The
-# ordering property the old comment defended still holds, now enforced by the
-# node itself rather than by Terraform — genesis publishes its
-# dns-self-register record early in its own first boot, and a sibling that
-# resolves registration_address before that lands is absorbed by the join-race
-# retry loop in bootstrap.sh, which already tolerates a not-yet-reachable
-# target. RKE2's server process retries its `server:` line the same way its
-# agent process retries a worker's join target.
+# node-bootstrap no longer executes anything, so there's no run to order against —
+# this is a pure render, plan-time only. Ordering is now enforced by the node itself:
+# genesis publishes its dns-self-register record early in first boot, and a sibling
+# that resolves registration_address before that lands is absorbed by bootstrap.sh's
+# join-race retry loop, same as RKE2's own server/agent join retries.
 module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
@@ -283,12 +255,10 @@ module "node_bootstrap_additional" {
   node_role           = "server-join"
   control_plane_taint = local.control_plane_taint
   cni                 = local.effective_cni
-  # local.registration_address (genesis's self-registered DNS name when DNS is
-  # configured, its raw IP otherwise) — see the no-depends_on comment above
-  # module.node_bootstrap_additional for why genesis's dns-self-register task
-  # publishing this name before a sibling resolves it doesn't need an explicit
-  # Terraform dependency. No round-robin race here (see cluster_fqdn's own doc)
-  # — this is always a single target.
+  # local.registration_address: genesis's self-registered DNS name when DNS is
+  # configured, its raw IP otherwise — see the no-depends_on comment above for why
+  # this doesn't need an explicit Terraform dependency. Always a single target (no
+  # round-robin race — see cluster_fqdn's own doc).
   registration_address = local.registration_address
   extra_tls_sans       = compact([local.wildcard_name, local.genesis_dns_name])
   cluster_token        = random_password.server_token.result
@@ -301,12 +271,10 @@ module "node_bootstrap_additional" {
 }
 
 # ---- Per-node cloud-init: node-bootstrap's full lean payload ----
-# This subsumes the hostname-only snippet that used to live here. Hostname is
-# now one key inside node-bootstrap's own cloud-config, alongside the RKE2
-# config/registries/CA/manifest write_files and the runcmd that starts the
-# bootstrap script — one payload, one place, no chance of the two drifting.
-# vendor_data (SSH keys + qemu-guest-agent) and network_data are unrelated to
-# RKE2 and stay exactly as they were.
+# Subsumes the old hostname-only snippet — hostname is now one key inside
+# node-bootstrap's own cloud-config, alongside the RKE2 config/registries/CA/manifest
+# write_files and the bootstrap runcmd, so the two can't drift. vendor_data (SSH keys +
+# qemu-guest-agent) and network_data are unrelated to RKE2 and unchanged.
 resource "proxmox_virtual_environment_file" "node_init" {
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
@@ -334,13 +302,10 @@ resource "proxmox_virtual_environment_file" "node_init_additional" {
 }
 
 # ---- DNS registration: publishes cluster_fqdn -> every control-plane IP via RFC2136 ----
-# depends_on the control-plane VMs rather than node-bootstrap: node-bootstrap
-# is now a plan-time render with nothing to wait for. This is a real, accepted
-# semantic change — the api.* record now appears once the VMs exist, not once
-# the API server is actually answering, because cloud-init runs asynchronously
-# after Terraform has already returned and nothing in Terraform can observe it
-# finishing. A client that resolves the name too early retries; RKE2's own
-# join paths already tolerate an unreachable target.
+# depends_on the VMs, not node-bootstrap (a pure plan-time render now) — the record
+# appears once VMs exist, not once the API server actually answers, since cloud-init
+# runs async after Terraform returns and can't be observed finishing. A client that
+# resolves too early retries; RKE2's own join paths tolerate an unreachable target.
 module "dns_registration" {
   source = "../dns-registration"
 
@@ -355,15 +320,9 @@ module "dns_registration" {
 }
 
 # ---- Wildcard DNS registration: publishes *.<cluster_name> -> the same IPs ----
-# Only on all_in_one clusters — see wildcard_registration_enabled above for why
-# a dedicated_control_plane cluster leaves this to proxmox-node-pool instead.
-# depends_on the control-plane VMs rather than node-bootstrap: node-bootstrap
-# is now a plan-time render with nothing to wait for. This is a real, accepted
-# semantic change — the api.* record now appears once the VMs exist, not once
-# the API server is actually answering, because cloud-init runs asynchronously
-# after Terraform has already returned and nothing in Terraform can observe it
-# finishing. A client that resolves the name too early retries; RKE2's own
-# join paths already tolerate an unreachable target.
+# Only on all_in_one clusters — see wildcard_registration_enabled above for why a
+# dedicated_control_plane cluster leaves this to proxmox-node-pool instead. Same
+# depends_on/async reasoning as dns_registration above.
 module "dns_registration_wildcard" {
   source = "../dns-registration"
 
@@ -430,11 +389,8 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     dedicated = var.vm_memory_mb
   }
 
-  # Full-clone a pre-baked kube-image template when one is supplied. full =
-  # true is NOT optional: a linked clone leaves every provisioned node
-  # permanently dependent on the template continuing to exist, which breaks the
-  # moment kube-image's prune-images.sh deletes an old build. Always an
-  # independent copy.
+  # full = true is not optional: a linked clone stays dependent on the template
+  # surviving, which breaks when kube-image's prune-images.sh deletes an old build.
   dynamic "clone" {
     for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
     content {
@@ -493,18 +449,13 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 }
 
 resource "proxmox_virtual_environment_vm" "control_plane_additional" {
-  # Deliberately NOT for_each = module.node_bootstrap_additional. It is no
-  # longer a real cycle — node_bootstrap_additional's registration_address
-  # resolves through local.genesis_ip, which (per the comment above it) was
-  # already narrowed to read only proxmox_virtual_environment_vm.control_plane,
-  # never control_plane_additional. (This resource still depends on
+  # Deliberately NOT for_each = module.node_bootstrap_additional. Not a real cycle:
+  # node_bootstrap_additional's registration_address resolves through local.genesis_ip,
+  # which (per the comment above it) reads only control_plane, never
+  # control_plane_additional. (This resource still depends on
   # module.node_bootstrap_additional transitively, via node_init_additional's
-  # initialization.user_data_file_id below — keying for_each off the module
-  # directly wouldn't add a NEW edge that isn't already there.) The reason to
-  # key for_each independently is simpler: this resource's index set is a pure
-  # function of var.control_plane_count, so there's no need to derive it from
-  # the module's own for_each keys just to get the same range back out.
-  # Same index range, computed independently so the two never entangle.
+  # user_data_file_id below.) for_each is keyed independently simply because this
+  # resource's index set is already a pure function of control_plane_count.
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
   name            = "${var.cluster_name}-cp-${each.key}"
@@ -531,11 +482,8 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
     dedicated = var.vm_memory_mb
   }
 
-  # Full-clone a pre-baked kube-image template when one is supplied. full =
-  # true is NOT optional: a linked clone leaves every provisioned node
-  # permanently dependent on the template continuing to exist, which breaks the
-  # moment kube-image's prune-images.sh deletes an old build. Always an
-  # independent copy.
+  # full = true is not optional: a linked clone stays dependent on the template
+  # surviving, which breaks when kube-image's prune-images.sh deletes an old build.
   dynamic "clone" {
     for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
     content {
@@ -573,10 +521,8 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
     datastore_id        = var.disk_datastore_id
     user_data_file_id   = proxmox_virtual_environment_file.node_init_additional[each.key].id
     vendor_data_file_id = proxmox_virtual_environment_file.vendor_data.id
-    # Same static/DHCP branch as the primary control_plane resource above
-    # (network_data is empty when static_ips is false — a DHCP HA cluster has
-    # no per-index entries there, just the one shared network_data_dhcp[0]
-    # content, identical for every control-plane node).
+    # Same static/DHCP branch as the primary control_plane resource above —
+    # network_data_dhcp[0] content is identical for every control-plane node.
     network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data[each.key].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
   }
 

@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Join-token flow: generated here directly (not in a separate cluster-facts-style
-# module) — matches proxmox-control-plane's own precedent of owning its join tokens
-# via random_password resources. Two tokens, least privilege: the server token grants
-# joining etcd/control-plane; the agent token is all a worker ever receives, so a
-# compromised worker cannot rejoin as a control-plane/etcd member.
+# Tokens owned here directly, matching proxmox-control-plane's precedent. Two tokens for
+# least privilege: server token joins etcd/control-plane; agent token is all a worker gets,
+# so a compromised worker can't rejoin as control-plane/etcd.
 resource "random_password" "server_token" {
   length  = 48
   special = false
@@ -15,28 +13,20 @@ resource "random_password" "agent_token" {
 }
 
 locals {
-  # AWS's own docs list AlmaLinux among AMIs that "likely" ship the SSM
-  # Agent pre-installed (Community/Marketplace AMIs, not AWS-guaranteed, can
-  # be present-but-not-running) — so this defensively enables/starts it
-  # rather than installing it; `|| true` tolerates the rare case it's
-  # genuinely absent. Kept independent of RKE2/node-bootstrap: SSM is this
-  # module's ongoing operator-access path (break-glass shell, verb-scripts —
-  # see node_control_ref below), not merely a bootstrap-time transport, so it
-  # stays enabled even though nothing runs live Ansible over it anymore.
+  # AlmaLinux community AMIs "likely" ship SSM Agent pre-installed but not guaranteed
+  # running, so this enables/starts it defensively (`|| true` covers the rare absent
+  # case). Independent of RKE2/node-bootstrap: SSM is this module's ongoing
+  # operator-access path (break-glass shell, verb-scripts — see node_control_ref below),
+  # not just a bootstrap-time transport.
   connectivity_user_data = <<-EOT
     #!/bin/bash
     systemctl enable --now amazon-ssm-agent 2>/dev/null || true
   EOT
 
-  # AWS accepts only one user_data string per instance. Cloud-init's own
-  # MIME multipart/mixed convention combines this AWS-only SSM-agent-enable
-  # script with node-bootstrap's #cloud-config payload without this module
-  # needing to know node-bootstrap's internal cloud-config shape (decoding
-  # and re-merging the YAML would create exactly that coupling). Every
-  # control-plane node — genesis and each additional server — gets its own
-  # combined document, keyed the same way the per-node module calls below
-  # already are ("0" for genesis, node_bootstrap_additional's own keys for
-  # the rest).
+  # AWS accepts only one user_data string per instance. MIME multipart/mixed combines the
+  # SSM-enable script with node-bootstrap's #cloud-config payload without decoding/re-merging
+  # the YAML (which would couple this module to node-bootstrap's internal shape). Keyed like
+  # the module calls below: "0" for genesis, node_bootstrap_additional's keys for the rest.
   mime_boundary = "MIMEBOUNDARY"
 
   cloud_init_payloads = merge(
@@ -90,44 +80,39 @@ locals {
   # The map's own keys ARE the distinct AZs — no data source needed to discover them.
   distinct_control_plane_azs = var.control_plane_subnets != null ? sort(keys(var.control_plane_subnets)) : []
 
-  # One subnet id per control-plane node, cycling through the distinct AZs (round-robins if
-  # control_plane_count exceeds the number of distinct AZs available, e.g. 5 nodes in a 3-AZ
-  # region — the >= 3 AZ requirement below is still enforced regardless).
+  # One subnet per control-plane node, round-robin across distinct AZs (e.g. 5 nodes in a
+  # 3-AZ region); the >= 3 AZ requirement below is still enforced.
   control_plane_subnet_ids = var.control_plane_count > 1 && length(local.distinct_control_plane_azs) > 0 ? [
     for i in range(var.control_plane_count) :
     var.control_plane_subnets[local.distinct_control_plane_azs[i % length(local.distinct_control_plane_azs)]]
   ] : []
 
-  # Genesis keeps using the existing single-subnet resolution for control_plane_count = 1
-  # (byte-for-byte the same behavior as before this task); for HA it takes the first AZ slot.
-  # try() guards against an empty control_plane_subnet_ids list (e.g. control_plane_subnets = {}
-  # or zero AZs resolved) so evaluation fails via the precondition below with a clear message,
-  # not a raw index-out-of-range crash.
+  # control_plane_count = 1 keeps the single-subnet resolution unchanged; HA takes the first
+  # AZ slot. try() guards an empty control_plane_subnet_ids list so evaluation fails via the
+  # precondition below with a clear message, not a raw index-out-of-range crash.
   genesis_subnet_id = var.control_plane_count > 1 ? try(local.control_plane_subnet_ids[0], local.effective_subnet_id) : local.effective_subnet_id
 
-  # In HA mode, the module's VPC is derived from the control-plane subnets themselves — the
-  # single-node subnet_id/subnet_name fallback is otherwise unused once control_plane_count > 1,
-  # and deriving VPC from it independently risked creating security groups/the NLB target group
-  # in a different VPC than where the instances actually launch.
+  # HA mode derives VPC from the control-plane subnets themselves, not the single-node
+  # fallback (unused once control_plane_count > 1) — avoids creating SGs/the NLB target
+  # group in a different VPC than where instances actually launch.
   module_vpc_id = var.control_plane_count > 1 ? data.aws_subnet.control_plane_genesis[0].vpc_id : data.aws_subnet.selected.vpc_id
 
-  # Null for control_plane_count = 1 (no registration endpoint). For control_plane_count
-  # > 1, the shape depends on endpoint_mode: the NLB's DNS name (loadbalancer, the default), the
-  # shared Route53 record name (dns), or the consumer-supplied address verbatim (static).
+  # Null when control_plane_count = 1. Otherwise depends on endpoint_mode: NLB DNS name
+  # (loadbalancer, default), shared Route53 record (dns), or static_registration_address (static).
   registration_address = var.control_plane_count == 1 ? null : (
     var.endpoint_mode == "static" ? var.static_registration_address :
     var.endpoint_mode == "dns" ? local.dns_registration_name :
     try(aws_lb.control_plane[0].dns_name, null)
   )
 
-  # Cilium is the standard CNI regardless of topology (Canal/flannel's iptables/ipset
-  # dataplane is broken on AlmaLinux 10, this project's only supported OS — see
-  # node-bootstrap's cni variable). null means "use the default".
+  # Cilium is standard regardless of topology — Canal/flannel's iptables/ipset dataplane is
+  # broken on AlmaLinux 10 (this project's only supported OS; see node-bootstrap's cni
+  # variable). null = default.
   effective_cni = coalesce(var.cni, "cilium")
 
-  # dns mode's shared record name — distinct from cluster_fqdn (api.<...>), which is the
-  # kubeconfig/API-cert name; this is the join-time registration name. Null unless a domain is
-  # configured, enforced by the precondition on aws_instance.control_plane below.
+  # dns mode's shared record name, distinct from cluster_fqdn (the kubeconfig/API-cert
+  # name). Null unless a domain is configured; enforced by the precondition on
+  # aws_instance.control_plane below.
   dns_registration_name = local.has_domain ? "cp.${local.fqdn_suffix}" : null
 
   # All control-plane instances, keyed by the same "cp-N" suffix used in control_plane_node_refs,
@@ -153,13 +138,10 @@ resource "aws_ssm_parameter" "agent_token" {
 }
 
 # ---- Cluster security group: self-referencing, every cluster member (east-west) ----
-# All-protocol among members rather than pinning to today's CNI ports: this SG is
-# meant to outlive a CNI switch without an edit. Owned here (not a separate
-# cluster-facts-style module) since aws-node-pool attaches to it by real ID
-# (vpc_security_group_ids) — a hard AWS API dependency, unlike Proxmox's
-# name-based/existence-tolerant ipsets — and aws-control-plane's own VPC resolution
-# (local.module_vpc_id, with its default-VPC fallback) already covers what this SG
-# needs.
+# All-protocol among members (not pinned to today's CNI ports) so it outlives a CNI
+# switch. Owned here rather than a separate module since aws-node-pool attaches to it
+# by real ID (vpc_security_group_ids) — a hard AWS API dependency, unlike Proxmox's
+# name-based ipsets.
 resource "aws_security_group" "cluster" {
   name_prefix = "kube-compute-${var.cluster_name}-cluster-"
   description = "kube-compute ${var.cluster_name}: east-west traffic among cluster members only."
@@ -246,13 +228,11 @@ module "node_bootstrap" {
 }
 
 # ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
-# node-bootstrap renders a plan-time-only cloud-init payload now (no live connection,
-# no run to wait for), so there is no ordering concern here beyond what RKE2's own
-# join retry already absorbs: a sibling starting concurrently with genesis just waits
-# out genesis's install via its own connection retry, the same way a worker retries
-# its join target. Ordering *among* the additional nodes themselves (the real
-# constraint — one non-voting etcd learner at a time) is handled by node-bootstrap's
-# own staggered, self-healing join-race retry inside bootstrap.sh.
+# node-bootstrap renders a plan-time-only cloud-init payload (no live connection to wait
+# on), so ordering relies on RKE2's own join retry: a sibling starting alongside genesis
+# just retries its connection until genesis is ready. Ordering among the additional nodes
+# themselves (one non-voting etcd learner at a time) is handled by node-bootstrap's own
+# staggered join-race retry inside bootstrap.sh.
 module "node_bootstrap_additional" {
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
@@ -285,10 +265,8 @@ resource "aws_instance" "control_plane_additional" {
   vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
-  # hop_limit 3, not AWS's generally-documented 2: confirmed live that 2 isn't
-  # enough for a pod (not just the host) to complete an IMDSv2 token PUT
-  # through Cilium — see the genesis instance's metadata_options below for the
-  # full story.
+  # hop_limit 3, not AWS's generally-documented 2: confirmed live that 2 isn't enough for a
+  # pod's IMDSv2 token PUT to complete through Cilium — see the genesis instance below.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -316,9 +294,8 @@ resource "aws_instance" "control_plane_additional" {
 }
 
 # ---- Internal NLB fronting the control plane on 6443 (control_plane_count > 1, endpoint_mode = "loadbalancer" only) ----
-# No registration endpoint at all for control_plane_count = 1; an internal NLB is the
-# default HA mode on cloud (a floating VIP cannot cross AWS AZ boundaries). See endpoint_mode for
-# the dns/static alternatives, gated below.
+# No registration endpoint for control_plane_count = 1. Internal NLB is the default HA mode
+# on cloud (a floating VIP can't cross AZ boundaries); see endpoint_mode for dns/static.
 resource "aws_lb" "control_plane" {
   count              = var.control_plane_count > 1 && var.endpoint_mode == "loadbalancer" ? 1 : 0
   name_prefix        = "cp-lb-"
@@ -374,9 +351,9 @@ resource "aws_lb_target_group_attachment" "additional" {
 }
 
 # ---- dns endpoint mode: Route53 multivalue-answer records, one per control-plane node ----
-# Route53's public health-checker fleet cannot reach a private VPC IP directly, so each record's
-# health check is CLOUDWATCH_METRIC-type, backed by that instance's own EC2 status-check alarm —
-# the standard bridge for private-IP Route53 failover.
+# Route53's public health checkers can't reach a private VPC IP, so each health check is
+# CLOUDWATCH_METRIC-type, backed by that instance's own EC2 status-check alarm — the
+# standard bridge for private-IP Route53 failover.
 resource "aws_cloudwatch_metric_alarm" "control_plane_health" {
   for_each = var.control_plane_count > 1 && var.endpoint_mode == "dns" ? local.control_plane_instances : {}
 
@@ -501,10 +478,9 @@ resource "aws_iam_instance_profile" "node" {
 }
 
 # ---- The control-plane node (genesis: server-init) ----
-# control_plane_count additional nodes (server-join) are provisioned below in
-# aws_instance.control_plane_additional. The precondition here fails plan explicitly when
-# control_plane_count > 1 but fewer than 3 distinct AZs were resolved from control_plane_subnets,
-# rather than silently under-spreading the quorum.
+# Additional nodes (server-join) are provisioned below in aws_instance.control_plane_additional.
+# The precondition fails plan explicitly when control_plane_count > 1 but fewer than 3 distinct
+# AZs resolved, rather than silently under-spreading the quorum.
 resource "aws_instance" "control_plane" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
@@ -512,18 +488,12 @@ resource "aws_instance" "control_plane" {
   vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
-  # hop_limit 3, not the commonly-documented 2 (AWS's own docs say 2 is enough
-  # for "containerized applications" generally). Confirmed live on this
-  # cluster: with hop_limit 2, a pod's IMDSv2 token PUT completes its TCP
-  # handshake fine (proving basic pod<->host routing works — this isn't a
-  # masquerade/connectivity problem) but the token response itself never
-  # arrives ("Operation timed out ... 0 bytes received"). IMDSv2 deliberately
-  # caps that response's IP TTL to the configured hop_limit as an anti-SSRF
-  # control, and it's getting dropped as TTL-exceeded one hop short — Cilium's
-  # own veth + internal routing between a pod's netns and the host evidently
-  # costs 2 hops here, not the 1 hop AWS's generic guidance assumes for
-  # "a container". Mutable in place (not ForceNew on aws_instance) — no
-  # replacement needed to pick this up.
+  # hop_limit 3, not AWS's commonly-documented 2. Confirmed live: with hop_limit 2, a pod's
+  # IMDSv2 token PUT completes its TCP handshake (proving pod<->host routing works) but the
+  # token response never arrives ("Operation timed out ... 0 bytes received"). IMDSv2 caps
+  # that response's TTL to hop_limit as an anti-SSRF control, and it's dropped one hop
+  # short — Cilium's veth + pod-netns routing costs 2 hops here, not the 1 hop AWS's generic
+  # guidance assumes. Mutable in place (not ForceNew) — no replacement needed to pick this up.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -543,15 +513,13 @@ resource "aws_instance" "control_plane" {
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}" })
 
-  # Marks every currently-attached EBS volume (root + any CSI-provisioned data
-  # volumes) delete-on-termination right before the instance itself is
-  # destroyed, so AWS deletes them as part of termination — no dependency on
-  # the cluster's API server, kubectl, or SSM being reachable at destroy time.
+  # Marks every attached EBS volume (root + any CSI-provisioned data volumes)
+  # delete-on-termination right before the instance is destroyed, so AWS cleans them up
+  # without needing the API server/kubectl/SSM reachable at destroy time.
   #
-  # Destroy-time provisioners may only reference `self` (OpenTofu/Terraform
-  # rejects var./resource references here to avoid destroy-order cycles) —
-  # region is derived from self.availability_zone since var.aws_region isn't
-  # allowed.
+  # Destroy-time provisioners may only reference `self` (Terraform rejects var./resource
+  # references here to avoid destroy-order cycles) — region is derived from
+  # self.availability_zone since var.aws_region isn't allowed.
   provisioner "local-exec" {
     when       = destroy
     on_failure = continue
@@ -585,8 +553,8 @@ resource "aws_instance" "control_plane" {
 }
 
 # ---- Optional DNS convenience: wildcard A record in a Route53 zone you already own ----
-# Created ONLY when cluster_domain is set and a zone is resolvable (hosted_zone_name or hosted_zone_id). Otherwise the module owns no DNS;
-# register *.${cluster}.${domain} -> cluster_ip in your DNS of choice using the wildcard_dns_name output.
+# Created only when cluster_domain is set and a zone is resolvable. Otherwise register
+# *.${cluster}.${domain} -> cluster_ip yourself using the wildcard_dns_name output.
 resource "aws_route53_record" "wildcard" {
   count   = local.create_record ? 1 : 0
   zone_id = local.effective_zone_id

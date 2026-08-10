@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Cross-node OS-patch orchestrator, rendered by node-os-patch's own
-# orchestrator_script output. Plain SSH, no Ansible/Ansible-core dependency —
-# only `ssh`/`bash` on the machine that runs this.
+# Cross-node OS-patch orchestrator, rendered by node-os-patch's
+# orchestrator_script output. Plain SSH, no Ansible — only `ssh`/`bash` on
+# the machine that runs this.
 #
 # Patches control-plane nodes one at a time (etcd tolerates losing at most
-# one control-plane node at once), then worker nodes one at a time. For each
-# node: `dnf update -y` (retry + self-heal on transient dnf/rpm lock
-# contention), a `dnf needs-restarting -r` check, and — only if a reboot is
-# actually needed — a reboot, a wait for the node to come back on a new boot
+# one at once), then worker nodes one at a time. Per node: `dnf update -y`
+# (retry + self-heal on transient dnf/rpm lock contention), a
+# `dnf needs-restarting -r` check, and — only if a reboot is actually
+# needed — a reboot, a wait for the node to come back on a new boot
 # (compares /proc/sys/kernel/random/boot_id before/after), then a wait for
-# the node's RKE2 systemd unit to report active (non-fatal if it doesn't
-# within the wait window — the run continues rather than aborting the whole
-# rollout over one slow node).
+# the RKE2 systemd unit to report active (non-fatal if it doesn't — the run
+# continues rather than aborting the rollout over one slow node).
 #
-# Connects as the same account/key node-bootstrap itself already uses on
-# Proxmox (a deliberate, evidenced exception to this project's usual
-# no-SSH stance) — this orchestrator is Proxmox-only, matching every
-# provider this project's node-os-patch composition currently targets.
+# Connects via SSH for day-2 guest access only (node-bootstrap itself never
+# connects to the node) — a deliberate, evidenced exception to this
+# project's usual no-SSH stance. Proxmox-only, matching every provider this
+# composition currently targets.
 #
 # Usage: bash <(tofu output -raw orchestrator_script)
 #    or: tofu output -raw orchestrator_script > upgrade-os.sh && bash upgrade-os.sh

@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# Resource-less "data module": renders the orchestrator script, but creates
-# nothing and runs nothing itself. OS
-# patching is an operator-triggered action, not a desired-state resource —
-# it must never fire just because an unrelated `tofu apply` touched this
-# module's inputs, the way node-bootstrap's own null_resource does for
-# one-time provisioning. The caller runs the rendered script themselves
-# (`bash <(tofu output -raw orchestrator_script)`), on whatever schedule
-# they choose.
+# Resource-less "data module": renders the orchestrator script but creates
+# and runs nothing itself. OS patching is operator-triggered, not a
+# desired-state resource — it must never fire just because an unrelated
+# `tofu apply` touched this module's inputs. The caller runs the rendered
+# script themselves (`bash <(tofu output -raw orchestrator_script)`), on
+# whatever schedule they choose.
 
 locals {
   orchestrator_script = templatefile("${path.module}/templates/upgrade-os.sh.tftpl", {

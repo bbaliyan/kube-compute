@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
   # Naming convention only, computed independently from proxmox-control-plane's
-  # identical formula — see that module's matching local for why there is no
-  # shared module/output for this instead. This pool only ever references the
-  # cluster ipset by name; it never creates one.
+  # identical formula (see that module for why there's no shared output). This pool
+  # only references the ipset by name; it never creates one.
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
 
   static_ips = var.worker_ip_addresses != null
@@ -16,19 +15,15 @@ locals {
   dns_zone                 = var.cluster_domain != null ? "${trimsuffix(var.cluster_domain, ".")}." : null
   dns_wildcard_record_name = "*.${var.cluster_name}"
 
-  # Same formula as proxmox-control-plane's identical local, passed to
-  # node-bootstrap below so a worker's cloud-init sets a real fqdn (not just
-  # hostname). Without this, cloud-init's cc_set_hostname has only a bare
-  # hostname key (no domain) to work with; on this distro it then prefers a
-  # derived fqdn over the literal hostname, and since there's no domain to
-  # derive one from, it falls back to reflecting the VM's own current (still
-  # template-baked) hostname back at itself -- so every worker clone from the
-  # same template ends up applying that SAME baked hostname instead of its
-  # own unique node_name. RKE2 registers nodes by hostname, so this collided
-  # every worker in a pool onto the exact same hostname; at most one can hold
-  # that registration, and the rest loop forever rejected with "Node password
-  # rejected, duplicate hostname" -- confirmed on a real 3-worker Proxmox
-  # apply, where all three workers stayed stuck (none had won the race yet).
+  # Same formula as proxmox-control-plane's identical local, passed to node-bootstrap
+  # so a worker's cloud-init sets a real fqdn, not just hostname. Without it,
+  # cc_set_hostname has only a bare hostname (no domain); this distro then prefers a
+  # derived fqdn over the literal hostname, and with no domain to derive one from,
+  # falls back to reflecting the VM's own template-baked hostname — so every worker
+  # cloned from the same template applies that SAME hostname instead of its own
+  # node_name. RKE2 registers by hostname, so all workers collided on one hostname;
+  # only one could hold the registration, the rest looped forever on "Node password
+  # rejected, duplicate hostname" — confirmed on a real 3-worker Proxmox apply.
   fqdn_suffix = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
 
   # Same fully-qualified-TSIG-key-name quirk as proxmox-control-plane — see
@@ -39,11 +34,10 @@ locals {
   # cloud-init snippet (no secret store to fetch from), unlike AWS's SSM fetch command.
   agent_token_fetch_command = "echo '${var.cluster_agent_token}'"
 
-  # Every unit computes this independently — see proxmox-control-plane's identical
-  # local for the full reasoning. Falls back to var.registration_address verbatim when
-  # the caller passed one explicitly (the no-DNS case). Guards cluster_domain == null
-  # the same way proxmox-control-plane's has_domain/genesis_dns_name locals do, so a
-  # null cluster_domain resolves to null here instead of crashing trimsuffix().
+  # Computed independently — see proxmox-control-plane's identical local for the full
+  # reasoning. effective_registration_address below falls back to this when the caller
+  # didn't pass var.registration_address explicitly (the no-DNS case). Guards
+  # cluster_domain == null so this resolves to null instead of crashing trimsuffix().
   genesis_dns_name = var.cluster_domain != null ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
 
   effective_registration_address = var.registration_address != null ? var.registration_address : (
@@ -51,22 +45,18 @@ locals {
   )
 
   _dns_list = join(", ", var.dns_servers)
-  # "to: 0.0.0.0/0" (not Netplan's own "to: default" shorthand): AlmaLinux 9's
-  # stock cloud-init package doesn't parse the "default" keyword in a route's
-  # `to:` field — fails the whole init-local stage and silently falls back to
-  # NetworkManager's own DHCP profile instead of the static IP. See
-  # proxmox-control-plane's matching local for the full explanation.
+  # "to: 0.0.0.0/0" not Netplan's "to: default": AlmaLinux 9's stock cloud-init doesn't
+  # parse "default" in a route's `to:` field — fails init-local and falls back to
+  # NetworkManager's DHCP profile instead of the static IP. See proxmox-control-plane's
+  # matching local for the full explanation.
   #
-  # "eth0" as the ethernets key directly (not a "primary" alias + match:
-  # {name: "en*"}): AlmaLinux 9's kernel cmdline sets net.ifnames=0
-  # biosdevname=0, so its NIC is always legacy-named eth0/eth1, never
-  # systemd-predictable ens*/enp*. Separately, cloud-init's RHEL/
-  # NetworkManager renderer doesn't honor `match` at all — it writes the
-  # config's key verbatim as DEVICE=, so "primary" produced an unbindable
-  # connection NetworkManager silently left inactive. See
-  # proxmox-control-plane's matching local for the full explanation, including
-  # the caveat that this hasn't been independently re-verified against
-  # AlmaLinux 10 (the template this module now points at).
+  # "eth0" as the ethernets key directly, not a "primary" alias + match: {name: "en*"}:
+  # AlmaLinux 9's kernel cmdline sets net.ifnames=0 biosdevname=0, so NICs are always
+  # legacy eth0/eth1, never predictable ens*/enp*. cloud-init's RHEL/NetworkManager
+  # renderer also ignores `match` entirely, writing the key verbatim as DEVICE= — so
+  # "primary" produced an unbindable connection left silently inactive. Not
+  # independently re-verified against AlmaLinux 10 (the template this module now
+  # targets) — see proxmox-control-plane's matching local.
   network_data_static = { for i in range(var.desired_count) : tostring(i) => local.static_ips ? <<-EOT
     version: 2
     ethernets:
@@ -140,13 +130,11 @@ resource "proxmox_virtual_environment_file" "network_data" {
 }
 
 resource "proxmox_virtual_environment_vm" "worker" {
-  # Not for_each = module.node_bootstrap. Post-cutover, module.node_bootstrap
-  # never reads local.worker_ips (or anything else derived from this VM) at
-  # all — a worker's registration_address/agent_token_fetch_command come from
-  # the caller, not from its own IP — so there is no cycle to avoid here
-  # anymore. Kept as its own identical index range anyway: this resource's key
-  # set is a pure function of var.desired_count and doesn't need to chain
-  # through a module output to get it.
+  # Not for_each = module.node_bootstrap. Post-cutover, node_bootstrap never reads
+  # anything derived from this VM — a worker's registration_address/
+  # agent_token_fetch_command come from the caller, not its own IP — so there's no
+  # cycle to avoid. Kept as an independent index range since it's already a pure
+  # function of desired_count.
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
   name            = "${var.cluster_name}-worker-${each.key}"
@@ -164,10 +152,8 @@ resource "proxmox_virtual_environment_vm" "worker" {
     trim    = true
   }
 
-  # Full-clone a pre-baked kube-image template when one is supplied. full =
-  # true is NOT optional: a linked clone leaves every worker permanently
-  # dependent on the template continuing to exist, which breaks the moment
-  # kube-image's prune-images.sh deletes an old build.
+  # full = true is not optional: a linked clone stays dependent on the template
+  # surviving, which breaks when kube-image's prune-images.sh deletes an old build.
   dynamic "clone" {
     for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
     content {
@@ -250,13 +236,11 @@ locals {
   worker_vm_ids = { for k, vm in proxmox_virtual_environment_vm.worker : k => vm.vm_id }
 }
 
-# Workers don't need to wait on each other the way server-join siblings do
-# (no etcd learner race — each worker independently fetches its own agent
-# token and joins). RKE2's agent process natively retries against the join
-# URL if the control plane isn't reachable yet, so no explicit depends_on
-# on the control-plane's own bootstrap is added here either; the consumer's
-# root module still creates the natural data dependency via
-# var.registration_address.
+# Workers don't need to wait on each other like server-join siblings do (no etcd
+# learner race — each fetches its own agent token and joins independently). RKE2's
+# agent process retries against the join URL, so no explicit depends_on on the
+# control plane's bootstrap is added either; the consumer's root module creates the
+# natural data dependency via var.registration_address.
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
@@ -279,11 +263,10 @@ module "node_bootstrap" {
 }
 
 # ---- Per-node cloud-init: node-bootstrap's full lean payload ----
-# Subsumes the hostname-only snippet that used to live here — hostname is now
-# one key inside node-bootstrap's own cloud-config, alongside the RKE2 config,
-# the registry mirror config, the trusted CA, and the runcmd that starts the
-# bootstrap script. vendor_data (SSH keys + qemu-guest-agent) and network_data
-# are unrelated to RKE2 and stay exactly as they were.
+# Subsumes the old hostname-only snippet — hostname is now one key inside
+# node-bootstrap's own cloud-config, alongside the RKE2 config, registry mirror
+# config, trusted CA, and the bootstrap runcmd. vendor_data (SSH keys +
+# qemu-guest-agent) and network_data are unrelated to RKE2 and unchanged.
 resource "proxmox_virtual_environment_file" "node_init" {
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
@@ -299,11 +282,9 @@ resource "proxmox_virtual_environment_file" "node_init" {
 }
 
 # ---- Wildcard DNS registration: publishes *.<cluster_name> -> every worker IP ----
-# depends_on the worker VMs rather than node-bootstrap: node-bootstrap is now a
-# plan-time render with nothing to wait for. Accepted semantic change — the
-# wildcard record now appears once the VMs exist, not once each worker has
-# actually joined, because cloud-init runs asynchronously after Terraform has
-# already returned. Ingress clients that resolve it early simply retry.
+# depends_on the VMs, not node-bootstrap (a pure plan-time render) — the record
+# appears once VMs exist, not once each worker has joined, since cloud-init runs
+# async after apply returns. Clients that resolve early simply retry.
 module "dns_registration" {
   source = "../dns-registration"
 

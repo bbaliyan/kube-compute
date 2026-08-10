@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Day-2 guest-access credentials (node-bootstrap itself never connects to the
-# node — these exist for node-os-patch and any other operator tooling that does) ----
+# ---- Day-2 guest-access credentials (node-bootstrap never connects to the node —
+# these exist for node-os-patch and other operator tooling) ----
 variable "ssh_private_key_file" {
   description = "Path to the SSH private key for guest access (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
   type        = string

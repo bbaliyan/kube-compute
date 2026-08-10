@@ -22,13 +22,13 @@ variable "cluster_fqdn_suffix" {
 }
 
 variable "node_fqdn_label" {
-  description = "Optional override for the fqdn's leftmost label (before cluster_fqdn_suffix), when it should differ from node_name. node_name is also this node's OS hostname and (on Proxmox) its VM/tag name in the provider UI, where a cluster-name prefix is genuinely useful for telling clusters apart at a glance; the fqdn already carries that same cluster identity in its suffix (cluster_fqdn_suffix embeds cluster_name), so repeating the prefix in the label too is redundant there. Null (the default) uses node_name for the label as before, preserving today's behavior for every caller that hasn't opted into a shorter label."
+  description = "Optional override for the fqdn's leftmost label (before cluster_fqdn_suffix), when it should differ from node_name. node_name is also this node's OS hostname and (on Proxmox) its VM/tag name in the provider UI, where a cluster-name prefix is useful for telling clusters apart at a glance; the fqdn already carries that identity in its suffix (cluster_fqdn_suffix embeds cluster_name), so repeating the prefix there is redundant. Null (the default) uses node_name for the label, preserving existing behavior."
   type        = string
   default     = null
 }
 
 variable "set_hostname" {
-  description = "Whether this node's cloud-init sets an explicit hostname/fqdn. true (the default, preserving today's behavior for every existing caller) writes hostname: <node_name> into cloud-config, required because RKE2/kubelet registers the node by OS hostname and every Terraform-provisioned node already gets a distinct node_name. false omits hostname/fqdn from cloud-config entirely, relying on the VM platform's own per-instance metadata (e.g. a NoCloud datasource's local-hostname) to supply a unique hostname instead — needed when the SAME rendered cloud-init is shared across multiple VMs the way CAPI-provisioned MachineDeployment replicas are (see proxmox-cluster's cluster_autoscaler_enabled, which sets this false for its shared worker-bootstrap render — this module itself no longer knows anything about the autoscaler). Unverified assumption for the false case: that the underlying VM platform's metadata actually provides a usable per-VM hostname when cloud-config doesn't set one explicitly — real-hardware check required before trusting this in production."
+  description = "Whether this node's cloud-init sets an explicit hostname/fqdn. true (the default) writes hostname: <node_name> into cloud-config, required because RKE2/kubelet registers the node by OS hostname and every Terraform-provisioned node gets a distinct node_name. false omits hostname/fqdn entirely, relying on the VM platform's own per-instance metadata (e.g. a NoCloud datasource's local-hostname) to supply a unique hostname — needed when the SAME rendered cloud-init is shared across multiple VMs, e.g. CAPI MachineDeployment replicas (see proxmox-cluster's cluster_autoscaler_enabled, which sets this false — this module has no autoscaler-specific knowledge). Unverified for the false case: that the VM platform's metadata actually provides a usable per-VM hostname when cloud-config doesn't set one — real-hardware check required before trusting this in production."
   type        = bool
   default     = true
 }
@@ -49,7 +49,7 @@ variable "control_plane_taint" {
 }
 
 variable "cluster_token" {
-  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (there is no existing secret store to fetch a server token from). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env, sourced by the bootstrap script, never into config.yaml's world-readable siblings."
+  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (no existing secret store to fetch a server token from). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env, sourced by the bootstrap script, never into config.yaml's world-readable siblings."
   type        = string
   default     = null
   sensitive   = true
@@ -69,7 +69,7 @@ variable "registration_address" {
 }
 
 variable "agent_token_fetch_command" {
-  description = "Shell command that prints the rke2 agent join token to stdout when run on the node (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store). Required for node_role worker; ignored otherwise. Sensitive: some providers' fetch commands embed the raw token in the command string itself rather than genuinely fetching it out-of-band (e.g. Proxmox's node-pool module today passes a literal `echo '<token>'`), so this is treated as sensitive uniformly and written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
+  description = "Shell command that prints the rke2 agent join token to stdout when run on the node (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store). Required for node_role worker; ignored otherwise. Sensitive: some providers' fetch commands embed the raw token in the command string itself rather than fetching it out-of-band (e.g. Proxmox's node-pool module passes a literal `echo '<token>'`), so this is treated as sensitive uniformly and written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
   type        = string
   default     = null
   sensitive   = true
@@ -82,7 +82,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not currently viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules that flannel and Felix's iptables dataplane both hard-require. Kept as an escape hatch for a consumer-supplied image/template that ships a different CNI out of the box. Sets the config.yaml cni:/disable-kube-proxy: flags and, when 'cilium' on a genesis node (server-init only), renders the Cilium chart via 'helm template' at plan time and writes the manifest into the cloud-init payload for the node's own bootstrap script to kubectl apply — RKE2's own built-in HelmChart install path for Cilium is explicitly disabled (disable: [rke2-cilium]) so the two never race over the same objects."
+  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules flannel and Felix's iptables dataplane both require. Kept as an escape hatch for a consumer-supplied image/template shipping a different CNI. Sets config.yaml's cni:/disable-kube-proxy: flags, and when 'cilium' on a genesis node, disables RKE2's own built-in HelmChart install of Cilium (disable: [rke2-cilium]) so bootstrap.sh's own apply of the kube-image-baked manifest never races it."
   type        = string
   default     = "cilium"
   validation {
@@ -221,7 +221,7 @@ variable "dns_server_port" {
 }
 
 variable "dns_servers" {
-  description = "Upstream DNS resolver IPs (not this node's RFC2136 update target above — its ordinary pod/kubelet resolvers, e.g. the same list a caller already passes its own VM's network config). Null/empty (the default) skips writing a kubelet resolv-conf override, leaving kubelet's default ClusterFirst DNS policy in place: every pod inherits the node's own /etc/resolv.conf search domains. That collides with a wildcard cluster DNS record (*.<cluster>.<domain>, see cluster_fqdn_suffix) whenever the node's own hostname-derived search domain matches that zone — confirmed on a real apply: with the pod's default ndots:5, a bare external hostname like \"github.com\" gets the search suffix tried first, silently resolving to the cluster's own wildcard IP instead of the real host, breaking any GitOps/external fetch from inside the cluster. Set this (the same DNS servers the node's own network config already uses) to give kubelet a resolv.conf with no search domain, fixing every pod on the node at once."
+  description = "Upstream DNS resolver IPs (not this node's RFC2136 update target above — its ordinary pod/kubelet resolvers, e.g. the same list a caller already passes its own VM's network config). Null/empty (the default) skips writing a kubelet resolv-conf override, leaving kubelet's default ClusterFirst DNS policy in place: every pod inherits the node's own /etc/resolv.conf search domains. That collides with a wildcard cluster DNS record (*.<cluster>.<domain>, see cluster_fqdn_suffix) whenever the node's hostname-derived search domain matches that zone — confirmed on a real apply: with the pod's default ndots:5, a bare external hostname like \"github.com\" gets the search suffix tried first, silently resolving to the cluster's own wildcard IP instead of the real host, breaking GitOps/external fetches from inside the cluster. Set this to give kubelet a resolv.conf with no search domain, fixing every pod on the node at once."
   type        = list(string)
   default     = null
 }

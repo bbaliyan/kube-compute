@@ -2,23 +2,21 @@
 # node-bootstrap renders a lean cloud-init payload. It executes NOTHING: no
 # null_resource, no local-exec, no Ansible, no connection to the node. The
 # heavy half of RKE2 bootstrap (OS prep, RKE2 binaries, SELinux policy, kernel
-# modules, guest agent) is baked into a kube-image template; what is left here
-# is per-cluster identity, per-cluster secrets, and join logic — the things
-# that can never be baked into a shared image.
+# modules, guest agent) is baked into a kube-image template; what's left here
+# is per-cluster identity, secrets, and join logic — what can't be baked into
+# a shared image.
 locals {
   # Single source of truth for the kube-platform pin, held directly here — this
   # is node-bootstrap's only remaining consumer, so a separate component-versions
   # module was pure indirection. NOT the gitops_platform_repo_url/_revision
-  # variables' own defaults: a caller (a *-control-plane module) passing an
-  # explicit null/"" to override-back-to-the-pin does NOT fall through to a
-  # variable's own default the way an omitted argument would — that "explicit
-  # null uses the callee's default" convenience is specific to optional()
-  # object-type attributes, not plain string variables passed through a module
-  # call. Verified the hard way on a real apply; the regression test in
-  # tests/platform_pin.tftest.hcl locks it in. coalesce() is the actual fix —
+  # variables' own defaults: an explicit null/"" passed through a module call
+  # does NOT fall through to the callee's variable default the way an omitted
+  # argument would (that convenience is specific to optional() object-type
+  # attributes) — verified the hard way on a real apply; the regression test
+  # in tests/platform_pin.tftest.hcl locks it in. coalesce() is the fix, since
   # it treats null and "" identically. Tracks kube-platform's protected `main`
-  # branch, not a pinned commit SHA: branch protection is the safeguard
-  # replacing the reproducibility guarantee a SHA pin would provide.
+  # branch, not a pinned SHA — branch protection is the safeguard replacing
+  # the reproducibility a SHA pin would give.
   pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
   pinned_platform_revision = "main"
 
@@ -57,59 +55,50 @@ locals {
   # already baked onto every template at /opt/kube-compute/manifests/ — a
   # per-cluster runtime decision (CNI choice, GitOps enablement), independent
   # of whether the files exist on disk (they always do). This module renders
-  # neither: the live `helm template` render that used to happen here (and
-  # get embedded whole in cloud-init) exceeded Proxmox's 1 MiB cicustom
-  # snippet cap on a real apply — see kube-image's packer/proxmox/build.sh
-  # and helm-values/ for where the render moved.
+  # neither: the live `helm template` render that used to happen here exceeded
+  # Proxmox's 1 MiB cicustom snippet cap on a real apply — see kube-image's
+  # packer/proxmox/build.sh and helm-values/ for where the render moved.
   render_cilium = var.cni == "cilium" && var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
   # Genesis-only, same as render_cilium/render_argocd — but deliberately NOT
   # gated on argocd_needed/render_argocd: an arbitrary genesis-apply manifest
   # (e.g. proxmox-cluster's CAPI/CAPMOX cluster-autoscaler bundle) is applied
-  # by bootstrap.sh itself (a one-time genesis step), independent of whether
-  # this cluster also runs a platform or workloads Argo CD Application. Tying
-  # it to render_argocd would mean a caller passing genesis_apply_manifests
-  # with gitops_platform_enabled = false never gets the write_files entries
-  # bootstrap.sh's apply step expects to exist. This module does not render
-  # or interpret genesis_apply_manifests' content — that now happens in the
-  # composing module (e.g. proxmox-cluster), which has access to inputs (like
-  # module.control_plane's own outputs) this leaf module does not.
+  # by bootstrap.sh as a one-time genesis step, independent of whether this
+  # cluster also runs a platform or workloads Argo CD Application. Tying it to
+  # render_argocd would mean gitops_platform_enabled = false callers never get
+  # the write_files entries bootstrap.sh's apply step expects. This module
+  # does not render or interpret genesis_apply_manifests' content — that
+  # happens in the composing module (e.g. proxmox-cluster), which has access
+  # to inputs (like module.control_plane's outputs) this leaf module does not.
   effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
   effective_crd_wait_enabled        = var.node_role == "server-init" && var.cluster_autoscaler_crd_wait_enabled
   genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
   # ---- GitOps Application manifests ----
-  # Rendered by templatefile()/yamlencode() here, not by Ansible's template
-  # module on the node — consistent with how the Cilium/Argo values above are
-  # already plain Terraform strings, and it keeps the node free of any
-  # templating engine at all.
+  # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
+  # node free of any templating engine.
   platform_values_object = merge(
     var.platform_helm_values_object != null ? var.platform_helm_values_object : {},
     { extraTags = var.extra_tags },
   )
 
-  # kube-platform's own bootstrap chart reads a clusterAutoscalerEnabled Helm
+  # kube-platform's bootstrap chart reads a clusterAutoscalerEnabled Helm
   # value to decide whether to deploy the cluster-autoscaler Argo CD
-  # Application at all (bootstrap/templates/cluster-autoscaler-app.yaml in
-  # kube-platform). This module no longer owns that decision (proxmox-cluster
-  # does — see genesis_apply_manifests/cluster_autoscaler_crd_wait_enabled
-  # above), so it is no longer a hardcoded parameter here: the composing
-  # module that DOES own the decision passes it through the existing generic
-  # platform_extra_helm_parameters map below instead. Omitting it entirely
-  # falls back to kube-platform's own chart default (false), so a caller that
-  # doesn't set it is unaffected.
+  # Application (bootstrap/templates/cluster-autoscaler-app.yaml). This
+  # module doesn't own that decision (proxmox-cluster does), so it's not a
+  # hardcoded parameter here — the composing module passes it through the
+  # generic platform_extra_helm_parameters map instead. Omitting it falls
+  # back to kube-platform's own chart default (false).
   #
-  # Multi-source Application (not the single-source form the API also
-  # supports): the second source (ref: values, no chart) makes
-  # platform-versions/values.yaml's content available to the first source's
-  # `helm.valueFiles`, so bootstrap's own chart templates (cilium-app.yaml,
+  # Multi-source Application: the second source (ref: values, no chart)
+  # makes platform-versions/values.yaml available to the first source's
+  # `helm.valueFiles`, so bootstrap's chart templates (cilium-app.yaml,
   # argocd-app.yaml) can read .Values.ciliumVersion/.Values.argocdVersion at
-  # every sync — the same mechanism system-upgrade-plans-app.yaml already
-  # uses for .Values.k8sVersion. This is what makes bumping
-  # platform-versions/values.yaml alone enough to roll Cilium/Argo CD forward
-  # kube-platform-wide, no per-cluster terragrunt apply and no editing the
-  # Application templates' own literals.
+  # every sync — same mechanism system-upgrade-plans-app.yaml uses for
+  # .Values.k8sVersion. This is what makes bumping platform-versions/values.yaml
+  # alone enough to roll Cilium/Argo CD forward kube-platform-wide, with no
+  # per-cluster apply and no editing the Application templates themselves.
   platform_app_yaml = <<-EOT
     apiVersion: argoproj.io/v1alpha1
     kind: Application
@@ -180,8 +169,8 @@ locals {
   EOT
 
   # ---- registries.yaml ----
-  # Faithful port of registries.yaml.j2, including the belt-and-suspenders
-  # containerd TLS pin to the same anchors path the trusted CA is written to.
+  # Ported from registries.yaml.j2, including the containerd TLS pin to the
+  # same anchors path the trusted CA is written to.
   registry_mirror_host = var.registry_mirror_url != null ? replace(var.registry_mirror_url, "/^https?:\\/\\//", "") : ""
 
   registries_yaml = var.registry_mirror_url == null ? "" : join("\n", concat([
@@ -202,12 +191,12 @@ locals {
   ], [""]))
 
   # ---- static config.yaml fragments ----
-  # Everything in config.yaml that is known at plan time. The node-discovered
-  # parts (node-ip, its own IP as the first tls-san, the fetched agent token,
-  # the rejoin-probe result) are appended by bootstrap.sh on the node itself.
-  # Every SAN is quoted: a wildcard entry starts with '*', which is YAML's
-  # alias indicator, so an unquoted "- *.foo" is invalid YAML and RKE2 refuses
-  # to start. Quoting is inert for plain IPs/hostnames.
+  # Everything in config.yaml known at plan time. Node-discovered parts
+  # (node-ip, its own IP as the first tls-san, the fetched agent token, the
+  # rejoin-probe result) are appended by bootstrap.sh on the node itself.
+  # Every SAN is quoted: a wildcard entry starts with '*', YAML's alias
+  # indicator, so an unquoted "- *.foo" is invalid YAML and RKE2 refuses to
+  # start. Quoting is inert for plain IPs/hostnames.
   static_tls_san_block = join("\n", [
     for san in compact(concat([var.cluster_fqdn != null ? var.cluster_fqdn : ""], var.extra_tls_sans)) :
     "  - \"${san}\""
@@ -242,19 +231,18 @@ locals {
   # ---- kubelet resolv-conf override ----
   # kubelet's default ClusterFirst DNS policy copies the NODE's own
   # /etc/resolv.conf search domains into every pod. NetworkManager derives a
-  # search domain from this node's own FQDN hostname (cluster_fqdn_suffix,
-  # set below) — the same zone a wildcard cluster DNS record
-  # (*.<cluster>.<domain>) answers for. With the pod's default ndots:5, a
-  # bare external hostname like "github.com" gets that search suffix tried
-  # FIRST, silently resolving to the cluster's own wildcard IP instead of the
-  # real host — confirmed on a real cluster-1 apply: Argo CD's repo-server
-  # tried to git-clone github.com against the node's own IP over HTTPS and
-  # got connection refused. Pointing kubelet at a search-domain-free
-  # resolv.conf (var.dns_servers only, no `search` line) fixes every pod on
-  # the node at once, without touching the node's own OS resolv.conf (kept
-  # search-enabled there for host-level convenience). Opt-in via
-  # var.dns_servers so a caller that doesn't pass it keeps the old behavior
-  # rather than erroring.
+  # search domain from this node's FQDN hostname (cluster_fqdn_suffix) — the
+  # same zone a wildcard cluster DNS record (*.<cluster>.<domain>) answers
+  # for. With the pod's default ndots:5, a bare external hostname like
+  # "github.com" gets that search suffix tried FIRST, silently resolving to
+  # the cluster's own wildcard IP instead of the real host — confirmed on a
+  # real cluster-1 apply: Argo CD's repo-server tried to git-clone github.com
+  # against the node's own IP over HTTPS and got connection refused. Pointing
+  # kubelet at a search-domain-free resolv.conf (var.dns_servers only, no
+  # `search` line) fixes every pod on the node, without touching the node's
+  # own OS resolv.conf (kept search-enabled for host-level convenience).
+  # Opt-in via var.dns_servers so a caller that doesn't pass it keeps the old
+  # behavior rather than erroring.
   kubelet_resolv_conf_enabled = var.dns_servers != null && length(var.dns_servers) > 0
   kubelet_resolv_conf_path    = "/etc/rancher/rke2/resolv-conf-no-search.conf"
   kubelet_resolv_conf_content = join("\n", concat(
@@ -297,7 +285,7 @@ locals {
   # ---- secrets.env ----
   # Every key is always defined (empty where a role doesn't use it) so
   # bootstrap.sh can run under `set -u` after sourcing it. Single-quoted with
-  # the POSIX '\'' escape so any character in a token is safe.
+  # the POSIX '\'' escape so any character in a token is safe to embed.
   secret_values = {
     CLUSTER_TOKEN             = var.node_role != "worker" && var.cluster_token != null ? var.cluster_token : ""
     CLUSTER_AGENT_TOKEN       = var.node_role == "server-init" && var.cluster_agent_token != null ? var.cluster_agent_token : ""
@@ -312,16 +300,15 @@ locals {
   ))
 
   # ---- cloud-init write_files ----
-  # Every entry is base64-encoded (encoding: b64). This is not cosmetic: it is
-  # what makes the outer cloud-config document immune to its own payloads —
-  # a PEM, an operator-supplied auto-deploy manifest, or a token containing a
-  # colon can never break the YAML around them. It also means the whole
-  # document is safely produced by yamlencode() rather than a text template,
-  # so it is structurally valid by construction. Cilium/Argo CD's own
-  # manifests are NOT among these entries — kube-image bakes them directly
-  # onto the template at /opt/kube-compute/manifests/, and bootstrap.sh reads
-  # them from there; embedding Argo CD's ~1.9 MB chart render here is exactly
-  # what used to exceed Proxmox's 1 MiB cicustom snippet cap.
+  # Every entry is base64-encoded (encoding: b64) — not cosmetic: it makes the
+  # outer cloud-config document immune to its own payloads (a PEM, an
+  # operator-supplied manifest, a token containing a colon can never break
+  # the surrounding YAML), and lets the whole document be safely produced by
+  # yamlencode() rather than a text template. Cilium/Argo CD's own manifests
+  # are NOT among these entries — kube-image bakes them directly onto the
+  # template at /opt/kube-compute/manifests/, and bootstrap.sh reads them
+  # from there; embedding Argo CD's ~1.9 MB chart render here is exactly what
+  # used to exceed Proxmox's 1 MiB cicustom snippet cap.
   write_files = concat(
     [
       {
@@ -395,12 +382,10 @@ locals {
   )
 
   # RKE2/kubelet default the registered Kubernetes node name to the OS
-  # hostname, so every node in a cluster MUST get a distinct value here — this
-  # single key replaces the standalone hostname-only cloud-init snippet the
-  # Proxmox modules used to carry separately. var.set_hostname = false omits
-  # both keys entirely (see that variable's description) — needed only when
-  # this same rendered payload is shared across multiple VMs, e.g. a CAPI
-  # MachineDeployment's replicas.
+  # hostname, so every node in a cluster MUST get a distinct value here.
+  # var.set_hostname = false omits both keys entirely (see that variable's
+  # description) — needed only when this same rendered payload is shared
+  # across multiple VMs, e.g. a CAPI MachineDeployment's replicas.
   cloud_config = merge(
     {
       preserve_hostname = false

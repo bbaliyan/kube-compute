@@ -66,9 +66,9 @@ data "aws_ec2_instance_type" "selected" {
 }
 
 # Latest AlmaLinux 10 for the derived arch — only when no explicit AMI is given.
-# Owner 764336703387 is the AlmaLinux OS Foundation's own AWS account (verified against
-# the AlmaLinux bug tracker and the AlmaLinux/cloud-images repo) — architecture isn't
-# embedded in the name (unlike AL2023's pattern), so it's filtered separately below.
+# Owner 764336703387 is the AlmaLinux OS Foundation's AWS account (verified against the
+# AlmaLinux bug tracker and AlmaLinux/cloud-images repo); architecture isn't embedded in
+# the name (unlike AL2023's), so it's filtered separately below.
 data "aws_ami" "almalinux10" {
   count       = var.os_image_ami_id == null ? 1 : 0
   most_recent = true

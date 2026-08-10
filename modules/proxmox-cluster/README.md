@@ -11,10 +11,10 @@ module internally — it only calls them from one place.
 This module puts the control plane and every worker pool in **one Terraform state
 with one lock**. That buys a single `terragrunt apply` per cluster, at a real cost:
 you can no longer apply `control-plane` and a node pool concurrently from separate
-terminals — every change to this cluster serializes through the one state/lock, the
-same as any other single-directory Terraform unit. If your workflow depends on
-applying a worker pool while a separate control-plane change is in flight, stay on
-the split `proxmox-control-plane` + `proxmox-node-pool` layout instead (see below).
+terminals — every change serializes through the one state/lock. If your workflow
+depends on applying a worker pool while a separate control-plane change is in
+flight, stay on the split `proxmox-control-plane` + `proxmox-node-pool` layout
+instead (see below).
 
 ## Inputs
 
@@ -60,7 +60,7 @@ module "cluster" {
 ```
 
 This is required even when you never set `dns_server_address` (DNS registration
-stays fully optional and off by default — the provider block just needs to exist so
+stays optional and off by default — the provider block just needs to exist so
 Terraform can resolve the alias).
 
 ## Usage: control-plane only, no worker pools
@@ -132,23 +132,21 @@ When enabled, this module:
   bundle (`templates/cluster-autoscaler-workers.yaml.tftpl`) — no
   `RKE2ConfigTemplate`/CAPRKE2 anywhere in it. Workers join via a plain `Secret`
   referenced by `Machine.spec.bootstrap.dataSecretName`; the `Secret`'s content
-  is this project's own existing worker cloud-init, rendered by a second,
-  dedicated `node-bootstrap` instantiation (`module.cluster_autoscaler_worker_bootstrap`,
+  is this project's own worker cloud-init, rendered by a second, dedicated
+  `node-bootstrap` instantiation (`module.cluster_autoscaler_worker_bootstrap`,
   `set_hostname = false` — the payload is shared byte-for-byte across every
   `MachineDeployment` replica, so it cannot carry a node-unique hostname;
-  CAPMOX's own per-VM metadata is relied on for that instead, unverified
-  against real hardware).
+  CAPMOX's own per-VM metadata is relied on instead, unverified against real
+  hardware).
 - Passes the rendered bundle through to `proxmox-control-plane` as a single
   `genesis_apply_manifests` entry (a generic node-bootstrap mechanism — see
   [`node-bootstrap`'s README](../node-bootstrap/README.md#genesis-apply-manifests-generic-cluster-autoscaler-is-the-one-caller-today)),
   with `cluster_autoscaler_crd_wait_enabled = true` so `bootstrap.sh` waits for
-  CAPI's core CRDs before applying it.
-  `proxmox-control-plane`/`node-bootstrap` have no cluster-autoscaler-specific
-  code left in them at all.
+  CAPI's core CRDs before applying it. `proxmox-control-plane`/`node-bootstrap`
+  have no cluster-autoscaler-specific code left in them.
   `proxmox_template_vm_id` for `cluster_autoscaler_worker_template` points at
-  the **same** kube-image template used everywhere else in this module — there
-  is only one image variant (dropping CAPRKE2 removed the only reason a
-  second, lighter variant existed).
+  the **same** kube-image template used everywhere else in this module — only
+  one image variant exists.
 - Merges a `clusterAutoscalerEnabled` Helm parameter into
   `platform_extra_helm_parameters`, which is what gates kube-platform's own
   `cluster-autoscaler` Argo CD Application.

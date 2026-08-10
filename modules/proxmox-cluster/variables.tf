@@ -83,7 +83,7 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (its kernel dropped modules flannel and Felix require). 'default' remains selectable as an escape hatch for a consumer-supplied playbook targeting a different OS. Set explicitly to override."
+  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (its kernel dropped modules flannel and Felix require). 'default' remains an escape hatch for a consumer-supplied playbook targeting a different OS."
   type        = string
   default     = null
   validation {
@@ -194,7 +194,7 @@ variable "os_image_file_id" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of a pre-baked kube-image Proxmox VM template to full-clone every control-plane node from, instead of booting a stock cloud image. The template already carries OS prep, the RKE2 binaries (both server and agent units — the role is chosen at launch), SELinux policy, kernel modules, and the guest agent, so a node reaches Ready in a fraction of the stock-image time. Null (the default) keeps the stock path via os_image_url/os_image_file_id — kube-image is opt-in and kube-compute works standalone without it. Set exactly one of os_image_url, os_image_file_id, or proxmox_template_vm_id. No compatibility validation is performed between this ID and what is actually baked in it: the template's own self-describing name (kube-image-<k8s_version>-<cilium_version>-<argocd_version>-<build-date>) is documentation, treated the same way a hand-picked stock image already is."
+  description = "VM ID of a pre-baked kube-image Proxmox VM template to full-clone every control-plane node from, instead of booting a stock cloud image. The template carries OS prep, RKE2 binaries (both server and agent units — role chosen at launch), SELinux policy, kernel modules, and the guest agent, so a node reaches Ready much faster than the stock-image path. Null (the default) keeps the stock path via os_image_url/os_image_file_id — kube-image is opt-in. Set exactly one of os_image_url, os_image_file_id, or proxmox_template_vm_id. No compatibility validation is performed against what's actually baked in the template — its self-describing name (kube-image-<k8s_version>-<cilium_version>-<argocd_version>-<build-date>) is documentation only."
   type        = number
   default     = null
 }
@@ -206,7 +206,7 @@ variable "ssh_authorized_keys" {
 }
 
 variable "dns_servers" {
-  description = "DNS nameserver addresses written into every control-plane VM's cloud-init network-config, and passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf (see node-bootstrap's dns_servers variable for why: kubelet's default DNS policy otherwise propagates this node's own hostname-derived search domain into every pod, colliding with the wildcard cluster DNS record for that same zone)."
+  description = "DNS nameserver addresses written into every control-plane VM's cloud-init network-config, and passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf (see node-bootstrap's dns_servers variable: kubelet's default DNS policy otherwise propagates this node's hostname-derived search domain into every pod, colliding with the wildcard cluster DNS record for that zone)."
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
 }
@@ -222,7 +222,7 @@ variable "control_plane_count" {
 }
 
 variable "control_plane_ip_addresses" {
-  description = "Static IPv4 addresses in CIDR notation (e.g. '192.168.1.10/24'), one per control-plane node, in order. Optional at any control_plane_count: when null, every control-plane node gets its IP via DHCP and it's resolved post-apply through the Proxmox guest agent (used for join tokens, TLS SANs, the etcd firewall ipset, and the dns-registration record). Static IPs remain the practical default for HA — genesis must be reachable before joiners' node-bootstrap runs, and DHCP-assigned IPs are only known after each VM boots."
+  description = "Static IPv4 addresses in CIDR notation (e.g. '192.168.1.10/24'), one per control-plane node, in order. Optional at any control_plane_count: when null, every control-plane node gets its IP via DHCP, resolved post-apply through the Proxmox guest agent (used for join tokens, TLS SANs, the etcd firewall ipset, and the dns-registration record). Static IPs remain the practical default for HA — genesis must be reachable before joiners' node-bootstrap runs, and DHCP-assigned IPs are only known after each VM boots."
   type        = list(string)
   default     = null
 
@@ -239,7 +239,7 @@ variable "vm_gateway" {
 }
 
 variable "cluster_network_cidr" {
-  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'), used as the sole member of the cluster-wide firewall ipset. Proxmox multi-node is a single flat L2 subnet, and bpg/proxmox's ipset resource is owned monolithically by one Terraform state, so exact per-VM membership (AWS's self-referencing security group) can't span the control plane's and each node pool's separate states — this CIDR is the pragmatic Proxmox equivalent of 'this cluster's own members'. Required when control_plane_count > 1 or when any node pool will attach; optional (module still creates the ipset) for a single-node cluster with no pools."
+  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'), used as the sole member of the cluster-wide firewall ipset. Proxmox multi-node is a single flat L2 subnet, and bpg/proxmox's ipset resource is owned monolithically by one Terraform state, so exact per-VM membership (AWS's self-referencing security group) can't span the control plane's and each node pool's separate states — this CIDR is the pragmatic Proxmox equivalent of 'this cluster's own members'. Required when control_plane_count > 1 or any node pool will attach; optional for a single-node cluster with no pools."
   type        = string
   default     = null
 }
@@ -258,7 +258,7 @@ variable "ingress_ports" {
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the HA registration/access endpoint — without it there is no single address that names every control-plane node."
+  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the only address that names every control-plane node."
   type        = string
   default     = null
 
@@ -284,7 +284,7 @@ variable "dns_server_port" {
 }
 
 variable "dns_transport" {
-  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp': a real apply against Technitium found 'tcp' fails with 'Error updating DNS record: EOF' (the connection drops mid-update) while 'udp' is the one transport actually proven end-to-end (the RFC2136 smoke test in kube-examples' technitium/README.md uses nsupdate's UDP default). A handful of IPv4 addresses in one A record set fits comfortably under UDP's message-size limit, so there's no capacity reason to prefer TCP here."
+  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp': a real apply against Technitium found 'tcp' fails with 'Error updating DNS record: EOF' (connection drops mid-update); 'udp' is the transport actually proven end-to-end. A handful of IPv4 addresses in one A record set fits comfortably under UDP's message-size limit, so there's no capacity reason to prefer TCP."
   type        = string
   default     = "udp"
   validation {
@@ -324,7 +324,7 @@ variable "tsig_key_secret" {
 
 # ---- Worker pools (optional, merged into this same directory/state) ----
 variable "node_pools" {
-  description = "Static worker pools joining this cluster, keyed by pool name (e.g. \"pool-a\"). Each pool is created via proxmox-node-pool, wired to this cluster's own cluster_name and cluster_agent_token automatically — do not set either field inside a pool object, they are ignored. Empty map (the default) creates no worker pools, matching an all_in_one cluster with no separate workers. Field names, types, and defaults mirror proxmox-node-pool's own variables.tf exactly (minus cluster_name/cluster_agent_token, which this module supplies)."
+  description = "Static worker pools joining this cluster, keyed by pool name (e.g. \"pool-a\"). Each pool is created via proxmox-node-pool, wired to this cluster's cluster_name and cluster_agent_token automatically — do not set either field inside a pool object, they are ignored. Empty map (the default) creates no worker pools. Field names, types, and defaults mirror proxmox-node-pool's own variables.tf exactly (minus cluster_name/cluster_agent_token, which this module supplies)."
   type = map(object({
     trusted_ca_pem         = optional(string)
     registry_mirror_url    = optional(string)
