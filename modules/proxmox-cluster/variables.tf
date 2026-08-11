@@ -294,9 +294,9 @@ variable "dns_transport" {
 }
 
 variable "dns_record_ttl" {
-  description = "TTL in seconds for the published cluster_fqdn record. Ignored when dns_server_address is null."
+  description = "TTL in seconds for the published cluster_fqdn record, and for the genesis node's own self-registered record. Ignored when dns_server_address is null. Kept low by default — see proxmox-control-plane's dns_record_ttl for why a low TTL matters here (downstream resolver caching can otherwise stale-block a fresh apply's join for up to a full TTL)."
   type        = number
-  default     = 300
+  default     = 30
 }
 
 variable "tsig_key_name" {
@@ -351,7 +351,7 @@ variable "node_pools" {
     dns_server_address     = optional(string)
     dns_server_port        = optional(number, 53)
     dns_transport          = optional(string, "udp")
-    dns_record_ttl         = optional(number, 300)
+    dns_record_ttl         = optional(number, 30)
     tsig_key_name          = optional(string)
     tsig_key_algorithm     = optional(string, "hmac-sha256")
     tsig_key_secret        = optional(string)

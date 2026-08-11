@@ -198,9 +198,9 @@ variable "dns_self_register_record_name" {
 }
 
 variable "dns_self_register_ttl" {
-  description = "TTL in seconds for the self-registered record. Only meaningful when dns_self_register_zone is set."
+  description = "TTL in seconds for the self-registered record. Only meaningful when dns_self_register_zone is set. Kept low by default: this record is republished on every apply via authoritative RFC2136 update, but a downstream caching resolver (e.g. a LAN router forwarding to the authoritative server) has no way to know that and keeps serving whatever it last cached for up to this TTL — on a reused cluster/record name that stale window directly delays every joining node."
   type        = number
-  default     = 300
+  default     = 30
 }
 
 variable "dns_server_address" {

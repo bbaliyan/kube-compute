@@ -184,9 +184,9 @@ variable "dns_transport" {
 }
 
 variable "dns_record_ttl" {
-  description = "TTL in seconds for the published wildcard record. Ignored when dns_server_address is null."
+  description = "TTL in seconds for the published wildcard record. Ignored when dns_server_address is null. Kept low by default — see proxmox-control-plane's dns_record_ttl for why a low TTL matters here (downstream resolver caching can otherwise stale-block a fresh apply for up to a full TTL)."
   type        = number
-  default     = 300
+  default     = 30
 }
 
 variable "tsig_key_name" {
