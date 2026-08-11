@@ -33,7 +33,7 @@ jobs:
         run: git config --global --add safe.directory '*'
 
       - name: Checkout kube-compute (full history + tags)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -89,7 +89,7 @@ jobs:
 
       - name: Checkout split repo
         if: steps.diffgate.outputs.publish == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.SPLIT_REPO }}
           token: ${{ secrets.SPLIT_REPO_PAT }}
