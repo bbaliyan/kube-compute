@@ -556,6 +556,34 @@ resource "proxmox_virtual_environment_firewall_options" "control_plane" {
   dhcp          = !local.static_ips
   input_policy  = "DROP"
   output_policy = "ACCEPT"
+
+  # vm_id isn't ForceNew on this resource, so replacing the underlying VM
+  # (e.g. a new proxmox_template_vm_id from a rebuilt image — clone_vm_id IS
+  # ForceNew on the VM itself) otherwise leaves this resource in place,
+  # pointed at the new vm_id via a plain in-place update. bpg/proxmox's
+  # firewall_rules resource then fails ("could not find rule with signature
+  # ... during repositioning") because it tries to reposition rules it
+  # remembers from the old VM against the new VM's actually-empty ruleset.
+  # Forcing replacement whenever the VM replaces keeps this resource's
+  # lifecycle tied to the VM it belongs to, avoiding the broken update path
+  # entirely. Confirmed against a real apply (image rebuild -> template swap).
+  #
+  # Deliberately only control_plane, not control_plane_additional: unlike
+  # depends_on, replace_triggered_by errors ("no change found for X") if the
+  # referenced resource has zero instances — confirmed on a real destroy,
+  # which still evaluates this even though it's not applying anything. On a
+  # single-control-plane cluster (control_plane_count = 1, this module's
+  # common case) control_plane_additional's for_each is always empty, so
+  # referencing it here breaks every plan/apply/destroy outright. Known gap:
+  # on an HA cluster, replacing only an additional CP node (not the genesis
+  # one) won't auto-recreate this shared resource — acceptable for now since
+  # the bug this fixes is far more common (any image/template rebuild) than
+  # replacing one specific additional CP node in isolation.
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_vm.control_plane,
+    ]
+  }
 }
 
 resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
@@ -563,6 +591,14 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
 
   node_name = var.proxmox_node
   vm_id     = each.value
+
+  # See firewall_options.control_plane's identical lifecycle block above for
+  # why this is required, and why it's scoped to control_plane only.
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_vm.control_plane,
+    ]
+  }
 
   rule {
     type    = "in"

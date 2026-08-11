@@ -307,6 +307,20 @@ resource "proxmox_virtual_environment_firewall_options" "worker" {
   dhcp          = !local.static_ips
   input_policy  = "DROP"
   output_policy = "ACCEPT"
+
+  # vm_id isn't ForceNew on this resource, so replacing the underlying worker
+  # VM (e.g. a new proxmox_template_vm_id from a rebuilt image) otherwise
+  # leaves this resource in place, pointed at the new vm_id via a plain
+  # in-place update — bpg/proxmox's firewall_rules resource then fails
+  # ("could not find rule with signature ... during repositioning") trying to
+  # reposition rules it remembers from the old VM against the new VM's
+  # actually-empty ruleset. See proxmox-control-plane's identical lifecycle
+  # block for the full explanation; confirmed against a real apply.
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_vm.worker,
+    ]
+  }
 }
 
 resource "proxmox_virtual_environment_firewall_rules" "worker" {
@@ -314,6 +328,12 @@ resource "proxmox_virtual_environment_firewall_rules" "worker" {
 
   node_name = var.proxmox_node
   vm_id     = each.value
+
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_vm.worker,
+    ]
+  }
 
   rule {
     type    = "in"
