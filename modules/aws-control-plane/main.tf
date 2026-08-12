@@ -204,6 +204,7 @@ module "node_bootstrap" {
 
   cluster_name                   = var.cluster_name
   node_name                      = "${var.cluster_name}-cp-1"
+  node_fqdn_label                = "cp-1"
   cluster_fqdn                   = local.cluster_fqdn
   cluster_fqdn_suffix            = local.fqdn_suffix
   node_role                      = "server-init"
@@ -240,6 +241,7 @@ module "node_bootstrap_additional" {
 
   cluster_name         = var.cluster_name
   node_name            = "${var.cluster_name}-cp-${tonumber(each.key) + 1}"
+  node_fqdn_label      = "cp-${tonumber(each.key) + 1}"
   cluster_fqdn         = local.cluster_fqdn
   cluster_fqdn_suffix  = local.fqdn_suffix
   node_role            = "server-join"
