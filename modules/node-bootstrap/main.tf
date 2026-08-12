@@ -132,7 +132,7 @@ locals {
                 value: "${val}"
     %{~endfor~}
             valuesObject:
-              ${indent(10, yamlencode(local.platform_values_object))}
+              ${indent(14, yamlencode(local.platform_values_object))}
         - repoURL: ${local.effective_gitops_platform_repo_url}
           targetRevision: ${local.effective_gitops_platform_revision}
           ref: values
