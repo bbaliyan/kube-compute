@@ -121,6 +121,7 @@ module "node_bootstrap" {
   node_labels               = local.node_labels
   trusted_ca_pem            = var.trusted_ca_pem
   registry_mirror_url       = var.registry_mirror_url
+  dns_servers               = var.dns_servers
 }
 
 # ---- Fixed node pool: ASG + launch template, no scaling policies ----

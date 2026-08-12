@@ -23,6 +23,12 @@ variable "registry_mirror_url" {
   default     = null
 }
 
+variable "dns_servers" {
+  description = "Upstream DNS resolver IPs, passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf — defense in depth, same purpose and default as aws-control-plane's own dns_servers variable. Set it to the same value passed there whenever this cluster's control plane has one (a wildcard cluster DNS record collides with every node's pods identically, not just the control plane's)."
+  type        = list(string)
+  default     = null
+}
+
 # ---- AWS-specific inputs ----
 variable "aws_region" {
   description = "AWS region the pool runs in. Must match the control plane's region."

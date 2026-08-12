@@ -23,6 +23,12 @@ variable "registry_mirror_url" {
   default     = null
 }
 
+variable "dns_servers" {
+  description = "Upstream DNS resolver IPs, passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf — defense in depth against any node-inherited DNS search domain colliding with a wildcard cluster DNS record (*.<cluster>.<domain>, see cluster_domain), on top of node-bootstrap's own prefer_fqdn_over_hostname fix for the specific hostname-derived case (e.g. a VPC DHCP-provided domain this module has no control over, if that ever turns out to be wildcarded too). Null/empty (the default) leaves kubelet's default ClusterFirst DNS policy in place: every pod inherits this node's own /etc/resolv.conf search domain(s) verbatim. 169.254.169.253 (the VPC's own Amazon-provided DNS Resolver, reachable from any subnet regardless of the VPC's DHCP option set) is a safe default for a standard VPC; use the account's actual resolver(s) if the VPC's DHCP options point elsewhere."
+  type        = list(string)
+  default     = null
+}
+
 variable "gitops_platform_enabled" {
   description = "Whether to bootstrap kube-platform at all. false = a bare RKE2+Cilium cluster, no Argo CD/platform Application. Sourced from this cluster's cluster-facts unit."
   type        = bool

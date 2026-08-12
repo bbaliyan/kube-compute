@@ -216,6 +216,7 @@ module "node_bootstrap" {
   extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   trusted_ca_pem                 = var.trusted_ca_pem
   registry_mirror_url            = var.registry_mirror_url
+  dns_servers                    = var.dns_servers
   gitops_platform_enabled        = var.gitops_platform_enabled
   gitops_platform_repo_url       = var.gitops_platform_repo_url_override
   gitops_platform_revision       = var.gitops_platform_revision_override
@@ -252,6 +253,7 @@ module "node_bootstrap_additional" {
   cluster_token        = random_password.server_token.result
   trusted_ca_pem       = var.trusted_ca_pem
   registry_mirror_url  = var.registry_mirror_url
+  dns_servers          = var.dns_servers
   cert_mode            = var.cert_mode
   extra_tags           = var.extra_tags
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the

@@ -6,6 +6,7 @@ module "control_plane" {
   cluster_name                      = var.cluster_name
   trusted_ca_pem                    = var.trusted_ca_pem
   registry_mirror_url               = var.registry_mirror_url
+  dns_servers                       = var.dns_servers
   gitops_platform_enabled           = var.gitops_platform_enabled
   gitops_platform_repo_url_override = var.gitops_platform_repo_url_override
   gitops_platform_revision_override = var.gitops_platform_revision_override
@@ -49,6 +50,7 @@ module "node_pools" {
 
   trusted_ca_pem      = each.value.trusted_ca_pem
   registry_mirror_url = each.value.registry_mirror_url
+  dns_servers         = each.value.dns_servers
   subnet_id           = each.value.subnet_id
   desired_count       = each.value.desired_count
   instance_type       = each.value.instance_type
