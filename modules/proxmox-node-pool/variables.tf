@@ -98,7 +98,7 @@ variable "ssh_authorized_keys" {
 }
 
 variable "dns_servers" {
-  description = "DNS nameserver addresses written into every worker's cloud-init network-config, and passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf (see node-bootstrap's dns_servers variable for why: kubelet's default DNS policy otherwise propagates this node's own hostname-derived search domain into every pod, colliding with the wildcard cluster DNS record for that same zone)."
+  description = "DNS nameserver addresses written into every worker's cloud-init network-config, and passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf — defense in depth against any node-inherited DNS search domain colliding with a wildcard cluster DNS record, on top of node-bootstrap's own prefer_fqdn_over_hostname fix for the specific hostname-derived case (see node-bootstrap's dns_servers variable for the full picture)."
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
 }

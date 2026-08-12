@@ -389,8 +389,20 @@ locals {
   cloud_config = merge(
     {
       preserve_hostname = false
-      write_files       = local.write_files
-      runcmd            = [["/opt/kube-compute/bootstrap.sh"]]
+      # RHEL-family distros (this project's only supported OS) default
+      # cloud-init's prefer_fqdn to true, which silently applies the fqdn
+      # value below as the actual system hostname even when a distinct
+      # short hostname is also given — see Distro._select_hostname in
+      # cloud-init's own source. An FQDN-formatted static hostname is
+      # exactly what NetworkManager derives its DNS search-domain entry
+      # from, which then collides with a wildcard cluster DNS record for
+      # that same zone (see kubelet_resolv_conf_block's own comment above
+      # for the full failure mode). Forcing the short hostname to win here
+      # avoids the collision at its source, for every pod on the node, not
+      # just kubelet's.
+      prefer_fqdn_over_hostname = false
+      write_files               = local.write_files
+      runcmd                    = [["/opt/kube-compute/bootstrap.sh"]]
     },
     var.set_hostname ? { hostname = var.node_name } : {},
     var.set_hostname && var.cluster_fqdn_suffix != null && var.cluster_fqdn_suffix != "" ? {

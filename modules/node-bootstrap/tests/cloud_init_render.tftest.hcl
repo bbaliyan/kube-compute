@@ -37,6 +37,10 @@ run "server_init_payload_is_valid_cloud_config" {
     error_message = "cluster_fqdn_suffix must produce a matching cloud-init fqdn"
   }
   assert {
+    condition     = yamldecode(output.cloud_init_user_data).prefer_fqdn_over_hostname == false
+    error_message = "prefer_fqdn_over_hostname must be false — RHEL-family cloud-init otherwise silently applies fqdn as the real system hostname even though a distinct short hostname is also set, which then makes NetworkManager derive a DNS search-domain entry matching the cluster's own wildcard DNS zone"
+  }
+  assert {
     condition     = yamldecode(output.cloud_init_user_data).runcmd == [["/opt/kube-compute/bootstrap.sh"]]
     error_message = "the payload must invoke the bootstrap script from runcmd"
   }
