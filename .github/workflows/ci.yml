@@ -8,7 +8,7 @@ on:
 jobs:
   tofu:
     runs-on: ubuntu-latest
-    container: ghcr.io/bbaliyan/kube-devenv:0.7.0
+    container: ghcr.io/bbaliyan/kube-devenv:0.8.2
     steps:
       - uses: actions/checkout@v4
 
