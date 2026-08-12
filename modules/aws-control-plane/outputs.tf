@@ -28,7 +28,7 @@ output "node_provider" {
 }
 
 output "node_control_ref" {
-  description = "Handle the control-plane verb-scripts use to reach the node out-of-band (kubeconfig fetch, break-glass shell). For AWS: the instance ID, targeted via 'aws ssm send-command'/'aws ssm start-session' in region aws_region. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that Ansible (not cloud-init) owns bootstrap, and this was always really just a node-addressing handle."
+  description = "Handle the control-plane verb-scripts use to reach the node out-of-band (kubeconfig fetch, break-glass shell). For AWS: the instance ID, targeted via 'aws ssm send-command'/'aws ssm start-session' in region aws_region. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that cloud-init (not Ansible) owns bootstrap, and this was always really just a node-addressing handle."
   value       = aws_instance.control_plane.id
 }
 
