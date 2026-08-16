@@ -210,6 +210,13 @@ locals {
     # version (ingress-nginx or Traefik) — this project doesn't bundle one at
     # bootstrap.
     "ingress-controller: none",
+    # RKE2 does not expose etcd's Prometheus metrics endpoint (a separate port,
+    # 2381, distinct from etcd's client port 2379) unless explicitly told to.
+    # Without this, kube-platform's kube-prometheus-stack has nothing to scrape
+    # on 2381 regardless of its own ServiceMonitor config. Safe unconditionally:
+    # it only exposes a metrics endpoint, it doesn't change etcd's behavior, and
+    # etcd only runs on server nodes anyway.
+    "etcd-expose-metrics: true",
     ], var.control_plane_taint ? [
     "node-taint:",
     "  - \"CriticalAddonsOnly=true:NoExecute\"",
