@@ -417,3 +417,14 @@ variable "cluster_autoscaler_worker_ip_pool" {
     error_message = "cluster_autoscaler_worker_ip_pool is required when cluster_autoscaler_enabled is true — CAPMOX has no DHCP mode, ProxmoxCluster.spec.ipv4Config must name a real static range excluded from the LAN's DHCP pool."
   }
 }
+
+variable "cluster_autoscaler_capmox_credentials_secret_name" {
+  description = "Name of the Kubernetes Secret (namespace \"default\", keys url/token/secret) this cluster's ProxmoxCluster.spec.credentialsRef points at, so CAPMOX reconciles this object using per-cluster credentials instead of falling back to its manager-wide capmox-manager-credentials Secret. That manager-wide Secret is deliberately baked with non-functional placeholder values (see kube-image/packer/proxmox/build.sh) — real Proxmox API credentials must never be baked into a VM image, so they are delivered into this named Secret at runtime by the consumer repo (e.g. an External Secrets Operator ExternalSecret pulling from a vault), never by this module or genesis. This module only references the name; creating the Secret is the caller's responsibility, and must happen before or shortly after genesis for CAPMOX to actually authenticate (it retries, so a late-arriving Secret is a delay, not a fatal error)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_capmox_credentials_secret_name != null
+    error_message = "cluster_autoscaler_capmox_credentials_secret_name is required when cluster_autoscaler_enabled is true — without it this ProxmoxCluster would fall back to CAPMOX's manager-wide credentials Secret, which is deliberately non-functional (kube-image bakes it with placeholder values to avoid leaking real credentials into every VM image)."
+  }
+}

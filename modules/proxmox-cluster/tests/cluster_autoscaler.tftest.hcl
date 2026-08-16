@@ -45,7 +45,7 @@ run "cluster_autoscaler_enabled_without_template_fails_validation" {
     cluster_autoscaler_worker_min_size = 1
     cluster_autoscaler_worker_max_size = 3
   }
-  expect_failures = [var.cluster_autoscaler_worker_template, var.cluster_autoscaler_worker_ip_pool]
+  expect_failures = [var.cluster_autoscaler_worker_template, var.cluster_autoscaler_worker_ip_pool, var.cluster_autoscaler_capmox_credentials_secret_name]
 }
 
 run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
@@ -72,6 +72,7 @@ run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
       gateway   = "192.168.1.1"
       prefix    = 24
     }
+    cluster_autoscaler_capmox_credentials_secret_name = "bharat-capmox-credentials"
   }
   expect_failures = [var.cluster_autoscaler_worker_max_size]
 }
@@ -120,6 +121,7 @@ run "cluster_autoscaler_enabled_renders_capi_core_bundle_no_caprke2" {
       gateway   = "192.168.1.1"
       prefix    = 24
     }
+    cluster_autoscaler_capmox_credentials_secret_name = "bharat-capmox-credentials"
   }
 
   assert {
@@ -187,6 +189,14 @@ run "cluster_autoscaler_enabled_renders_capi_core_bundle_no_caprke2" {
     ])
     error_message = "ProxmoxCluster.spec.controlPlaneEndpoint.host rejects empty (CAPMOX's CRD validation on a real apply) — must be populated from cluster_autoscaler_registration_address, not left blank"
   }
+  assert {
+    condition = anytrue([
+      for m in local.genesis_apply_manifests :
+      strcontains(m.content, "credentialsRef:") &&
+      strcontains(m.content, "name: bharat-capmox-credentials")
+    ])
+    error_message = "ProxmoxCluster.spec.credentialsRef must be set from cluster_autoscaler_capmox_credentials_secret_name — without it CAPMOX falls back to its manager-wide credentials Secret, which kube-image deliberately bakes with non-functional placeholder values (real credentials must never be baked into a VM image)"
+  }
 }
 
 run "cluster_autoscaler_enabled_without_dns_registration_fails_check" {
@@ -210,6 +220,7 @@ run "cluster_autoscaler_enabled_without_dns_registration_fails_check" {
       gateway   = "192.168.1.1"
       prefix    = 24
     }
+    cluster_autoscaler_capmox_credentials_secret_name = "bharat-capmox-credentials"
   }
 
   # cluster_domain/dns_server_address are both unset here, so

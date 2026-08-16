@@ -57,6 +57,17 @@
 #    name autoscaler workers already join through (main.tf's
 #    cluster_autoscaler_registration_address), not
 #    module.control_plane.cluster_ip/cluster_fqdn (would cycle).
+# 4. spec.credentialsRef: without this, CAPMOX would fall back to its
+#    manager-wide capmox-manager-credentials Secret (capmox-system
+#    namespace) — which kube-image's packer/proxmox/build.sh deliberately
+#    bakes with non-functional placeholder values, never real Proxmox
+#    credentials (baking a real API token into every VM image is a standing
+#    credential leak). credentialsRef makes THIS object authenticate via
+#    its own, caller-named Secret instead, so real credentials only ever
+#    need to exist at runtime, delivered by the consumer repo (e.g. an ESO
+#    ExternalSecret pulling from a vault) — never in git, never in the
+#    image. Set from cluster_autoscaler_capmox_credentials_secret_name;
+#    this module does not create that Secret, only references its name.
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
@@ -78,6 +89,9 @@ metadata:
   labels:
     cluster.x-k8s.io/cluster-name: ${cluster_name}
 spec:
+  credentialsRef:
+    name: ${capmox_credentials_secret_name}
+    namespace: default
   dnsServers:
 %{ for server in dns_servers ~}
     - ${server}

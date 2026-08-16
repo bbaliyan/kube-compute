@@ -71,6 +71,12 @@ locals {
       control_plane_endpoint_host = local.cluster_autoscaler_registration_address != null ? local.cluster_autoscaler_registration_address : ""
       control_plane_endpoint_port = 6443
       bootstrap_secret_b64        = var.cluster_autoscaler_enabled ? base64encode(module.cluster_autoscaler_worker_bootstrap[0].cloud_init_user_data) : ""
+      # Never the manager-wide capmox-manager-credentials fallback — see
+      # variables.tf's own description and the template's UNVERIFIED-item-4
+      # comment for why. Empty string is unreachable at apply time: the
+      # variable's own validation blocks null here whenever
+      # cluster_autoscaler_enabled is true.
+      capmox_credentials_secret_name = coalesce(var.cluster_autoscaler_capmox_credentials_secret_name, "")
     }
   )
 
