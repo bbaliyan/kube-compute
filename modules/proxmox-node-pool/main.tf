@@ -262,7 +262,6 @@ module "node_bootstrap" {
   dns_servers = var.dns_servers
 }
 
-# ---- Per-node cloud-init: node-bootstrap's full lean payload ----
 # Subsumes the old hostname-only snippet — hostname is now one key inside
 # node-bootstrap's own cloud-config, alongside the RKE2 config, registry mirror
 # config, trusted CA, and the bootstrap runcmd. vendor_data (SSH keys +
@@ -281,7 +280,6 @@ resource "proxmox_virtual_environment_file" "node_init" {
   }
 }
 
-# ---- Wildcard DNS registration: publishes *.<cluster_name> -> every worker IP ----
 # depends_on the VMs, not node-bootstrap (a pure plan-time render) — the record
 # appears once VMs exist, not once each worker has joined, since cloud-init runs
 # async after apply returns. Clients that resolve early simply retry.

@@ -4,7 +4,6 @@
 
 data "aws_caller_identity" "current" {}
 
-# Default-VPC fallback: only consulted when neither subnet_id nor subnet_name is provided.
 data "aws_vpc" "default" {
   count   = (var.subnet_id == null && var.subnet_name == null) ? 1 : 0
   default = true
@@ -18,7 +17,6 @@ data "aws_subnets" "default" {
   }
 }
 
-# Named-VPC lookup — only consulted when subnet_name is provided with a vpc_name scope.
 data "aws_vpc" "named" {
   count = (var.subnet_name != null && var.vpc_name != null) ? 1 : 0
   filter {
@@ -27,7 +25,6 @@ data "aws_vpc" "named" {
   }
 }
 
-# Named-subnet lookup — resolves the ID from the Name tag.
 # When vpc_name is also provided, a VPC filter narrows the search to avoid ambiguity.
 data "aws_subnet" "by_name" {
   count = var.subnet_name != null ? 1 : 0
@@ -47,7 +44,6 @@ data "aws_subnet" "by_name" {
   }
 }
 
-# Named hosted zone lookup — resolves the zone ID from the zone name.
 data "aws_route53_zone" "private" {
   count        = var.hosted_zone_name != null ? 1 : 0
   name         = var.hosted_zone_name

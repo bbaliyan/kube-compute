@@ -137,7 +137,6 @@ resource "aws_ssm_parameter" "agent_token" {
   tags  = local.common_tags
 }
 
-# ---- Cluster security group: self-referencing, every cluster member (east-west) ----
 # All-protocol among members (not pinned to today's CNI ports) so it outlives a CNI
 # switch. Owned here rather than a separate module since aws-node-pool attaches to it
 # by real ID (vpc_security_group_ids) — a hard AWS API dependency, unlike Proxmox's
@@ -169,7 +168,6 @@ resource "aws_vpc_security_group_egress_rule" "cluster_all" {
   tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-egress-all" })
 }
 
-# ---- etcd security group: control-plane members only, never joined by workers ----
 resource "aws_security_group" "control_plane_etcd" {
   name_prefix = "kube-compute-${var.cluster_name}-etcd-"
   description = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
@@ -229,7 +227,6 @@ module "node_bootstrap" {
   extra_tags                     = var.extra_tags
 }
 
-# ---- Additional control-plane nodes (2..N): server-join, one per remaining AZ ----
 # node-bootstrap renders a plan-time-only cloud-init payload (no live connection to wait
 # on), so ordering relies on RKE2's own join retry: a sibling starting alongside genesis
 # just retries its connection until genesis is ready. Ordering among the additional nodes
@@ -297,7 +294,6 @@ resource "aws_instance" "control_plane_additional" {
   }
 }
 
-# ---- Internal NLB fronting the control plane on 6443 (control_plane_count > 1, endpoint_mode = "loadbalancer" only) ----
 # No registration endpoint for control_plane_count = 1. Internal NLB is the default HA mode
 # on cloud (a floating VIP can't cross AZ boundaries); see endpoint_mode for dns/static.
 resource "aws_lb" "control_plane" {
@@ -354,7 +350,6 @@ resource "aws_lb_target_group_attachment" "additional" {
   port             = 6443
 }
 
-# ---- dns endpoint mode: Route53 multivalue-answer records, one per control-plane node ----
 # Route53's public health checkers can't reach a private VPC IP, so each health check is
 # CLOUDWATCH_METRIC-type, backed by that instance's own EC2 status-check alarm — the
 # standard bridge for private-IP Route53 failover.
@@ -450,7 +445,6 @@ resource "aws_vpc_security_group_egress_rule" "node_all" {
   tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-egress-all" })
 }
 
-# ---- IAM: SSM-managed instance for the control-plane (send-command/session) ----
 # Inline JSON avoids a data.aws_iam_policy_document block that mock_provider cannot evaluate.
 resource "aws_iam_role" "node" {
   name_prefix = "kube-compute-${var.cluster_name}-"
@@ -481,7 +475,6 @@ resource "aws_iam_instance_profile" "node" {
   tags        = local.common_tags
 }
 
-# ---- The control-plane node (genesis: server-init) ----
 # Additional nodes (server-join) are provisioned below in aws_instance.control_plane_additional.
 # The precondition fails plan explicitly when control_plane_count > 1 but fewer than 3 distinct
 # AZs resolved, rather than silently under-spreading the quorum.
@@ -556,7 +549,6 @@ resource "aws_instance" "control_plane" {
   }
 }
 
-# ---- Optional DNS convenience: wildcard A record in a Route53 zone you already own ----
 # Created only when cluster_domain is set and a zone is resolvable. Otherwise register
 # *.${cluster}.${domain} -> cluster_ip yourself using the wildcard_dns_name output.
 resource "aws_route53_record" "wildcard" {

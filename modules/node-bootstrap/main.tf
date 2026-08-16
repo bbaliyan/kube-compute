@@ -75,7 +75,6 @@ locals {
   effective_crd_wait_enabled        = var.node_role == "server-init" && var.cluster_autoscaler_crd_wait_enabled
   genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
-  # ---- GitOps Application manifests ----
   # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
   # node free of any templating engine.
   platform_values_object = merge(
@@ -168,7 +167,6 @@ locals {
         syncOptions: ["CreateNamespace=true"]
   EOT
 
-  # ---- registries.yaml ----
   # Ported from registries.yaml.j2, including the containerd TLS pin to the
   # same anchors path the trusted CA is written to.
   registry_mirror_host = var.registry_mirror_url != null ? replace(var.registry_mirror_url, "/^https?:\\/\\//", "") : ""
@@ -190,7 +188,6 @@ locals {
     "      ca_file: /etc/pki/ca-trust/source/anchors/trusted-ca.crt",
   ], [""]))
 
-  # ---- static config.yaml fragments ----
   # Everything in config.yaml known at plan time. Node-discovered parts
   # (node-ip, its own IP as the first tls-san, the fetched agent token, the
   # rejoin-probe result) are appended by bootstrap.sh on the node itself.
@@ -235,7 +232,6 @@ locals {
     [for k, v in var.node_labels : "  - \"${k}=${v}\""],
   ))
 
-  # ---- kubelet resolv-conf override ----
   # kubelet's default ClusterFirst DNS policy copies the NODE's own
   # /etc/resolv.conf search domains into every pod. NetworkManager derives a
   # search domain from this node's FQDN hostname (cluster_fqdn_suffix) — the
@@ -263,7 +259,6 @@ locals {
     "  - \"resolv-conf=${local.kubelet_resolv_conf_path}\"",
   ])
 
-  # ---- runtime bootstrap script ----
   bootstrap_sh = templatefile("${path.module}/templates/bootstrap.sh.tftpl", {
     node_role                           = var.node_role
     cni                                 = var.cni
@@ -289,7 +284,6 @@ locals {
     genesis_apply_manifest_paths        = local.genesis_apply_manifest_paths
   })
 
-  # ---- secrets.env ----
   # Every key is always defined (empty where a role doesn't use it) so
   # bootstrap.sh can run under `set -u` after sourcing it. Single-quoted with
   # the POSIX '\'' escape so any character in a token is safe to embed.
@@ -306,7 +300,6 @@ locals {
     [""],
   ))
 
-  # ---- cloud-init write_files ----
   # Every entry is base64-encoded (encoding: b64) — not cosmetic: it makes the
   # outer cloud-config document immune to its own payloads (a PEM, an
   # operator-supplied manifest, a token containing a colon can never break

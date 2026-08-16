@@ -49,7 +49,6 @@ if [[ ! -d "$target_dir/.git" ]]; then
   exit 1
 fi
 
-# ---- Wipe target, preserving .git/ and the exclude-list ----
 # Exclude-list: README.md (static, hand-written per split repo), .github/
 # (repo settings only, no CI of its own), and .gitignore (ignores .terraform/
 # etc. - without this, a later `tofu init` run in this checkout, e.g. this
@@ -60,7 +59,6 @@ find "$target_dir" -mindepth 1 -maxdepth 1 \
   ! -name ".git" ! -name "README.md" ! -name ".github" ! -name ".gitignore" \
   -exec rm -rf {} +
 
-# ---- Copy control-plane-<provider> to the split repo root ----
 # cp -a (not rsync, to avoid an extra tool dependency in the CI image) copies
 # everything including local tofu-init artifacts (.terraform/); those are
 # stripped in a single cleanup pass below. .terraform.lock.hcl IS kept
@@ -68,7 +66,6 @@ find "$target_dir" -mindepth 1 -maxdepth 1 \
 mkdir -p "$target_dir"
 cp -a "$source_dir/modules/$control_plane_mod/." "$target_dir/"
 
-# ---- Copy the rest under modules/<name>/ ----
 # node-pool drops its provider prefix here (the split repo's own name already
 # carries the provider); node-bootstrap/component-versions are already
 # provider-neutral, so their destination name matches their source name.
@@ -81,8 +78,6 @@ done
 
 find "$target_dir" -type d -name ".terraform" -exec rm -rf {} +
 
-# ---- Rewrite the root module's known relative references to node-bootstrap /
-# component-versions ----
 # Scoped find/replace only — not a general HCL rewrite. Only the module
 # "source" lines need rewriting (sibling -> parent-child); neither module is
 # otherwise referenced by a path.module-relative default in control-plane's
@@ -100,7 +95,6 @@ perl -pi -e 's{source\s*=\s*"\.\./node-bootstrap"}{source = "./modules/node-boot
 cp "$source_dir/LICENSE" "$target_dir/LICENSE"
 cp "$source_dir/NOTICE" "$target_dir/NOTICE"
 
-# ---- Interface-parity check ----
 # variables.tf/outputs.tf must be byte-identical between source and output
 # for every copied module — this is what lets a consumer swap a git/local
 # source for the registry source with zero change to their inputs block.

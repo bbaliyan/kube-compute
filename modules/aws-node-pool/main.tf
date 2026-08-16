@@ -49,7 +49,6 @@ locals {
   })
 }
 
-# ---- IAM: SSM-managed instance, scoped to read only this cluster's agent token ----
 resource "aws_iam_role" "worker" {
   name_prefix = "kube-compute-${var.cluster_name}-worker-"
   assume_role_policy = jsonencode({
@@ -102,7 +101,6 @@ resource "aws_iam_instance_profile" "worker" {
   tags        = local.common_tags
 }
 
-# ---- Shared worker join payload: one node-bootstrap render for the whole pool ----
 # The ASG's launch template hands every instance the same user_data — Terraform never sees
 # individual pool members, so there's no per-instance node_name to assign (unlike
 # aws-control-plane's discrete nodes). set_hostname = false omits node-bootstrap's
@@ -124,7 +122,6 @@ module "node_bootstrap" {
   dns_servers               = var.dns_servers
 }
 
-# ---- Fixed node pool: ASG + launch template, no scaling policies ----
 # min_size = max_size = desired_capacity — deliberately inert until a chosen autoscaler is
 # wired up to drive it (kube-image-design Ticket 07's locked shape). Still buys self-healing
 # and rolling launch-template updates for free; nothing here reacts to load.

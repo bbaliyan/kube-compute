@@ -33,7 +33,6 @@ update-ca-trust extract
 %{ endif ~}
 
 %{ if node_role == "server-init" && dns_self_register_zone != "" ~}
-# ---- genesis DNS self-registration (RFC2136/TSIG) ----
 # Publishes a single-target A record as soon as this node knows its own IP, so
 # a concurrently-bootstrapping sibling never has to wait for the round-robin
 # api.* record every control-plane node contributes to.
@@ -65,7 +64,6 @@ umask 022
 %{ endif ~}
 
 %{ if registry_mirror_url != "" ~}
-# ---- registry mirror preflight ----
 # Advisory only, matching the Ansible role's uri check in spirit: a 200 or 401
 # both mean "the mirror is answering". Non-fatal here because a first boot must
 # not be lost to a transiently unreachable mirror.
@@ -76,7 +74,6 @@ case "$MIRROR_CODE" in
 esac
 %{ endif ~}
 
-# ---- render /etc/rancher/rke2/config.yaml ----
 install -d -m 0755 /etc/rancher/rke2
 CONFIG=/etc/rancher/rke2/config.yaml
 umask 077
@@ -159,7 +156,6 @@ if [ -d "$KC/server-manifests" ]; then
 fi
 %{ endif ~}
 
-# ---- start RKE2 ----
 %{ if node_role == "server-init" ~}
 systemctl enable --now rke2-server.service
 %{ endif ~}

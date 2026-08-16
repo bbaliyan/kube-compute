@@ -132,7 +132,6 @@ resource "random_password" "agent_token" {
   special = false
 }
 
-# ---- Cluster firewall: ipset scoped to the cluster's L2 subnet CIDR ----
 resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
   name    = local.cluster_ipset_name
   comment = "kube-compute ${var.cluster_name}: east-west traffic among cluster members (subnet-scoped — see module README)."
@@ -142,7 +141,6 @@ resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
   }
 }
 
-# ---- etcd firewall: exact control-plane IPs only, never joined by workers ----
 resource "proxmox_virtual_environment_firewall_ipset" "etcd" {
   name    = local.etcd_ipset_name
   comment = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
@@ -270,7 +268,6 @@ module "node_bootstrap_additional" {
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
 }
 
-# ---- Per-node cloud-init: node-bootstrap's full lean payload ----
 # Subsumes the old hostname-only snippet — hostname is now one key inside
 # node-bootstrap's own cloud-config, alongside the RKE2 config/registries/CA/manifest
 # write_files and the bootstrap runcmd, so the two can't drift. vendor_data (SSH keys +
@@ -301,7 +298,6 @@ resource "proxmox_virtual_environment_file" "node_init_additional" {
   }
 }
 
-# ---- DNS registration: publishes cluster_fqdn -> every control-plane IP via RFC2136 ----
 # depends_on the VMs, not node-bootstrap (a pure plan-time render now) — the record
 # appears once VMs exist, not once the API server actually answers, since cloud-init
 # runs async after Terraform returns and can't be observed finishing. A client that
@@ -319,7 +315,6 @@ module "dns_registration" {
   record_ttl       = var.dns_record_ttl
 }
 
-# ---- Wildcard DNS registration: publishes *.<cluster_name> -> the same IPs ----
 # Only on all_in_one clusters — see wildcard_registration_enabled above for why a
 # dedicated_control_plane cluster leaves this to proxmox-node-pool instead. Same
 # depends_on/async reasoning as dns_registration above.
