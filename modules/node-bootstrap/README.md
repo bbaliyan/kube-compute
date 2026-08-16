@@ -62,15 +62,23 @@ CAPMOX specifically. It exposes two generic inputs instead:
   `kubectl apply -f`'d in order by `bootstrap.sh`. This module does not
   interpret `content` at all.
 - `cluster_autoscaler_crd_wait_enabled` — gates a `bootstrap.sh` block that
-  applies the kube-image-baked `capi-install.yaml` (CAPI core + CAPMOX
-  manifests) and waits for CAPI's core CRDs to be `Established` **before**
-  applying the `genesis_apply_manifests` entries. Despite the name, it is not
-  cluster-autoscaler-specific — any caller needing CAPI's CRDs to exist first
-  can use it.
+  waits for cert-manager's CRDs (installed by the platform Argo CD
+  Application, applied just before this block), applies the kube-image-baked
+  `capi-install.yaml` (CAPI core + CAPMOX manifests — their webhook TLS is
+  provisioned via cert-manager `Issuer`/`Certificate` objects, a hard
+  dependency), and waits for CAPI's own core CRDs to be `Established`
+  **before** applying the `genesis_apply_manifests` entries. Despite the
+  name, it is not cluster-autoscaler-specific — any caller needing CAPI's
+  CRDs to exist first can use it.
 
-Both are genesis-only (`server-init` only) and independent of
-`gitops_platform_enabled` — a one-time step, not tied to whether a platform
-Argo CD Application also exists on this cluster.
+Both are genesis-only (`server-init` only). `genesis_apply_manifests` itself
+has no opinion on `gitops_platform_enabled`. `cluster_autoscaler_crd_wait_enabled`
+is different: it is NOT independent of `gitops_platform_enabled` — cert-manager
+only exists on this cluster because the platform Argo CD Application installs
+it, so setting this true with `gitops_platform_enabled = false` leaves
+`capi-install.yaml` with no way to ever succeed. `proxmox-cluster` (the one
+caller today) enforces this with its own
+`cluster_autoscaler_requires_platform_gitops` precondition.
 
 The one real caller today is `modules/proxmox-cluster`, which owns the
 `cluster_autoscaler_enabled` toggle and everything cluster-autoscaler-specific:

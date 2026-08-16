@@ -45,7 +45,7 @@ run "cluster_autoscaler_enabled_without_template_fails_validation" {
     cluster_autoscaler_worker_min_size = 1
     cluster_autoscaler_worker_max_size = 3
   }
-  expect_failures = [var.cluster_autoscaler_worker_template]
+  expect_failures = [var.cluster_autoscaler_worker_template, var.cluster_autoscaler_worker_ip_pool]
 }
 
 run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
@@ -66,6 +66,11 @@ run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
       network_bridge          = "vmbr0"
       disk_datastore_id       = "local-lvm"
       proxmox_node            = "pve1"
+    }
+    cluster_autoscaler_worker_ip_pool = {
+      addresses = ["192.168.1.230-192.168.1.240"]
+      gateway   = "192.168.1.1"
+      prefix    = 24
     }
   }
   expect_failures = [var.cluster_autoscaler_worker_max_size]
@@ -110,6 +115,11 @@ run "cluster_autoscaler_enabled_renders_capi_core_bundle_no_caprke2" {
       disk_datastore_id       = "local-lvm"
       proxmox_node            = "pve1"
     }
+    cluster_autoscaler_worker_ip_pool = {
+      addresses = ["192.168.1.230-192.168.1.240"]
+      gateway   = "192.168.1.1"
+      prefix    = 24
+    }
   }
 
   assert {
@@ -148,9 +158,34 @@ run "cluster_autoscaler_enabled_renders_capi_core_bundle_no_caprke2" {
   }
   assert {
     condition = anytrue([
-      for m in local.genesis_apply_manifests : strcontains(m.content, "memoryMiB: 3907")
+      for m in local.genesis_apply_manifests : strcontains(m.content, "memoryMiB: 4096")
     ])
-    error_message = "vm_memory_mb = 4096 must convert to memoryMiB = ceil(4096 * 1000000 / 1048576) = 3907"
+    error_message = "vm_memory_mb is already MiB (same convention as every other vm_memory_mb in this project) — it must pass through to memoryMiB unconverted, not through a decimal-MB(10^6)-to-MiB(2^20) formula (that formula previously corrupted 8192 -> 7813 on a real apply, rejected by CAPMOX's CRD validation for not being a multiple of 8)"
+  }
+  assert {
+    condition = anytrue([
+      for m in local.genesis_apply_manifests : strcontains(m.content, "dnsServers:") && strcontains(m.content, "- 1.1.1.1") && strcontains(m.content, "- 8.8.8.8")
+    ])
+    error_message = "ProxmoxCluster.spec.dnsServers is required by CAPMOX's CRD validation (rejected an empty spec: {} on a real apply) — must be populated from this module's own dns_servers input"
+  }
+  assert {
+    condition = anytrue([
+      for m in local.genesis_apply_manifests :
+      strcontains(m.content, "ipv4Config:") &&
+      strcontains(m.content, "- 192.168.1.230-192.168.1.240") &&
+      strcontains(m.content, "gateway: 192.168.1.1") &&
+      strcontains(m.content, "prefix: 24")
+    ])
+    error_message = "ProxmoxCluster.spec.ipv4Config is required by CAPMOX's CRD validation (CAPMOX has no DHCP mode — rejected an empty spec on a real apply) — must be populated from cluster_autoscaler_worker_ip_pool"
+  }
+  assert {
+    condition = anytrue([
+      for m in local.genesis_apply_manifests :
+      strcontains(m.content, "controlPlaneEndpoint:") &&
+      strcontains(m.content, "host: genesis.bharat.example.test") &&
+      strcontains(m.content, "port: 6443")
+    ])
+    error_message = "ProxmoxCluster.spec.controlPlaneEndpoint.host rejects empty (CAPMOX's CRD validation on a real apply) — must be populated from cluster_autoscaler_registration_address, not left blank"
   }
 }
 
@@ -169,6 +204,11 @@ run "cluster_autoscaler_enabled_without_dns_registration_fails_check" {
       network_bridge          = "vmbr0"
       disk_datastore_id       = "local-lvm"
       proxmox_node            = "pve1"
+    }
+    cluster_autoscaler_worker_ip_pool = {
+      addresses = ["192.168.1.230-192.168.1.240"]
+      gateway   = "192.168.1.1"
+      prefix    = 24
     }
   }
 

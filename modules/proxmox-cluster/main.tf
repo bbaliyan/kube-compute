@@ -17,9 +17,18 @@ locals {
 
   # ---- cluster-autoscaler-workers.yaml (Cluster + Secret + ProxmoxMachineTemplate + MachineDeployment) ----
   # See templates/cluster-autoscaler-workers.yaml.tftpl for field-source
-  # commentary. vm_memory_mb -> memoryMiB: ProxmoxMachineTemplate wants MiB,
-  # this module's/proxmox-node-pool's own convention is MB, so the conversion
-  # happens here, not in the template.
+  # commentary. vm_memory_mb -> memoryMiB: despite the "_mb" name, this
+  # variable is already MiB project-wide (see its own description, "RAM per
+  # ... VM in MiB" — same convention as proxmox-control-plane's and
+  # proxmox-node-pool's own vm_memory_mb, and the same value bpg/proxmox's
+  # `memory { dedicated = ... }` block consumes directly). A prior revision
+  # of this local ran it through a decimal-MB(10^6)-to-MiB(2^20) conversion
+  # formula anyway, silently corrupting e.g. 8192 -> 7813 — caught on a real
+  # apply: CAPMOX's CRD validation rejects non-multiple-of-8 memoryMiB
+  # values outright ("spec.template.spec.memoryMiB: Invalid value: 7813
+  # ... should be a multiple of 8"). No conversion is needed; pass the value
+  # straight through, matching every other vm_memory_mb consumer in this
+  # project.
   cluster_autoscaler_bundle_yaml = !var.cluster_autoscaler_enabled ? "" : templatefile(
     "${path.module}/templates/cluster-autoscaler-workers.yaml.tftpl",
     {
@@ -27,13 +36,41 @@ locals {
       min_size               = var.cluster_autoscaler_worker_min_size
       max_size               = var.cluster_autoscaler_worker_max_size
       vm_cores               = var.cluster_autoscaler_worker_template.vm_cores
-      vm_memory_mib          = ceil(var.cluster_autoscaler_worker_template.vm_memory_mb * 1000000 / 1048576)
+      vm_memory_mib          = var.cluster_autoscaler_worker_template.vm_memory_mb
       vm_disk_gb             = var.cluster_autoscaler_worker_template.vm_disk_gb
       proxmox_node           = var.cluster_autoscaler_worker_template.proxmox_node
       proxmox_template_vm_id = var.cluster_autoscaler_worker_template.proxmox_template_vm_id
       disk_datastore_id      = var.cluster_autoscaler_worker_template.disk_datastore_id
       network_bridge         = var.cluster_autoscaler_worker_template.network_bridge
-      bootstrap_secret_b64   = var.cluster_autoscaler_enabled ? base64encode(module.cluster_autoscaler_worker_bootstrap[0].cloud_init_user_data) : ""
+      dns_servers            = var.dns_servers
+      ip_pool_addresses      = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_ip_pool.addresses : []
+      ip_pool_gateway        = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_ip_pool.gateway : ""
+      ip_pool_prefix         = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_ip_pool.prefix : 0
+      ip_pool_metric         = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_ip_pool.metric : 0
+      # ProxmoxCluster.spec.controlPlaneEndpoint.host rejects an empty/unset
+      # value outright ("provided endpoint address is not a valid IP or
+      # FQDN") — confirmed on a real apply. This ProxmoxCluster is a
+      # Get()-satisfying placeholder only (see the big comment in the
+      # template on why Cluster.spec.controlPlaneRef is deliberately
+      # omitted), so its value is never actually consulted for anything
+      # actionable here — reusing cluster_autoscaler_registration_address
+      # (the same genesis self-registered DNS name autoscaler workers
+      # already join through) keeps it real/resolvable without introducing
+      # the module.control_plane.cluster_ip/cluster_fqdn dependency cycle
+      # that local's own comment documents. 6443 is RKE2/Kubernetes' standard
+      # API server port — this project never overrides it.
+      # coalesce, not the bare local: cluster_domain/dns_server_address unset
+      # (with cluster_autoscaler_enabled = true) is already a hard error via
+      # the terraform_data.cluster_autoscaler_registration_address_configured
+      # precondition below, but that precondition and this templatefile()
+      # call both evaluate in the same plan — a bare null here would crash
+      # templatefile() itself ("Cannot include a null value in a string
+      # template") before OpenTofu gets to report the precondition's own,
+      # more actionable error message. The empty-string fallback is never a
+      # real value an actual apply reaches (the precondition blocks it).
+      control_plane_endpoint_host = local.cluster_autoscaler_registration_address != null ? local.cluster_autoscaler_registration_address : ""
+      control_plane_endpoint_port = 6443
+      bootstrap_secret_b64        = var.cluster_autoscaler_enabled ? base64encode(module.cluster_autoscaler_worker_bootstrap[0].cloud_init_user_data) : ""
     }
   )
 
@@ -105,6 +142,27 @@ resource "terraform_data" "cluster_autoscaler_registration_address_configured" {
     precondition {
       condition     = local.cluster_autoscaler_registration_address != null
       error_message = "cluster_autoscaler_enabled = true requires both cluster_domain and dns_server_address to be set — autoscaled workers join through the genesis node's self-registered DNS name, computed from those two, same as proxmox-node-pool's own default registration_address."
+    }
+  }
+}
+
+# The CAPI-core/CAPMOX manifests bootstrap.sh applies as capi-install.yaml
+# provision their webhook TLS via cert-manager Issuer/Certificate resources —
+# a hard dependency, not cosmetic. cert-manager itself is only installed by
+# the platform Argo CD Application (kube-platform's wave-0
+# cert-manager-app.yaml), so cluster_autoscaler_enabled = true with
+# gitops_platform_enabled = false leaves capi-install.yaml with no way to
+# ever succeed (confirmed on a real apply: "no matches for kind Issuer/
+# Certificate in version cert-manager.io/v1: ensure CRDs are installed
+# first"). Fail this at plan/apply time rather than at 03:00 in a bootstrap
+# log on a booting VM.
+resource "terraform_data" "cluster_autoscaler_requires_platform_gitops" {
+  count = var.cluster_autoscaler_enabled ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = var.gitops_platform_enabled
+      error_message = "cluster_autoscaler_enabled = true requires gitops_platform_enabled = true — the CAPI/CAPMOX manifests it applies depend on cert-manager, which is only installed by the platform Argo CD Application."
     }
   }
 }

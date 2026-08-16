@@ -218,39 +218,6 @@ if [ "$ACTIVE" -ne 1 ]; then
 fi
 %{ endif ~}
 
-%{ if cluster_autoscaler_crd_wait_enabled ~}
-# ---- CAPI/CAPMOX install + genesis_apply_manifests entries: genesis only,
-#      after the node is Ready. Applied before the Argo CD platform/workloads
-#      Applications below (and independent of whether either of those is even
-#      enabled): CAPI's own CRDs must exist before anything that references
-#      them, and Argo CD ownership is irrelevant to this one-time genesis
-#      install. This module does not interpret genesis_apply_manifests'
-#      content — the composing module (e.g. proxmox-cluster) decides what
-#      goes in the list; this is just the ordered apply. ----
-KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
-$KUBECTL apply -f "$KC/manifests/capi-install.yaml"
-# Wait for CAPI's core CRDs to be Established before applying anything that
-# references them — same "CRD-established vs controller-running" race this
-# project already hit and fixed for Argo CD's own bootstrap (see the
-# CoreDNS-wait / argocd-application-controller-wait loops below).
-for attempt in $(seq 1 60); do
-  if $KUBECTL get crd machinedeployments.cluster.x-k8s.io >/dev/null 2>&1; then
-    break
-  fi
-  sleep 2
-done
-%{ endif ~}
-%{ for manifest_path in genesis_apply_manifest_paths ~}
-# Not nested inside the cluster_autoscaler_crd_wait_enabled block above:
-# genesis_apply_manifests is a generic mechanism, not autoscaler-specific,
-# so its own apply must not silently depend on that flag being set too —
-# a caller passing manifests with the wait flag left false would otherwise
-# get them written to disk (write_files runs unconditionally) but never
-# applied, with no error anywhere.
-KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
-$KUBECTL apply -f "${manifest_path}"
-%{ endfor ~}
-
 %{ if argocd_needed ~}
 # ---- GitOps/Argo CD bootstrap: genesis only, after the node is Ready ----
 KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
@@ -325,5 +292,85 @@ $KUBECTL apply -f "$KC/manifests/10-platform-app.yaml"
 $KUBECTL apply -f "$KC/manifests/11-workloads-app.yaml"
 %{ endif ~}
 %{ endif ~}
+
+%{ if cluster_autoscaler_crd_wait_enabled ~}
+# ---- CAPI/CAPMOX install + genesis_apply_manifests entries: genesis only,
+#      after the node is Ready, and deliberately AFTER the Argo CD block
+#      above (not before, as an earlier revision had it). clusterctl's
+#      generated CAPI-core/CAPMOX manifests provision their webhook TLS via
+#      cert-manager Issuer/Certificate objects (cert-manager.io/v1) — a hard
+#      dependency, not cosmetic — and cert-manager itself is only installed
+#      by the platform Argo CD Application applied just above (kube-platform's
+#      wave-0 cert-manager-app.yaml). Applying capi-install.yaml before that
+#      exists fails outright ("no matches for kind Issuer/Certificate in
+#      version cert-manager.io/v1: ensure CRDs are installed first"),
+#      confirmed on a real apply. The composing module (proxmox-cluster) is
+#      expected to enforce cluster_autoscaler_enabled requires
+#      gitops_platform_enabled via its own precondition — this block does not
+#      re-check that, it only waits for the dependency that precondition
+#      guarantees will eventually appear.
+#
+#      CRDs existing is NOT sufficient, though — confirmed on a second real
+#      apply after the CRD-wait alone was in place: cert-manager's chart
+#      installs the CRDs and starts the webhook Deployment in the same Helm
+#      release, so the CRD-established/controller-not-ready race that
+#      already bit the machinedeployments CRD wait below applies just as
+#      much to cert-manager's own *validating* webhook — Issuer/Certificate
+#      is gated by ValidatingWebhookConfiguration "webhook.cert-manager.io"
+#      at admission time, and that failed with "no endpoints available for
+#      service cert-manager-webhook" when the webhook Pod hadn't finished
+#      starting yet, even though the CRDs themselves already existed. Wait
+#      for the Service to actually have endpoints (a Pod passed its
+#      readiness probe and got registered), not just for the CRD type to
+#      exist. This module does not interpret genesis_apply_manifests'
+#      content — the composing module decides what goes in the list; this is
+#      just the ordered apply. ----
+KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
+CERT_MANAGER_CRDS_READY=0
+for attempt in $(seq 1 90); do
+  if $KUBECTL get crd certificates.cert-manager.io >/dev/null 2>&1 && $KUBECTL get crd issuers.cert-manager.io >/dev/null 2>&1; then
+    CERT_MANAGER_CRDS_READY=1
+    break
+  fi
+  sleep 5
+done
+if [ "$CERT_MANAGER_CRDS_READY" -ne 1 ]; then
+  echo "kube-compute: cert-manager CRDs did not appear within ~450s of applying the platform Application — capi-install.yaml requires them and cannot proceed" >&2
+  exit 1
+fi
+CERT_MANAGER_WEBHOOK_READY=0
+for attempt in $(seq 1 90); do
+  if [ -n "$($KUBECTL get endpoints cert-manager-webhook -n cert-manager -o jsonpath='{.subsets}' 2>/dev/null)" ]; then
+    CERT_MANAGER_WEBHOOK_READY=1
+    break
+  fi
+  sleep 5
+done
+if [ "$CERT_MANAGER_WEBHOOK_READY" -ne 1 ]; then
+  echo "kube-compute: cert-manager-webhook had no endpoints within ~450s of its CRDs appearing — capi-install.yaml's Issuer/Certificate objects would fail admission and cannot proceed" >&2
+  exit 1
+fi
+$KUBECTL apply -f "$KC/manifests/capi-install.yaml"
+# Wait for CAPI's core CRDs to be Established before applying anything that
+# references them — same "CRD-established vs controller-running" race this
+# project already hit and fixed for Argo CD's own bootstrap (see the
+# CoreDNS-wait / argocd-application-controller-wait loops above).
+for attempt in $(seq 1 60); do
+  if $KUBECTL get crd machinedeployments.cluster.x-k8s.io >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+%{ endif ~}
+%{ for manifest_path in genesis_apply_manifest_paths ~}
+# Not nested inside the cluster_autoscaler_crd_wait_enabled block above:
+# genesis_apply_manifests is a generic mechanism, not autoscaler-specific,
+# so its own apply must not silently depend on that flag being set too —
+# a caller passing manifests with the wait flag left false would otherwise
+# get them written to disk (write_files runs unconditionally) but never
+# applied, with no error anywhere.
+KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
+$KUBECTL apply -f "${manifest_path}"
+%{ endfor ~}
 
 echo "kube-compute: bootstrap complete $(date -Is)"

@@ -36,9 +36,27 @@
 #    move the no-op from "object missing" to "object never ready". Not
 #    checked in either research pass; this project has no mechanism today
 #    that would ever patch that status field.
-# 2. Whether ProxmoxClusterSpec has other required (non-optional) fields
-#    beyond what's set here that CRD admission would reject an empty/minimal
-#    object for — not checked against the live OpenAPI schema either.
+# 2. (RESOLVED on a real apply, CAPMOX v0.9.0): ProxmoxClusterSpec DOES have
+#    other required fields beyond what a prior revision of this template
+#    set — spec.dnsServers, and spec.ipv4Config (or ipv6Config). An empty
+#    `spec: {}` is rejected outright by CRD admission ("spec.dnsServers:
+#    Required value", then separately "at least one ip config must be set,
+#    either ipv4Config or ipv6Config"). dnsServers is filled from this
+#    project's existing dns_servers input. ipv4Config is CAPMOX's own static
+#    IPAM — confirmed via `kubectl explain proxmoxcluster.spec.ipv4Config`
+#    against the live CRD that CAPMOX has no DHCP mode for CAPI-managed
+#    Machines (ProxmoxMachine's network.default has only an optional
+#    ipv4PoolRef, no dhcp toggle) — filled from
+#    cluster_autoscaler_worker_ip_pool, a caller-supplied static range
+#    excluded from the LAN's DHCP pool.
+# 3. (RESOLVED on a real apply): spec.controlPlaneEndpoint.host also rejects
+#    empty ("provided endpoint address is not a valid IP or FQDN"), despite
+#    not being marked -required- by `kubectl explain`. This ProxmoxCluster
+#    never actually drives anything off this value (no controlPlaneRef —
+#    see above), so it's filled with the same genesis self-registered DNS
+#    name autoscaler workers already join through (main.tf's
+#    cluster_autoscaler_registration_address), not
+#    module.control_plane.cluster_ip/cluster_fqdn (would cycle).
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
@@ -59,7 +77,22 @@ metadata:
     cluster.x-k8s.io/managed-by: ""
   labels:
     cluster.x-k8s.io/cluster-name: ${cluster_name}
-spec: {}
+spec:
+  dnsServers:
+%{ for server in dns_servers ~}
+    - ${server}
+%{ endfor ~}
+  ipv4Config:
+    addresses:
+%{ for address in ip_pool_addresses ~}
+      - ${address}
+%{ endfor ~}
+    gateway: ${ip_pool_gateway}
+    prefix: ${ip_pool_prefix}
+    metric: ${ip_pool_metric}
+  controlPlaneEndpoint:
+    host: ${control_plane_endpoint_host}
+    port: ${control_plane_endpoint_port}
 ---
 apiVersion: v1
 kind: Secret

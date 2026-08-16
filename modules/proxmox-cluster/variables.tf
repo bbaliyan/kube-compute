@@ -401,3 +401,19 @@ variable "cluster_autoscaler_worker_template" {
     error_message = "cluster_autoscaler_worker_template is required when cluster_autoscaler_enabled is true."
   }
 }
+
+variable "cluster_autoscaler_worker_ip_pool" {
+  description = "Static IPv4 pool CAPMOX allocates autoscaler-worker addresses from, via ProxmoxCluster.spec.ipv4Config. CAPMOX has no DHCP mode for CAPI-managed Machines — confirmed against the live CRD (kubectl explain proxmoxcluster.spec.ipv4Config): ProxmoxClusterSpec's CEL validation hard-requires ipv4Config or ipv6Config, and ProxmoxMachine's own network.default has no dhcp toggle, only an optional ipv4PoolRef. This differs from proxmox-node-pool's plain Terraform-provisioned workers, which use DHCP freely — that path never goes through CAPMOX's own ipam.cluster.x-k8s.io IPAddressClaim/IPAddress machinery. `addresses` must be a small range/list carved out of the caller's LAN and excluded from their router's DHCP pool (CAPMOX assigns from it directly, unmanaged by DHCP) — sized for at least cluster_autoscaler_worker_max_size concurrent addresses. Null (default) is valid only when cluster_autoscaler_enabled is false."
+  type = object({
+    addresses = list(string)
+    gateway   = string
+    prefix    = number
+    metric    = optional(number, 100)
+  })
+  default = null
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_ip_pool != null
+    error_message = "cluster_autoscaler_worker_ip_pool is required when cluster_autoscaler_enabled is true — CAPMOX has no DHCP mode, ProxmoxCluster.spec.ipv4Config must name a real static range excluded from the LAN's DHCP pool."
+  }
+}
