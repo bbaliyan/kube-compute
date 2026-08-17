@@ -93,6 +93,39 @@ run "explicit_ami_overrides_lookup" {
   }
 }
 
+run "os_image_name_lookup" {
+  command = plan
+  override_data {
+    target = data.aws_ami.by_name
+    values = { id = "ami-byname789" }
+  }
+  variables {
+    cluster_name  = "byname"
+    instance_type = "m7g.large"
+    subnet_id     = "subnet-x"
+    os_image_name = "almalinux10-arm64-kube-image-*"
+  }
+  assert {
+    condition     = output.effective_ami_id == "ami-byname789"
+    error_message = "os_image_name should resolve to the looked-up AMI ID"
+  }
+}
+
+run "os_image_ami_id_overrides_os_image_name" {
+  command = plan
+  variables {
+    cluster_name    = "bothset"
+    instance_type   = "m7g.large"
+    subnet_id       = "subnet-x"
+    os_image_ami_id = "ami-0explicit123"
+    os_image_name   = "almalinux10-arm64-kube-image-*"
+  }
+  assert {
+    condition     = output.effective_ami_id == "ami-0explicit123"
+    error_message = "os_image_ami_id must take precedence over os_image_name when both are set"
+  }
+}
+
 # Previously broken with the regex approach: im4gn is a Graviton storage family
 # (family prefix "im", not matched by the old i[0-9]+g pattern).
 # The data-source approach handles it correctly regardless of naming convention.

@@ -77,6 +77,12 @@ variable "os_image_ami_id" {
   default     = null
 }
 
+variable "os_image_name" {
+  description = "AMI name for the workers, e.g. kube-image's self-descriptive build name. Alternative to os_image_ami_id — the module resolves the ID via a data lookup scoped to this account's own AMIs and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
+  type        = string
+  default     = null
+}
+
 variable "root_volume_size_gb" {
   description = "Root EBS volume size (GB) for every worker."
   type        = number

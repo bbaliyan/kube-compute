@@ -213,6 +213,12 @@ variable "os_image_ami_id" {
   default     = null
 }
 
+variable "os_image_name" {
+  description = "AMI name for the control-plane node(s), e.g. kube-image's self-descriptive build name. Alternative to os_image_ami_id — resolved to an ID via a data lookup scoped to this account and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
+  type        = string
+  default     = null
+}
+
 variable "allowed_ingress_cidrs" {
   description = "CIDR blocks allowed inbound to the cluster ports from outside the cluster — the networks you administer/reach the cluster from. Required — environment-specific."
   type        = list(string)
@@ -247,6 +253,7 @@ variable "node_pools" {
     desired_count       = optional(number, 2)
     instance_type       = optional(string, "m7g.medium")
     os_image_ami_id     = optional(string)
+    os_image_name       = optional(string)
     root_volume_size_gb = optional(number, 20)
     root_volume_type    = optional(string, "gp3")
     extra_node_labels   = optional(map(string), {})

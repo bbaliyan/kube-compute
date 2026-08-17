@@ -32,6 +32,7 @@ module "control_plane" {
   hosted_zone_id                    = var.hosted_zone_id
   instance_type                     = var.instance_type
   os_image_ami_id                   = var.os_image_ami_id
+  os_image_name                     = var.os_image_name
   allowed_ingress_cidrs             = var.allowed_ingress_cidrs
   ingress_ports                     = var.ingress_ports
   root_volume_size_gb               = var.root_volume_size_gb
@@ -55,6 +56,7 @@ module "node_pools" {
   desired_count       = each.value.desired_count
   instance_type       = each.value.instance_type
   os_image_ami_id     = each.value.os_image_ami_id
+  os_image_name       = each.value.os_image_name
   root_volume_size_gb = each.value.root_volume_size_gb
   root_volume_type    = each.value.root_volume_type
   extra_node_labels   = each.value.extra_node_labels

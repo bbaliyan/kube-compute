@@ -55,7 +55,11 @@ locals {
   # Arch from AWS's own metadata — covers all present and future instance types.
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
 
-  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.almalinux10[*].id)
+  effective_ami_id = coalesce(
+    var.os_image_ami_id,
+    try(one(data.aws_ami.by_name[*].id), null),
+    try(one(data.aws_ami.almalinux10[*].id), null),
+  )
 
   # VPC ID resolved from vpc_name, or null when vpc_name is not provided.
   named_vpc_id = try(data.aws_vpc.named[0].id, null)

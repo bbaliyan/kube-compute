@@ -18,7 +18,10 @@ to assign each instance its own unique hostname. Nothing in this module connects
 waits on it, or observes it converge.
 
 **`os_image_ami_id` is opt-in**, same convention as `aws-control-plane`: pass a kube-image-baked
-AMI id to get workers that actually join. The default fallback — latest stock AlmaLinux 10 — has
+AMI id to get workers that actually join. `os_image_name` is an alternative — pass the AMI's
+name instead of its ID (accepts EC2 Name-filter wildcards for "most recent build matching this
+pattern") and the module resolves the ID itself, scoped to your own account and the derived
+architecture. The default fallback — latest stock AlmaLinux 10, when both are left null — has
 no RKE2 baked in and will not join a cluster; it exists only so the AMI lookup resolves to
 something for plan-time testing and as a base for your own bake.
 
@@ -63,9 +66,9 @@ Terraform resources, so verb-scripts discover them via the `autoscaling_group_na
 ## Inputs
 
 See `variables.tf`. Compute sizing is AWS-native: `instance_type`, `root_volume_size_gb`,
-`root_volume_type`. `os_image_ami_id` defaults to the latest stock AlmaLinux 10 for the derived
-architecture (no RKE2 baked in — see "Boot flow" above); pass a kube-image-baked AMI id to get
-workers that actually join.
+`root_volume_type`. `os_image_ami_id`/`os_image_name` default to the latest stock AlmaLinux 10
+for the derived architecture (no RKE2 baked in — see "Boot flow" above); pass a kube-image-baked
+AMI id (or name) to get workers that actually join.
 
 ## Outputs
 

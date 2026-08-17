@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
   ami_arch         = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
-  effective_ami_id = var.os_image_ami_id != null ? var.os_image_ami_id : one(data.aws_ami.almalinux10[*].id)
+  effective_ami_id = coalesce(
+    var.os_image_ami_id,
+    try(one(data.aws_ami.by_name[*].id), null),
+    try(one(data.aws_ami.almalinux10[*].id), null),
+  )
 
   availability_zone = data.aws_subnet.selected.availability_zone
 

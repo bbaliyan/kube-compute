@@ -62,3 +62,29 @@ run "fixed_pool_is_an_asg_on_the_cluster_sg" {
     error_message = "autoscaling_group_name output must expose the ASG for verb-script instance discovery"
   }
 }
+
+run "os_image_name_lookup" {
+  command = plan
+  override_data {
+    target = data.aws_subnet.selected
+    values = { availability_zone = "eu-west-1a", vpc_id = "vpc-mock" }
+  }
+  override_data {
+    target = data.aws_ami.by_name
+    values = { id = "ami-byname789" }
+  }
+  variables {
+    cluster_name              = "byname"
+    aws_region                = "eu-west-1"
+    registration_address      = "10.0.1.5"
+    agent_token_ssm_parameter = "/kube-compute/byname/agent-token"
+    cluster_security_group_id = "sg-cluster123"
+    subnet_id                 = "subnet-worker-a"
+    instance_type             = "m7g.large"
+    os_image_name             = "almalinux10-arm64-kube-image-*"
+  }
+  assert {
+    condition     = aws_launch_template.worker.image_id == "ami-byname789"
+    error_message = "os_image_name should resolve to the looked-up AMI ID"
+  }
+}
