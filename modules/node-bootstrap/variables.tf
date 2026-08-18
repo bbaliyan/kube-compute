@@ -152,6 +152,12 @@ variable "gitops_workloads_path" {
   default     = "."
 }
 
+variable "workloads_extra_helm_parameters" {
+  description = "Additional Helm parameters forwarded verbatim to the workloads Application. Only meaningful when gitops_workloads_repo_url is set."
+  type        = map(string)
+  default     = {}
+}
+
 variable "cert_mode" {
   description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' needs no dependencies. 'byo' expects a Secret named byo-ca-tls in the cert-manager namespace. 'acme' requires DNS-01 config (separate setup)."
   type        = string

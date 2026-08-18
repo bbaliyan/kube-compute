@@ -159,6 +159,14 @@ locals {
         repoURL: ${local.effective_gitops_workloads_repo_url}
         targetRevision: ${var.gitops_workloads_revision}
         path: ${var.gitops_workloads_path}
+    %{~if length(var.workloads_extra_helm_parameters) > 0~}
+        helm:
+          parameters:
+    %{~for name, val in var.workloads_extra_helm_parameters~}
+            - name: ${name}
+              value: "${val}"
+    %{~endfor~}
+    %{~endif~}
       destination:
         server: https://kubernetes.default.svc
         namespace: argocd

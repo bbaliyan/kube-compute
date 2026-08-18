@@ -188,6 +188,7 @@ module "control_plane" {
   gitops_workloads_repo_url         = var.gitops_workloads_repo_url
   gitops_workloads_revision         = var.gitops_workloads_revision
   gitops_workloads_path             = var.gitops_workloads_path
+  workloads_extra_helm_parameters   = var.workloads_extra_helm_parameters
   cluster_type                      = var.cluster_type
   cni                               = var.cni
   cert_mode                         = var.cert_mode

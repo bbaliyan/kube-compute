@@ -245,6 +245,12 @@ variable "platform_extra_helm_parameters" {
   default     = {}
 }
 
+variable "workloads_extra_helm_parameters" {
+  description = "Helm parameters forwarded verbatim to the workloads Application. See node-bootstrap for full description."
+  type        = map(string)
+  default     = {}
+}
+
 variable "platform_helm_values_object" {
   description = "Arbitrary object forwarded to the platform Application as helm.valuesObject. Use for nested values that cannot be expressed as flat helm.parameters strings."
   type        = any

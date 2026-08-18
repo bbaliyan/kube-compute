@@ -204,31 +204,32 @@ resource "aws_vpc_security_group_egress_rule" "etcd_all" {
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
-  cluster_name                   = var.cluster_name
-  node_name                      = "${var.cluster_name}-cp-1"
-  node_fqdn_label                = "cp-1"
-  cluster_fqdn                   = local.cluster_fqdn
-  cluster_fqdn_suffix            = local.fqdn_suffix
-  node_role                      = "server-init"
-  control_plane_taint            = local.control_plane_taint
-  cni                            = local.effective_cni
-  cluster_token                  = random_password.server_token.result
-  cluster_agent_token            = random_password.agent_token.result
-  registration_address           = local.registration_address
-  extra_tls_sans                 = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
-  trusted_ca_pem                 = var.trusted_ca_pem
-  registry_mirror_url            = var.registry_mirror_url
-  dns_servers                    = var.dns_servers
-  gitops_platform_enabled        = var.gitops_platform_enabled
-  gitops_platform_repo_url       = var.gitops_platform_repo_url_override
-  gitops_platform_revision       = var.gitops_platform_revision_override
-  gitops_workloads_repo_url      = var.gitops_workloads_repo_url
-  gitops_workloads_revision      = var.gitops_workloads_revision
-  gitops_workloads_path          = var.gitops_workloads_path
-  cert_mode                      = var.cert_mode
-  platform_extra_helm_parameters = var.platform_extra_helm_parameters
-  platform_helm_values_object    = var.platform_helm_values_object
-  extra_tags                     = var.extra_tags
+  cluster_name                    = var.cluster_name
+  node_name                       = "${var.cluster_name}-cp-1"
+  node_fqdn_label                 = "cp-1"
+  cluster_fqdn                    = local.cluster_fqdn
+  cluster_fqdn_suffix             = local.fqdn_suffix
+  node_role                       = "server-init"
+  control_plane_taint             = local.control_plane_taint
+  cni                             = local.effective_cni
+  cluster_token                   = random_password.server_token.result
+  cluster_agent_token             = random_password.agent_token.result
+  registration_address            = local.registration_address
+  extra_tls_sans                  = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
+  trusted_ca_pem                  = var.trusted_ca_pem
+  registry_mirror_url             = var.registry_mirror_url
+  dns_servers                     = var.dns_servers
+  gitops_platform_enabled         = var.gitops_platform_enabled
+  gitops_platform_repo_url        = var.gitops_platform_repo_url_override
+  gitops_platform_revision        = var.gitops_platform_revision_override
+  gitops_workloads_repo_url       = var.gitops_workloads_repo_url
+  gitops_workloads_revision       = var.gitops_workloads_revision
+  gitops_workloads_path           = var.gitops_workloads_path
+  workloads_extra_helm_parameters = var.workloads_extra_helm_parameters
+  cert_mode                       = var.cert_mode
+  platform_extra_helm_parameters  = var.platform_extra_helm_parameters
+  platform_helm_values_object     = var.platform_helm_values_object
+  extra_tags                      = var.extra_tags
 }
 
 # node-bootstrap renders a plan-time-only cloud-init payload (no live connection to wait
