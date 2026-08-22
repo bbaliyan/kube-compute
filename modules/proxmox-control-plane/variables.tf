@@ -342,3 +342,9 @@ variable "cluster_autoscaler_crd_wait_enabled" {
   type        = bool
   default     = false
 }
+
+variable "extra_server_manifests" {
+  description = "Forwarded verbatim to node-bootstrap's own identically-named variable, on the genesis (server-init) node only — matching genesis_apply_manifests' own scope, since RKE2's manifest auto-deploy only needs to apply once per cluster. Empty by default."
+  type        = map(string)
+  default     = {}
+}

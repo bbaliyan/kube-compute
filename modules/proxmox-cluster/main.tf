@@ -227,6 +227,7 @@ module "control_plane" {
 
   genesis_apply_manifests             = local.genesis_apply_manifests
   cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_enabled
+  extra_server_manifests              = var.extra_server_manifests
 }
 
 module "node_pools" {

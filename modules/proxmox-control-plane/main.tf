@@ -219,6 +219,7 @@ module "node_bootstrap" {
 
   genesis_apply_manifests             = var.genesis_apply_manifests
   cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_crd_wait_enabled
+  extra_server_manifests              = var.extra_server_manifests
 
   dns_self_register_zone        = var.dns_server_address != null ? local.dns_zone : null
   dns_self_register_record_name = "genesis.${var.cluster_name}"

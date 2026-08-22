@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the genesis_apply_manifests/cluster_autoscaler_crd_wait_enabled
-# pass-through: this module owns none of the cluster-autoscaler rendering
-# itself (proxmox-cluster does, see that module's own cluster_autoscaler
-# tests) — it is a pure forward of both variables into its own genesis
-# module "node_bootstrap" call, the same pattern every other node-bootstrap
-# variable already gets here.
+# Guards the genesis_apply_manifests/cluster_autoscaler_crd_wait_enabled/
+# extra_server_manifests pass-throughs: this module owns none of the
+# cluster-autoscaler rendering itself (proxmox-cluster does, see that
+# module's own cluster_autoscaler tests) — it is a pure forward of these
+# variables into its own genesis module "node_bootstrap" call, the same
+# pattern every other node-bootstrap variable already gets here.
 mock_provider "proxmox" {
   mock_resource "proxmox_download_file" {
     defaults = { id = "local:iso/bharat.img" }
@@ -80,5 +80,32 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
       if f.path == "/opt/kube-compute/bootstrap.sh"
     ])
     error_message = "cluster_autoscaler_crd_wait_enabled = true must reach bootstrap.sh's CAPI-install/CRD-wait apply step"
+  }
+}
+
+run "extra_server_manifests_thread_through_to_node_bootstrap" {
+  command = apply
+
+  variables {
+    extra_server_manifests = {
+      "20-coredns-lan-forward.yaml" = "kind: HelmChartConfig\nname: rke2-coredns\n"
+    }
+  }
+
+  assert {
+    condition = contains(
+      [for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path],
+      "/opt/kube-compute/server-manifests/20-coredns-lan-forward.yaml"
+    )
+    error_message = "an extra_server_manifests entry passed to this module must reach its own genesis node_bootstrap call's write_files"
+  }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "kind: HelmChartConfig") &&
+      strcontains(base64decode(f.content), "name: rke2-coredns")
+      if f.path == "/opt/kube-compute/server-manifests/20-coredns-lan-forward.yaml"
+    ])
+    error_message = "the entry's content must be forwarded verbatim, unmodified by this module"
   }
 }

@@ -36,6 +36,12 @@ variable "registry_mirror_url" {
   default     = null
 }
 
+variable "extra_server_manifests" {
+  description = "Arbitrary RKE2 auto-deploy manifest files (filename => full YAML content), forwarded verbatim through proxmox-control-plane to node-bootstrap's own identically-named variable, which writes them to /var/lib/rancher/rke2/server/manifests/ on the genesis control-plane node only. This module does not interpret the content — e.g. a HelmChartConfig overriding the packaged rke2-coredns chart's Corefile to add an internal-DNS forward zone, a Proxmox-only need since (unlike AWS/Azure's cloud DNS) there is no network-layer resolution for a homelab/on-prem private zone. Empty by default, so callers that don't need this are unaffected."
+  type        = map(string)
+  default     = {}
+}
+
 variable "gitops_platform_enabled" {
   description = "Whether to bootstrap kube-platform at all. false = a bare RKE2+Cilium cluster, no Argo CD/platform Application."
   type        = bool
