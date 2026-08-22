@@ -166,6 +166,9 @@ locals {
             - name: ${name}
               value: "${val}"
     %{~endfor~}
+    %{~else~}
+        directory:
+          recurse: true
     %{~endif~}
       destination:
         server: https://kubernetes.default.svc
