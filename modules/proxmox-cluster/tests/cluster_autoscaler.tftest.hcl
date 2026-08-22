@@ -60,12 +60,12 @@ run "cluster_autoscaler_enabled_with_zero_max_size_fails_validation" {
     cluster_autoscaler_enabled = true
     cluster_autoscaler_worker_template = {
       vm_cores               = 4
-      vm_memory_mb            = 4096
-      vm_disk_gb              = 40
-      proxmox_template_vm_id  = 9100
-      network_bridge          = "vmbr0"
-      disk_datastore_id       = "local-lvm"
-      proxmox_node            = "pve1"
+      vm_memory_mb           = 4096
+      vm_disk_gb             = 40
+      proxmox_template_vm_id = 9100
+      network_bridge         = "vmbr0"
+      disk_datastore_id      = "local-lvm"
+      proxmox_node           = "pve1"
     }
     cluster_autoscaler_worker_ip_pool = {
       addresses = ["192.168.1.230-192.168.1.240"]
@@ -109,12 +109,12 @@ run "cluster_autoscaler_enabled_renders_capi_core_bundle_no_caprke2" {
     cluster_autoscaler_worker_max_size = 3
     cluster_autoscaler_worker_template = {
       vm_cores               = 4
-      vm_memory_mb            = 4096
-      vm_disk_gb              = 40
-      proxmox_template_vm_id  = 9100
-      network_bridge          = "vmbr0"
-      disk_datastore_id       = "local-lvm"
-      proxmox_node            = "pve1"
+      vm_memory_mb           = 4096
+      vm_disk_gb             = 40
+      proxmox_template_vm_id = 9100
+      network_bridge         = "vmbr0"
+      disk_datastore_id      = "local-lvm"
+      proxmox_node           = "pve1"
     }
     cluster_autoscaler_worker_ip_pool = {
       addresses = ["192.168.1.230-192.168.1.240"]
@@ -208,12 +208,12 @@ run "cluster_autoscaler_enabled_without_dns_registration_fails_check" {
     cluster_autoscaler_worker_max_size = 3
     cluster_autoscaler_worker_template = {
       vm_cores               = 4
-      vm_memory_mb            = 4096
-      vm_disk_gb              = 40
-      proxmox_template_vm_id  = 9100
-      network_bridge          = "vmbr0"
-      disk_datastore_id       = "local-lvm"
-      proxmox_node            = "pve1"
+      vm_memory_mb           = 4096
+      vm_disk_gb             = 40
+      proxmox_template_vm_id = 9100
+      network_bridge         = "vmbr0"
+      disk_datastore_id      = "local-lvm"
+      proxmox_node           = "pve1"
     }
     cluster_autoscaler_worker_ip_pool = {
       addresses = ["192.168.1.230-192.168.1.240"]

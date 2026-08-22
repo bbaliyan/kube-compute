@@ -25,7 +25,7 @@ run "fixed_pool_is_an_asg_on_the_cluster_sg" {
     agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
     cluster_security_group_id = "sg-cluster123"
     subnet_id                 = "subnet-worker-a"
-    instance_type              = "m7g.large"
+    instance_type             = "m7g.large"
     desired_count             = 3
   }
   # Fixed-size ASG: min = max = desired_capacity = desired_count, no scaling policies.
