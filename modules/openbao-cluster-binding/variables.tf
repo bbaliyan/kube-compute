@@ -51,6 +51,12 @@ variable "secret_path_prefix" {
   default     = null
 }
 
+variable "extra_secret_path_prefixes" {
+  description = "Additional KV path prefixes this cluster's ExternalSecrets may read, granted read access alongside secret_path_prefix. For a consumer whose ExternalSecrets span more than one logical KV namespace — e.g. this cluster's own infra secrets under kube/<cluster_name>/* plus a separate GitOps workloads repo's own secrets under a different top-level prefix. Empty by default (single-prefix behavior, unchanged)."
+  type        = list(string)
+  default     = []
+}
+
 variable "role_name" {
   description = "Name of the Kubernetes auth backend role bound to the ESO ServiceAccount."
   type        = string

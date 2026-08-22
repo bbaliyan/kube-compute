@@ -33,11 +33,13 @@ resource "vault_kubernetes_auth_backend_config" "this" {
 resource "vault_policy" "eso_reader" {
   name = local.policy_name
 
-  policy = <<-EOT
-    path "${var.vault_kv_mount}/data/${local.secret_path_prefix}/*" {
-      capabilities = ["read"]
-    }
-  EOT
+  policy = join("\n", [
+    for prefix in concat([local.secret_path_prefix], var.extra_secret_path_prefixes) : <<-EOT
+      path "${var.vault_kv_mount}/data/${prefix}/*" {
+        capabilities = ["read"]
+      }
+    EOT
+  ])
 }
 
 resource "vault_kubernetes_auth_backend_role" "eso" {
