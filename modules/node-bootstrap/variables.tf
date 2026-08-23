@@ -175,18 +175,16 @@ variable "platform_extra_helm_parameters" {
 }
 
 variable "platform_helm_values_object" {
-  # map(any), not any: with `any`, each caller's literal object carries its own
-  # distinct static object-attribute type (e.g. cluster-media's
-  # gpuOperatorHelmValues/storageProvisionerHelmValues attributes), and any
-  # null-fallback expression in locals (a `? :` ternary, coalesce(), even a
-  # jsonencode/jsondecode round-trip) then fails OpenTofu's static
-  # "Inconsistent conditional result types" check the moment that object's
-  # attribute set differs from the fallback's. Declaring map(any) makes
-  # OpenTofu convert every caller's object to the same map type at this
-  # module's boundary, so it unifies with the {} fallback regardless of which
-  # keys a given caller passes.
+  # any, not map(any): map(any) forces every top-level value to unify to one
+  # common type, which breaks the moment two callers' objects have
+  # genuinely different-shaped attributes (e.g. cluster-media's
+  # gpuOperatorHelmValues vs. storageProvisionerHelmValues) -- "all map
+  # elements must have the same type". Stays `any`; the null-fallback in
+  # locals.platform_values_object uses try(), not a `? :` ternary or
+  # coalesce(), specifically because try() is the one HCL construct whose
+  # own arguments are exempt from static type-consistency checking.
   description = "Arbitrary object forwarded to the platform Application as helm.valuesObject. Use for nested values that cannot be expressed as flat helm.parameters strings."
-  type        = map(any)
+  type        = any
   default     = null
 }
 

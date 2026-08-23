@@ -78,11 +78,16 @@ locals {
   # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
   # node free of any templating engine.
   #
-  # Both branches are map(any) (see the map(any) note on the variable
-  # declaration in variables.tf) so this ternary unifies regardless of which
-  # attributes a given caller's platform_helm_values_object carries.
+  # try(), not a `? :` ternary or coalesce() -- see the note on the
+  # platform_helm_values_object variable declaration. try()'s own arguments
+  # are exempt from OpenTofu's static "Inconsistent conditional result
+  # types" check, so this falls back to {} on null without needing var.x's
+  # object type to unify with {}'s, regardless of which attributes the
+  # caller's object carries. Verified in isolation (both the null case and
+  # a concrete multi-attribute object case plan cleanly) before relying on
+  # it here.
   platform_values_object = merge(
-    var.platform_helm_values_object != null ? var.platform_helm_values_object : {},
+    try(var.platform_helm_values_object, {}),
     { extraTags = var.extra_tags },
   )
 
