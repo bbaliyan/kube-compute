@@ -288,6 +288,12 @@ variable "genesis_apply_manifests" {
   default = []
 }
 
+variable "iscsi_initiator_enabled" {
+  description = "Write a deterministic iSCSI InitiatorName (iqn.2026-08.lan.<cluster_name>:<node_name>) to /etc/iscsi/initiatorname.iscsi and restart iscsid, replacing the OS-generated random one. Only meaningful where the image already has iscsi-initiator-utils baked in (kube-image's Proxmox template does; AWS uses EBS CSI and has no iSCSI initiator at all). Exists so an iSCSI target's initiator allow-list can be registered once, ahead of time, instead of re-discovered and re-registered by hand after every VM rebuild. False (the default) leaves the OS-generated random name untouched."
+  type        = bool
+  default     = false
+}
+
 variable "cluster_autoscaler_crd_wait_enabled" {
   description = "Whether bootstrap.sh applies capi-install.yaml and waits for CAPI's core CRDs (machinedeployments.cluster.x-k8s.io) to be Established before applying genesis_apply_manifests entries. Only meaningful when genesis_apply_manifests is non-empty and contains CAPI-dependent content, and only takes effect for node_role = server-init."
   type        = bool

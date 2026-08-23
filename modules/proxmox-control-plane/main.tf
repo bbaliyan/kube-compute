@@ -216,6 +216,7 @@ module "node_bootstrap" {
   platform_extra_helm_parameters  = var.platform_extra_helm_parameters
   platform_helm_values_object     = var.platform_helm_values_object
   extra_tags                      = var.extra_tags
+  iscsi_initiator_enabled         = true
 
   genesis_apply_manifests             = var.genesis_apply_manifests
   cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_crd_wait_enabled
@@ -259,14 +260,15 @@ module "node_bootstrap_additional" {
   # configured, its raw IP otherwise — see the no-depends_on comment above for why
   # this doesn't need an explicit Terraform dependency. Always a single target (no
   # round-robin race — see cluster_fqdn's own doc).
-  registration_address = local.registration_address
-  extra_tls_sans       = compact([local.wildcard_name, local.genesis_dns_name])
-  cluster_token        = random_password.server_token.result
-  trusted_ca_pem       = var.trusted_ca_pem
-  registry_mirror_url  = var.registry_mirror_url
-  dns_servers          = var.dns_servers
-  cert_mode            = var.cert_mode
-  extra_tags           = var.extra_tags
+  registration_address    = local.registration_address
+  extra_tls_sans          = compact([local.wildcard_name, local.genesis_dns_name])
+  cluster_token           = random_password.server_token.result
+  trusted_ca_pem          = var.trusted_ca_pem
+  registry_mirror_url     = var.registry_mirror_url
+  dns_servers             = var.dns_servers
+  cert_mode               = var.cert_mode
+  extra_tags              = var.extra_tags
+  iscsi_initiator_enabled = true
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
 }
 

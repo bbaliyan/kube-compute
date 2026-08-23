@@ -63,6 +63,18 @@ trap - EXIT
 umask 022
 %{ endif ~}
 
+%{ if iscsi_initiator_enabled ~}
+# Replaces the OS-generated random InitiatorName (iscsi-initiator-utils writes
+# one on first boot) with a deterministic one derived from this node's own
+# identity, so the target-side initiator allow-list can be registered once,
+# ahead of time, instead of re-discovered and re-registered by hand after
+# every VM rebuild.
+cat >/etc/iscsi/initiatorname.iscsi <<EOF
+InitiatorName=iqn.2026-08.lan.${cluster_name}:${node_name}
+EOF
+systemctl restart iscsid
+%{ endif ~}
+
 %{ if registry_mirror_url != "" ~}
 # Advisory only, matching the Ansible role's uri check in spirit: a 200 or 401
 # both mean "the mirror is answering". Non-fatal here because a first boot must

@@ -260,6 +260,8 @@ module "node_bootstrap" {
   # dns_servers variable for why a worker's kubelet needs this too (every
   # pod scheduled on it inherits the same node-search-domain collision).
   dns_servers = var.dns_servers
+
+  iscsi_initiator_enabled = true
 }
 
 # Subsumes the old hostname-only snippet — hostname is now one key inside
