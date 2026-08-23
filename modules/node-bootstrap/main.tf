@@ -283,7 +283,7 @@ locals {
     node_role                           = var.node_role
     cni                                 = var.cni
     cluster_name                        = var.cluster_name
-    node_name                           = var.node_name
+    iscsi_initiator_label               = coalesce(var.node_fqdn_label, var.node_name)
     iscsi_initiator_enabled             = var.iscsi_initiator_enabled
     registration_address                = var.registration_address != null ? var.registration_address : ""
     trusted_ca_enabled                  = var.trusted_ca_pem != null

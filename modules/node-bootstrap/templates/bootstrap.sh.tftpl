@@ -70,7 +70,7 @@ umask 022
 # ahead of time, instead of re-discovered and re-registered by hand after
 # every VM rebuild.
 cat >/etc/iscsi/initiatorname.iscsi <<EOF
-InitiatorName=iqn.2026-08.lan.${cluster_name}:${node_name}
+InitiatorName=iqn.2026.lan.${cluster_name}:${iscsi_initiator_label}
 EOF
 systemctl restart iscsid
 %{ endif ~}
