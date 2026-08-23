@@ -175,8 +175,18 @@ variable "platform_extra_helm_parameters" {
 }
 
 variable "platform_helm_values_object" {
+  # map(any), not any: with `any`, each caller's literal object carries its own
+  # distinct static object-attribute type (e.g. cluster-media's
+  # gpuOperatorHelmValues/storageProvisionerHelmValues attributes), and any
+  # null-fallback expression in locals (a `? :` ternary, coalesce(), even a
+  # jsonencode/jsondecode round-trip) then fails OpenTofu's static
+  # "Inconsistent conditional result types" check the moment that object's
+  # attribute set differs from the fallback's. Declaring map(any) makes
+  # OpenTofu convert every caller's object to the same map type at this
+  # module's boundary, so it unifies with the {} fallback regardless of which
+  # keys a given caller passes.
   description = "Arbitrary object forwarded to the platform Application as helm.valuesObject. Use for nested values that cannot be expressed as flat helm.parameters strings."
-  type        = any
+  type        = map(any)
   default     = null
 }
 

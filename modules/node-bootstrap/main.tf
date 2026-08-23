@@ -78,18 +78,11 @@ locals {
   # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
   # node free of any templating engine.
   #
-  # var.platform_helm_values_object is type = any, so once a caller supplies a
-  # concrete object (e.g. cluster-media's gpuOperatorHelmValues/
-  # storageProvisionerHelmValues), that value's static object type must unify
-  # with whatever the null-fallback branch's type is — both a `? :` ternary
-  # and coalesce() enforce this and fail with "Inconsistent conditional
-  # result types" / "all arguments must have the same type" the moment a
-  # caller's object shape has attributes {} doesn't have. The
-  # jsonencode/jsondecode round-trip forces the value's type to be inferred
-  # dynamically instead of statically, so it unifies with {} regardless of
-  # the caller's actual attribute set.
+  # Both branches are map(any) (see the map(any) note on the variable
+  # declaration in variables.tf) so this ternary unifies regardless of which
+  # attributes a given caller's platform_helm_values_object carries.
   platform_values_object = merge(
-    var.platform_helm_values_object != null ? jsondecode(jsonencode(var.platform_helm_values_object)) : {},
+    var.platform_helm_values_object != null ? var.platform_helm_values_object : {},
     { extraTags = var.extra_tags },
   )
 
