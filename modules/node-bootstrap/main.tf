@@ -78,7 +78,7 @@ locals {
   # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
   # node free of any templating engine.
   platform_values_object = merge(
-    var.platform_helm_values_object != null ? var.platform_helm_values_object : {},
+    coalesce(var.platform_helm_values_object, {}),
     { extraTags = var.extra_tags },
   )
 
