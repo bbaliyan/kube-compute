@@ -56,12 +56,6 @@ locals {
   wildcard_registration_enabled = local.dns_registration_enabled && var.cluster_type == "all_in_one"
   dns_wildcard_record_name      = "*.${var.cluster_name}"
 
-  # dns-registration's provider requires a fully-qualified (trailing-dot) TSIG key
-  # name, but DNS servers commonly configure bare names (e.g. Technitium's UI). Qualify
-  # here so callers don't need to know this provider quirk. Idempotent either way;
-  # coalesced to a placeholder when unused so the (unused) provider block stays valid.
-  tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
-
   # One IP per control-plane node; index 0 is genesis. DHCP works at any
   # control_plane_count — every additional control-plane VM shares the same
   # network_data_dhcp[0] content, resolved individually post-apply via the Proxmox
@@ -309,14 +303,19 @@ resource "proxmox_virtual_environment_file" "node_init_additional" {
 module "dns_registration" {
   source = "../dns-registration"
 
-  providers  = { dns = dns }
   depends_on = [proxmox_virtual_environment_vm.control_plane, proxmox_virtual_environment_vm.control_plane_additional]
 
-  enabled          = local.dns_registration_enabled
-  dns_zone         = coalesce(local.dns_zone, "invalid.")
-  record_name      = local.dns_record_name
-  record_addresses = values(local.cp_ips)
-  record_ttl       = var.dns_record_ttl
+  enabled            = local.dns_registration_enabled
+  dns_zone           = coalesce(local.dns_zone, "invalid.")
+  record_name        = local.dns_record_name
+  record_addresses   = values(local.cp_ips)
+  record_ttl         = var.dns_record_ttl
+  dns_server_address = coalesce(var.dns_server_address, "127.0.0.1")
+  dns_server_port    = var.dns_server_port
+  dns_transport      = var.dns_transport
+  tsig_key_name      = coalesce(var.tsig_key_name, "unused")
+  tsig_key_algorithm = var.tsig_key_algorithm
+  tsig_key_secret    = coalesce(var.tsig_key_secret, "unused")
 }
 
 # Only on all_in_one clusters — see wildcard_registration_enabled above for why a
@@ -325,14 +324,19 @@ module "dns_registration" {
 module "dns_registration_wildcard" {
   source = "../dns-registration"
 
-  providers  = { dns = dns }
   depends_on = [proxmox_virtual_environment_vm.control_plane, proxmox_virtual_environment_vm.control_plane_additional]
 
-  enabled          = local.wildcard_registration_enabled
-  dns_zone         = coalesce(local.dns_zone, "invalid.")
-  record_name      = local.dns_wildcard_record_name
-  record_addresses = values(local.cp_ips)
-  record_ttl       = var.dns_record_ttl
+  enabled            = local.wildcard_registration_enabled
+  dns_zone           = coalesce(local.dns_zone, "invalid.")
+  record_name        = local.dns_wildcard_record_name
+  record_addresses   = values(local.cp_ips)
+  record_ttl         = var.dns_record_ttl
+  dns_server_address = coalesce(var.dns_server_address, "127.0.0.1")
+  dns_server_port    = var.dns_server_port
+  dns_transport      = var.dns_transport
+  tsig_key_name      = coalesce(var.tsig_key_name, "unused")
+  tsig_key_algorithm = var.tsig_key_algorithm
+  tsig_key_secret    = coalesce(var.tsig_key_secret, "unused")
 }
 
 resource "proxmox_virtual_environment_file" "network_data" {

@@ -1,11 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 locals {
-  # Same formula as proxmox-control-plane's/proxmox-node-pool's own local —
-  # needed here too since this module now owns the dns provider both used to
-  # self-configure.
-  tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
-
   # kube-platform's bootstrap chart gates the cluster-autoscaler Argo CD
   # Application on this Helm value. This module owns
   # cluster_autoscaler_enabled, so it injects it via node-bootstrap's generic
@@ -174,8 +169,7 @@ resource "terraform_data" "cluster_autoscaler_requires_platform_gitops" {
 }
 
 module "control_plane" {
-  source    = "../proxmox-control-plane"
-  providers = { dns = dns }
+  source = "../proxmox-control-plane"
 
   ssh_private_key_file              = var.ssh_private_key_file
   ssh_user                          = var.ssh_user
@@ -231,9 +225,8 @@ module "control_plane" {
 }
 
 module "node_pools" {
-  source    = "../proxmox-node-pool"
-  for_each  = var.node_pools
-  providers = { dns = dns }
+  source   = "../proxmox-node-pool"
+  for_each = var.node_pools
 
   cluster_name        = var.cluster_name
   cluster_agent_token = module.control_plane.cluster_agent_token
