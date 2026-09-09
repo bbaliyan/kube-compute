@@ -64,8 +64,27 @@ locals {
   # VPC ID resolved from vpc_name, or null when vpc_name is not provided.
   named_vpc_id = try(data.aws_vpc.named[0].id, null)
 
+  # subnet_name is the one-element case of subnet_names; both variables funnel into this list so the
+  # lookup and selection below have a single shape to deal with.
+  subnet_name_candidates = var.subnet_names != null ? var.subnet_names : (var.subnet_name != null ? [var.subnet_name] : [])
+
+  # Whether the caller pinned placement at all. When they did not, the default-VPC fallback applies.
+  has_explicit_subnet = var.subnet_id != null || length(local.subnet_name_candidates) > 0
+
+  # First candidate, in the caller's order, that still has a free IP. Preserving their order rather
+  # than picking the emptiest subnet is what keeps placement stable: a node only moves when the
+  # subnet it sits in is genuinely full, and moving it REPLACES the instance.
+  named_subnet_id = try([
+    for name in local.subnet_name_candidates :
+    data.aws_subnet.by_name[name].id
+    if data.aws_subnet.by_name[name].available_ip_address_count > 0
+  ][0], null)
+
   # Network handle: explicit subnet_id → named subnet → first default-VPC subnet. Never creates fabric.
-  effective_subnet_id = coalesce(var.subnet_id, try(one(data.aws_subnet.by_name[*].id), null), try(sort(data.aws_subnets.default[0].ids)[0], null))
+  # Wrapped in try so that resolving to nothing stays null: coalesce raises on all-null arguments,
+  # and its "no non-null arguments" error would surface instead of the preconditions below, which
+  # can actually say which of the two ways to end up with no subnet happened.
+  effective_subnet_id = try(coalesce(var.subnet_id, local.named_subnet_id, try(sort(data.aws_subnets.default[0].ids)[0], null)), null)
 
   # DNS is optional and name-only. cluster_fqdn is the API/kubeconfig name; wildcard covers it + services.
   has_domain    = var.cluster_domain != null

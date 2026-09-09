@@ -36,7 +36,7 @@ run "subnet_name_lookup" {
   command = plan
   override_data {
     target = data.aws_subnet.by_name
-    values = { id = "subnet-byname456" }
+    values = { id = "subnet-byname456", available_ip_address_count = 251 }
   }
   variables {
     cluster_name = "byname"
@@ -46,6 +46,52 @@ run "subnet_name_lookup" {
     condition     = output.subnet_id == "subnet-byname456"
     error_message = "subnet_name should resolve to the looked-up subnet ID"
   }
+}
+
+# subnet_names goes through the same lookup and selection as subnet_name.
+#
+# Which of several candidates wins cannot be asserted here: override_data only
+# targets a whole data source, never one for_each instance, so every candidate
+# necessarily mocks to the same id and the same free-IP count. The two cases
+# that ARE distinguishable under that constraint are covered below — capacity
+# present, and capacity exhausted everywhere.
+run "subnet_names_lookup" {
+  command = plan
+  override_data {
+    target = data.aws_subnet.by_name
+    values = { id = "subnet-pool123", available_ip_address_count = 250 }
+  }
+  variables {
+    cluster_name = "pool"
+    subnet_names = ["private-az1", "private-az2"]
+  }
+  assert {
+    condition     = output.subnet_id == "subnet-pool123"
+    error_message = "subnet_names should resolve to a looked-up subnet ID"
+  }
+}
+
+run "subnet_names_all_full_fails" {
+  command = plan
+  override_data {
+    target = data.aws_subnet.by_name
+    values = { id = "subnet-pool123", available_ip_address_count = 0 }
+  }
+  variables {
+    cluster_name = "pool"
+    subnet_names = ["private-az1", "private-az2"]
+  }
+  expect_failures = [data.aws_subnet.selected]
+}
+
+run "subnet_name_and_subnet_names_are_mutually_exclusive" {
+  command = plan
+  variables {
+    cluster_name = "pool"
+    subnet_name  = "private-az1"
+    subnet_names = ["private-az1", "private-az2"]
+  }
+  expect_failures = [var.subnet_names]
 }
 
 run "default_vpc_fallback" {

@@ -183,6 +183,12 @@ variable "vpc_name" {
   default     = null
 }
 
+variable "subnet_names" {
+  description = "Candidate subnets by Name tag, tried in order; the control-plane node launches into the first with a free IP. List form of subnet_name — see the aws-control-plane module for the ordering caveat."
+  type        = list(string)
+  default     = null
+}
+
 variable "subnet_name" {
   description = "Name tag of the subnet to launch the control-plane node into (control_plane_count = 1 only). Alternative to subnet_id."
   type        = string
