@@ -5,12 +5,12 @@
 data "aws_caller_identity" "current" {}
 
 data "aws_vpc" "default" {
-  count   = (var.subnet_id == null && var.subnet_name == null) ? 1 : 0
+  count   = local.has_explicit_subnet ? 0 : 1
   default = true
 }
 
 data "aws_subnets" "default" {
-  count = (var.subnet_id == null && var.subnet_name == null) ? 1 : 0
+  count = local.has_explicit_subnet ? 0 : 1
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default[0].id]
@@ -18,20 +18,21 @@ data "aws_subnets" "default" {
 }
 
 data "aws_vpc" "named" {
-  count = (var.subnet_name != null && var.vpc_name != null) ? 1 : 0
+  count = (length(local.subnet_name_candidates) > 0 && var.vpc_name != null) ? 1 : 0
   filter {
     name   = "tag:Name"
     values = [var.vpc_name]
   }
 }
 
+# One lookup per candidate name, so available_ip_address_count can be compared across them.
 # When vpc_name is also provided, a VPC filter narrows the search to avoid ambiguity.
 data "aws_subnet" "by_name" {
-  count = var.subnet_name != null ? 1 : 0
+  for_each = toset(local.subnet_name_candidates)
 
   filter {
     name   = "tag:Name"
-    values = [var.subnet_name]
+    values = [each.value]
   }
 
   dynamic "filter" {
@@ -53,6 +54,18 @@ data "aws_route53_zone" "private" {
 # The subnet the node launches into. Also yields the VPC ID for the module-owned security group.
 data "aws_subnet" "selected" {
   id = local.effective_subnet_id
+
+  lifecycle {
+    precondition {
+      condition     = length(local.subnet_name_candidates) == 0 || local.named_subnet_id != null
+      error_message = "None of the candidate subnets has a free IP address: ${join(", ", local.subnet_name_candidates)}. Free addresses in one of them, or add another subnet to subnet_names."
+    }
+
+    precondition {
+      condition     = local.effective_subnet_id != null
+      error_message = "No subnet could be resolved. Pass subnet_id, subnet_name or subnet_names, or run in an account that still has a default VPC."
+    }
+  }
 }
 
 # Authoritative arch lookup: AWS's own API returns supported_architectures for any instance type,

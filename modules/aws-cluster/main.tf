@@ -28,6 +28,7 @@ module "control_plane" {
   subnet_id                         = var.subnet_id
   vpc_name                          = var.vpc_name
   subnet_name                       = var.subnet_name
+  subnet_names                      = var.subnet_names
   cluster_domain                    = var.cluster_domain
   hosted_zone_name                  = var.hosted_zone_name
   hosted_zone_id                    = var.hosted_zone_id

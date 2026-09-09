@@ -156,6 +156,30 @@ variable "subnet_name" {
   default     = null
 }
 
+variable "subnet_names" {
+  description = <<-EOT
+    Candidate subnets by Name tag, tried IN ORDER: the node launches into the first one that still
+    has a free IP address. The list form of subnet_name, for spreading a cluster's placement across
+    several AZs without pinning it to one that may fill up.
+
+    Order is a preference, not a set — selection stops at the first subnet with capacity, so a node
+    stays where it is for as long as that subnet has room. Put the subnet an existing node already
+    occupies first, or the next apply moves it, which REPLACES the instance.
+  EOT
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.subnet_names == null || length(var.subnet_names) > 0
+    error_message = "subnet_names must be null or a non-empty list; an empty list selects nothing."
+  }
+
+  validation {
+    condition     = var.subnet_names == null || var.subnet_name == null
+    error_message = "Set subnet_name or subnet_names, not both."
+  }
+}
+
 # DNS: optional convenience. The module never owns DNS as a hard dependency — if you don't pass a
 # zone, it creates no record and you register the wildcard (see the wildcard_dns_name output) in
 # whatever DNS you run (Route53, a local resolver, RFC2136, external-dns, sslip.io fallback...).
