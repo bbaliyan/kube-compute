@@ -212,6 +212,7 @@ module "node_bootstrap" {
   gitops_workloads_revision       = var.gitops_workloads_revision
   gitops_workloads_path           = var.gitops_workloads_path
   workloads_extra_helm_parameters = var.workloads_extra_helm_parameters
+  workloads_helm_values_object    = var.workloads_helm_values_object
   cert_mode                       = var.cert_mode
   platform_extra_helm_parameters  = var.platform_extra_helm_parameters
   platform_helm_values_object     = var.platform_helm_values_object

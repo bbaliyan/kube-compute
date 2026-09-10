@@ -120,6 +120,12 @@ variable "workloads_extra_helm_parameters" {
   default     = {}
 }
 
+variable "workloads_helm_values_object" {
+  description = "Arbitrary object forwarded to the workloads Application as helm.valuesObject. Use for values a map(string) cannot carry, such as a pod's tolerations."
+  type        = any
+  default     = null
+}
+
 variable "platform_helm_values_object" {
   description = "Arbitrary object forwarded to the platform Application as helm.valuesObject."
   type        = any

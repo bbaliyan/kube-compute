@@ -23,6 +23,7 @@ module "control_plane" {
   gitops_workloads_revision         = var.gitops_workloads_revision
   gitops_workloads_path             = var.gitops_workloads_path
   workloads_extra_helm_parameters   = var.workloads_extra_helm_parameters
+  workloads_helm_values_object      = var.workloads_helm_values_object
   cluster_type                      = var.cluster_type
   cni                               = var.cni
   cert_mode                         = var.cert_mode

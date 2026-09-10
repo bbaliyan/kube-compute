@@ -91,6 +91,13 @@ locals {
     { extraTags = var.extra_tags },
   )
 
+  workloads_values_object = try(var.workloads_helm_values_object, {})
+
+  workloads_helm_configured = (
+    length(var.workloads_extra_helm_parameters) > 0 ||
+    var.workloads_helm_values_object != null
+  )
+
   # kube-platform's bootstrap chart reads a clusterAutoscalerEnabled Helm
   # value to decide whether to deploy the cluster-autoscaler Argo CD
   # Application (bootstrap/templates/cluster-autoscaler-app.yaml). This
@@ -168,13 +175,19 @@ locals {
         repoURL: ${local.effective_gitops_workloads_repo_url}
         targetRevision: ${var.gitops_workloads_revision}
         path: ${var.gitops_workloads_path}
-    %{~if length(var.workloads_extra_helm_parameters) > 0~}
+    %{~if local.workloads_helm_configured~}
         helm:
+    %{~if length(var.workloads_extra_helm_parameters) > 0~}
           parameters:
     %{~for name, val in var.workloads_extra_helm_parameters~}
             - name: ${name}
               value: "${val}"
     %{~endfor~}
+    %{~endif~}
+    %{~if var.workloads_helm_values_object != null~}
+          valuesObject:
+            ${indent(12, yamlencode(local.workloads_values_object))}
+    %{~endif~}
     %{~else~}
         directory:
           recurse: true

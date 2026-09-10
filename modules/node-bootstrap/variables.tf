@@ -169,6 +169,14 @@ variable "workloads_extra_helm_parameters" {
   default     = {}
 }
 
+variable "workloads_helm_values_object" {
+  # any and the try() fallback in locals, for the same reasons as
+  # platform_helm_values_object below.
+  description = "Arbitrary object forwarded to the workloads Application as helm.valuesObject. Use for values a map(string) cannot carry, such as a pod's tolerations."
+  type        = any
+  default     = null
+}
+
 variable "cert_mode" {
   description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' needs no dependencies. 'byo' expects a Secret named byo-ca-tls in the cert-manager namespace. 'acme' requires DNS-01 config (separate setup)."
   type        = string
