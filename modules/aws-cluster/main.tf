@@ -318,7 +318,7 @@ resource "aws_iam_role_policy" "autoscaler_worker_agent_token" {
       {
         Effect   = "Allow"
         Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${module.control_plane.agent_token_ssm_parameter}"
+        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:parameter${module.control_plane.agent_token_ssm_parameter}"
       },
       {
         Effect   = "Allow"
