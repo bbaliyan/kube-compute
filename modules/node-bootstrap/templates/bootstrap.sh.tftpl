@@ -104,6 +104,7 @@ fi
   echo "node-ip: $NODE_IP"
   cat <<'KUBE_COMPUTE_WORKER_STATIC'
 ${node_label_block}
+${node_taint_block}
 ${kubelet_resolv_conf_block}
 KUBE_COMPUTE_WORKER_STATIC
 } >"$CONFIG"

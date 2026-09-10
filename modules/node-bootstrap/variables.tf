@@ -110,6 +110,17 @@ variable "node_labels" {
   default     = {}
 }
 
+variable "node_taints" {
+  description = "Extra node-taint: entries applied at rke2 install time, each a full \"key=value:Effect\" string (e.g. [\"dedicated=true:NoSchedule\"]). Only meaningful for node_role = worker — the control-plane roles get their taint from control_plane_taint instead, and rke2 accepts only one node-taint: key in config.yaml, so the two cannot both render. A label plus a nodeSelector makes a dedicated node merely PREFERRED; only a taint keeps other pods off it, which is why this exists separately from node_labels."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for t in var.node_taints : can(regex("^[^=:]+=[^=:]*:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
+    error_message = "each node_taints entry must be key=value:Effect, where Effect is NoSchedule, PreferNoSchedule, or NoExecute."
+  }
+}
+
 variable "extra_server_manifests" {
   description = "Arbitrary RKE2 auto-deploy manifest files (filename => full YAML content) written to /var/lib/rancher/rke2/server/manifests/ on server-init/server-join nodes only. This module does not interpret the content."
   type        = map(string)

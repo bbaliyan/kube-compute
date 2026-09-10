@@ -252,6 +252,19 @@ locals {
     [for k, v in var.node_labels : "  - \"${k}=${v}\""],
   ))
 
+  # Worker-only, exactly like node_label_block above. The server roles render
+  # their taint inside server_static_block from control_plane_taint, and rke2
+  # accepts a single node-taint: key in config.yaml -- two blocks would produce
+  # a duplicate key and RKE2 refuses to start. Each entry is already a full
+  # "key=value:Effect" string (validated on the variable), so it needs no
+  # assembly here, only quoting: a value that starts with '*' or looks like a
+  # YAML indicator must not be reinterpreted by the parser, the same reason
+  # every tls-san entry is quoted.
+  node_taint_block = length(var.node_taints) == 0 ? "" : join("\n", concat(
+    ["node-taint:"],
+    [for t in var.node_taints : "  - \"${t}\""],
+  ))
+
   # kubelet's default ClusterFirst DNS policy copies the NODE's own
   # /etc/resolv.conf search domains into every pod. NetworkManager derives a
   # search domain from this node's FQDN hostname (cluster_fqdn_suffix) — the
@@ -297,6 +310,7 @@ locals {
     tsig_key_name                       = var.tsig_key_name != null ? var.tsig_key_name : ""
     tsig_key_algorithm                  = var.tsig_key_algorithm
     node_label_block                    = local.node_label_block
+    node_taint_block                    = local.node_taint_block
     static_tls_san_block                = local.static_tls_san_block
     server_static_block                 = local.server_static_block
     kubelet_resolv_conf_block           = local.kubelet_resolv_conf_block
