@@ -32,43 +32,20 @@ supplies both automatically from its own `cluster_name` input and from
 empty `node_pools` map (the default) creates no worker pools — a control-plane-only
 cluster, identical in shape to applying `proxmox-control-plane` alone.
 
-### The `dns` provider
+### DNS registration
 
-Like `proxmox-control-plane` and `proxmox-node-pool`, this module never configures
-the `dns` provider itself — it declares `configuration_aliases = [dns]` and expects
-its caller to pass one in. Your root module (or your Terragrunt `generate` block)
-needs a `provider "dns" {}` block and must pass it through explicitly:
-
-```hcl
-provider "dns" {
-  alias = "cluster"
-  update {
-    server        = coalesce(var.dns_server_address, "127.0.0.1")
-    port          = var.dns_server_port
-    transport     = var.dns_transport
-    key_name      = local.tsig_key_name_fqdn
-    key_algorithm = var.tsig_key_algorithm
-    key_secret    = coalesce(var.tsig_key_secret, "dW51c2VkAA==")
-  }
-}
-
-module "cluster" {
-  source    = "path/to/kube-compute/modules/proxmox-cluster"
-  providers = { dns = dns.cluster }
-  # ...
-}
-```
-
-This is required even when you never set `dns_server_address` (DNS registration
-stays optional and off by default — the provider block just needs to exist so
-Terraform can resolve the alias).
+Unlike some earlier revisions of this module, there's no `provider "dns" {}` to
+wire up — DNS registration (`dns_server_address`/`tsig_key_*`) is plain module
+input, and the underlying `dns-registration` module shells out to `nsupdate`
+rather than using a Terraform provider (see its README for why). It just needs
+`nsupdate` (`bind-utils`/`dnsutils`) installed on whatever machine runs
+`tofu apply`/`tofu destroy`.
 
 ## Usage: control-plane only, no worker pools
 
 ```hcl
 module "cluster" {
-  source    = "path/to/kube-compute/modules/proxmox-cluster"
-  providers = { dns = dns.cluster }
+  source = "path/to/kube-compute/modules/proxmox-cluster"
 
   cluster_name          = "example"
   proxmox_node           = "pve-01"
@@ -87,8 +64,7 @@ This is equivalent to today's `control-plane/` unit alone — `node_pools` defau
 
 ```hcl
 module "cluster" {
-  source    = "path/to/kube-compute/modules/proxmox-cluster"
-  providers = { dns = dns.cluster }
+  source = "path/to/kube-compute/modules/proxmox-cluster"
 
   cluster_name          = "example"
   cluster_type          = "dedicated_control_plane"

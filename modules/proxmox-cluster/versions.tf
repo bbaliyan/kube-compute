@@ -4,12 +4,7 @@ terraform {
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"
-      version = "~> 0.110"
-    }
-    dns = {
-      source                = "hashicorp/dns"
-      version               = "~> 3.6"
-      configuration_aliases = [dns]
+      version = "~> 0.112"
     }
   }
 }

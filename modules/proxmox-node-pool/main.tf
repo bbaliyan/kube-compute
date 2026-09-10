@@ -26,10 +26,6 @@ locals {
   # rejected, duplicate hostname" — confirmed on a real 3-worker Proxmox apply.
   fqdn_suffix = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
 
-  # Same fully-qualified-TSIG-key-name quirk as proxmox-control-plane — see
-  # its identical local for why.
-  tsig_key_name_fqdn = "${trimsuffix(coalesce(var.tsig_key_name, "unused"), ".")}."
-
   # Proxmox-native delivery: the token is embedded verbatim into this pool's own
   # cloud-init snippet (no secret store to fetch from), unlike AWS's SSM fetch command.
   agent_token_fetch_command = "echo '${var.cluster_agent_token}'"
@@ -288,14 +284,19 @@ resource "proxmox_virtual_environment_file" "node_init" {
 module "dns_registration" {
   source = "../dns-registration"
 
-  providers  = { dns = dns }
   depends_on = [proxmox_virtual_environment_vm.worker]
 
-  enabled          = local.dns_registration_enabled
-  dns_zone         = coalesce(local.dns_zone, "invalid.")
-  record_name      = local.dns_wildcard_record_name
-  record_addresses = values(local.worker_ips)
-  record_ttl       = var.dns_record_ttl
+  enabled            = local.dns_registration_enabled
+  dns_zone           = coalesce(local.dns_zone, "invalid.")
+  record_name        = local.dns_wildcard_record_name
+  record_addresses   = values(local.worker_ips)
+  record_ttl         = var.dns_record_ttl
+  dns_server_address = coalesce(var.dns_server_address, "127.0.0.1")
+  dns_server_port    = var.dns_server_port
+  dns_transport      = var.dns_transport
+  tsig_key_name      = coalesce(var.tsig_key_name, "unused")
+  tsig_key_algorithm = var.tsig_key_algorithm
+  tsig_key_secret    = coalesce(var.tsig_key_secret, "unused")
 }
 
 resource "proxmox_virtual_environment_firewall_options" "worker" {

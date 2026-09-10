@@ -6,6 +6,6 @@ output "fqdn" {
 }
 
 output "record_created" {
-  description = "Whether a dns_a_record_set resource was actually created this run (mirrors var.enabled)."
-  value       = length(dns_a_record_set.this) > 0
+  description = "Whether the record was actually published this run (mirrors var.enabled)."
+  value       = length(terraform_data.this) > 0
 }
