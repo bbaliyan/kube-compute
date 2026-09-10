@@ -13,7 +13,6 @@ mock_provider "proxmox" {
     }
   }
 }
-mock_provider "dns" {}
 
 variables {
   cluster_name          = "bharat"
