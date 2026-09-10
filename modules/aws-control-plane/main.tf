@@ -96,6 +96,12 @@ locals {
   effective_zone_id = var.hosted_zone_id != null ? var.hosted_zone_id : try(data.aws_route53_zone.private[0].zone_id, null)
   create_record     = local.has_domain && local.effective_zone_id != null
 
+  # An IAM name_prefix caps at 38 characters, where a security group's does not,
+  # and cluster_name allows up to 31 -- so a legal name could fail at apply after
+  # the rest of the plan had already been created. substr returns the whole string
+  # when it is shorter than the limit, so this changes no existing role's prefix.
+  node_iam_name_prefix = format("kube-compute-%s-", substr(var.cluster_name, 0, 24))
+
   # Split from create_record so external-dns can own the wildcard without
   # costing the cluster its api. record, which is what agents join through.
   create_wildcard_record = local.create_record && var.manage_wildcard_dns_record
@@ -480,7 +486,7 @@ resource "aws_vpc_security_group_egress_rule" "node_all" {
 
 # Inline JSON avoids a data.aws_iam_policy_document block that mock_provider cannot evaluate.
 resource "aws_iam_role" "node" {
-  name_prefix = "kube-compute-${var.cluster_name}-"
+  name_prefix = local.node_iam_name_prefix
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -503,7 +509,7 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
 }
 
 resource "aws_iam_instance_profile" "node" {
-  name_prefix = "kube-compute-${var.cluster_name}-"
+  name_prefix = local.node_iam_name_prefix
   role        = aws_iam_role.node.name
   tags        = local.common_tags
 }

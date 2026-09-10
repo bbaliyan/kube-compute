@@ -164,3 +164,17 @@ run "x86_instance_type_resolves_x86_images" {
     error_message = "the AMI lookup must filter on architecture as well as name, or a wildcard architecture segment in os_image_name lets an arm64 build satisfy an x86_64 node"
   }
 }
+
+run "a_long_cluster_and_group_name_still_fit_the_iam_name_prefix_cap" {
+  command = plan
+
+  variables {
+    cluster_name = "cluster-sql-multinode-abcdefghi"
+    group_name   = "observability"
+  }
+
+  assert {
+    condition     = length(local.node_iam_name_prefix) <= 38
+    error_message = "an IAM name_prefix over 38 characters is rejected by AWS at apply time, after the rest of the plan has already been created"
+  }
+}

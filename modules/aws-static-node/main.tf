@@ -4,6 +4,12 @@
 locals {
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
 
+  # An IAM name_prefix caps at 38 characters, and this one carries two variable
+  # parts. Capping the whole string can cost the trailing hyphen, which is only
+  # cosmetic -- AWS appends its own unique suffix regardless. substr is a no-op
+  # below the limit, so no existing role's prefix changes.
+  node_iam_name_prefix = substr(format("kube-compute-%s-%s-", var.cluster_name, var.group_name), 0, 38)
+
   effective_ami_id = coalesce(
     var.os_image_ami_id,
     try(one(data.aws_ami.by_name[*].id), null),
@@ -67,7 +73,7 @@ locals {
 
 # One role per group, not per node: every node reads the same SSM parameter.
 resource "aws_iam_role" "node" {
-  name_prefix = "kube-compute-${var.cluster_name}-${var.group_name}-"
+  name_prefix = local.node_iam_name_prefix
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -118,7 +124,7 @@ resource "aws_iam_role_policy" "agent_token" {
 }
 
 resource "aws_iam_instance_profile" "node" {
-  name_prefix = "kube-compute-${var.cluster_name}-${var.group_name}-"
+  name_prefix = local.node_iam_name_prefix
   role        = aws_iam_role.node.name
   tags        = local.common_tags
 }

@@ -199,3 +199,25 @@ run "enabled_with_no_groups_is_rejected" {
     cluster_autoscaler_enabled = true
   }
 }
+
+run "a_long_cluster_name_still_fits_the_iam_name_prefix_cap" {
+  command = plan
+
+  variables {
+    cluster_name               = "cluster-sql-multinode-abcdefghi"
+    cluster_domain             = "eu-west-1.example.net"
+    cluster_autoscaler_enabled = true
+    cluster_autoscaler_worker_groups = {
+      platform = { instance_type = "t4g.large", max_size = 2 }
+    }
+  }
+
+  assert {
+    condition     = length(local.autoscaler_role_name_prefix) <= 38
+    error_message = "an IAM name_prefix over 38 characters is rejected by AWS at apply time, after the rest of the plan has already been created"
+  }
+  assert {
+    condition     = endswith(local.autoscaler_role_name_prefix, "-capi-")
+    error_message = "truncation must take the cluster name, not the suffix that distinguishes these roles from the control-plane one"
+  }
+}

@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 locals {
+  # An IAM name_prefix caps at 38 characters where a launch template's and an
+  # autoscaling group's do not, and cluster_name allows up to 31. substr is a
+  # no-op below the limit, so no existing role's prefix changes.
+  worker_iam_name_prefix = substr(format("kube-compute-%s-worker-", var.cluster_name), 0, 38)
+
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
   effective_ami_id = coalesce(
     var.os_image_ami_id,
@@ -54,7 +59,7 @@ locals {
 }
 
 resource "aws_iam_role" "worker" {
-  name_prefix = "kube-compute-${var.cluster_name}-worker-"
+  name_prefix = local.worker_iam_name_prefix
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -100,7 +105,7 @@ resource "aws_iam_role_policy" "worker_agent_token" {
 }
 
 resource "aws_iam_instance_profile" "worker" {
-  name_prefix = "kube-compute-${var.cluster_name}-worker-"
+  name_prefix = local.worker_iam_name_prefix
   role        = aws_iam_role.worker.name
   tags        = local.common_tags
 }

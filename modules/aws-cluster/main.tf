@@ -147,6 +147,14 @@ locals {
 
   autoscaler_groups = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_groups : {}
 
+  # An IAM name_prefix caps at 38 characters, and this one carries two fixed
+  # affixes worth 19 of them. The cluster name is what gets truncated, so
+  # "-capi-" survives: it is what distinguishes these from the control-plane
+  # role at a glance in the console, and AWS appends its own unique suffix
+  # anyway. Truncating avoids failing at apply time on a long cluster name,
+  # after everything else in the plan has already been created.
+  autoscaler_role_name_prefix = format("kube-compute-%s-capi-", substr(var.cluster_name, 0, 19))
+
   autoscaler_group_arch = {
     for name, g in local.autoscaler_groups :
     name => contains(data.aws_ec2_instance_type.autoscaler_worker[name].supported_architectures, "arm64") ? "arm64" : "x86_64"
@@ -284,7 +292,7 @@ module "cluster_autoscaler_worker_bootstrap" {
 # and AWSMachineTemplate takes a profile name that must already exist.
 resource "aws_iam_role" "autoscaler_worker" {
   count       = var.cluster_autoscaler_enabled ? 1 : 0
-  name_prefix = "kube-compute-${var.cluster_name}-capi-"
+  name_prefix = local.autoscaler_role_name_prefix
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -334,7 +342,7 @@ resource "aws_iam_role_policy" "autoscaler_worker_agent_token" {
 
 resource "aws_iam_instance_profile" "autoscaler_worker" {
   count       = var.cluster_autoscaler_enabled ? 1 : 0
-  name_prefix = "kube-compute-${var.cluster_name}-capi-"
+  name_prefix = local.autoscaler_role_name_prefix
   role        = aws_iam_role.autoscaler_worker[0].name
   tags        = local.autoscaler_common_tags
 }
