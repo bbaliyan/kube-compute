@@ -19,10 +19,10 @@ run "workloads_app_helm_parameters_render_nested_and_flat" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_workloads_repo_url = "https://example.test/workloads.git"
-    gitops_workloads_path     = "cluster-sql"
+    gitops_workloads_path     = "cluster-db"
     workloads_extra_helm_parameters = {
-      "backup.bucketName" = "xtpc-icrq-1717-database-backups-us-east-1"
-      "clusterFqdnSuffix" = "cluster-sql.us-east-1.1717.aws.iongroup.net"
+      "backup.bucketName" = "acme-backups-us-east-1"
+      "clusterFqdnSuffix" = "cluster-db.us-east-1.example.net"
     }
   }
 
@@ -32,7 +32,7 @@ run "workloads_app_helm_parameters_render_nested_and_flat" {
       can(yamldecode(base64decode(f.content)).spec.source.helm.parameters) &&
       anytrue([
         for p in yamldecode(base64decode(f.content)).spec.source.helm.parameters :
-        p.name == "backup.bucketName" && p.value == "xtpc-icrq-1717-database-backups-us-east-1"
+        p.name == "backup.bucketName" && p.value == "acme-backups-us-east-1"
       ])
       if f.path == "/opt/kube-compute/manifests/11-workloads-app.yaml"
     ])
@@ -44,7 +44,7 @@ run "workloads_app_helm_parameters_render_nested_and_flat" {
       for f in yamldecode(output.cloud_init_user_data).write_files :
       anytrue([
         for p in yamldecode(base64decode(f.content)).spec.source.helm.parameters :
-        p.name == "clusterFqdnSuffix" && p.value == "cluster-sql.us-east-1.1717.aws.iongroup.net"
+        p.name == "clusterFqdnSuffix" && p.value == "cluster-db.us-east-1.example.net"
       ])
       if f.path == "/opt/kube-compute/manifests/11-workloads-app.yaml"
     ])
@@ -60,7 +60,7 @@ run "workloads_app_omits_helm_block_when_no_extra_parameters" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_workloads_repo_url = "https://example.test/workloads.git"
-    gitops_workloads_path     = "cluster-sql"
+    gitops_workloads_path     = "cluster-db"
   }
 
   assert {
