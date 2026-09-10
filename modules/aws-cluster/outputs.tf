@@ -119,3 +119,18 @@ output "all_instance_ids" {
   description = "Every EC2 instance Terraform owns individually: the control-plane node(s) plus every static node. Feed a nightly stop schedule from this, not from instance_id alone, or the workers run around the clock while the control plane stops. Excludes ASG members, which cannot be stopped this way at all."
   value       = local.all_instance_ids
 }
+
+output "cluster_autoscaler_enabled" {
+  description = "Whether the Cluster API autoscaling path is on for this cluster."
+  value       = var.cluster_autoscaler_enabled
+}
+
+output "cluster_autoscaler_worker_iam_role_name" {
+  description = "IAM role attached to CAPI-provisioned workers, or null when autoscaling is off. Reference it to attach additional policies. Note the CAPA controller itself authenticates as the CONTROL-PLANE node instead, so the policy letting it create instances belongs on node_iam_role_name."
+  value       = try(aws_iam_role.autoscaler_worker[0].name, null)
+}
+
+output "cluster_autoscaler_worst_case_node_count" {
+  description = "Maximum instances the autoscaler can create for this cluster. Multiply by the hourly price of cluster_autoscaler_worker_template.instance_type and the hours the cluster actually runs to get the worst-case monthly spend the autoscaler can reach."
+  value       = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_max_size : 0
+}

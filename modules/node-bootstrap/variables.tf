@@ -305,6 +305,12 @@ variable "iscsi_initiator_enabled" {
   default     = false
 }
 
+variable "cluster_autoscaler_capi_install_baked" {
+  description = "Whether the CAPI install manifest is baked onto the node image at /opt/kube-compute/manifests/capi-install.yaml and should be applied by bootstrap.sh. True suits the Proxmox template, which stages one; false suits AWS, whose image does not, and where Cluster API arrives as a platform Argo CD Application instead -- bootstrap.sh then only waits for the CRDs rather than installing them. Only meaningful when cluster_autoscaler_crd_wait_enabled is true."
+  type        = bool
+  default     = true
+}
+
 variable "cluster_autoscaler_crd_wait_enabled" {
   description = "Whether bootstrap.sh applies capi-install.yaml and waits for CAPI's core CRDs (machinedeployments.cluster.x-k8s.io) to be Established before applying genesis_apply_manifests entries. Only meaningful when genesis_apply_manifests is non-empty and contains CAPI-dependent content, and only takes effect for node_role = server-init."
   type        = bool

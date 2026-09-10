@@ -1,0 +1,158 @@
+# SPDX-License-Identifier: Apache-2.0
+# Cluster + AWSCluster + Secret + AWSMachineTemplate + MachineDeployment for
+# CAPI/CAPA-managed autoscaler workers. Mirrors proxmox-cluster's own bundle
+# field for field where the two providers agree; the differences are noted below.
+#
+# No bootstrap-provider CRD: the Secret carries the same cloud-init node-bootstrap
+# already renders for this project's other workers, referenced via
+# Machine.spec.bootstrap.dataSecretName. CAPRKE2 is deliberately unused, for the
+# reason recorded on the Proxmox template -- its worker-join path requires a live
+# CAPRKE2-owned RKE2ControlPlane object, and this project's control plane belongs
+# to Terraform.
+#
+# Cluster.spec.controlPlaneRef is omitted. Cluster.spec.infrastructureRef points
+# at a real AWSCluster, because CAPA's AWSMachine reconciler does a hard Get on
+# it; the cluster.x-k8s.io/managed-by annotation is what stops CAPA reconciling
+# that object's own fields, so it exists to satisfy the Get rather than to let
+# CAPA own network fabric Terraform already created.
+#
+# UNVERIFIED, in the order to check if no worker instance ever appears:
+#
+# 1. Readiness, not existence. The managed-by annotation stops CAPA's AWSCluster
+#    controller reconciling this object, so nothing ever sets status.ready or
+#    Cluster.status.infrastructureReady -- and CAPI's Machine controller gates
+#    machine creation on the latter. CAPI's externally-managed contract says the
+#    external controller is responsible for setting it, and nothing in this
+#    project does. This is the same open question the Proxmox template records as
+#    its own item 1, unresolved there too. If machines never appear and the
+#    AWSMachine has no error, patch AWSCluster.status.ready = true and see
+#    whether provisioning starts; if it does, this bundle needs a genesis step
+#    that does that patch.
+# 2. Required AWSClusterSpec fields beyond what is set here. The Proxmox
+#    equivalent needed two rounds of real applies to find spec.dnsServers and
+#    spec.ipv4Config. The fields set below are region, controlPlaneEndpoint,
+#    network.vpc.id, the subnet, and bastion/sshKeyName disabled. CRD admission
+#    will name anything else it wants.
+# 3. iamInstanceProfile must be a profile NAME, not an ARN, and the profile must
+#    already exist -- CAPA does not create one when the cluster is externally
+#    managed. It is created by the aws-cluster module alongside this bundle.
+# 4. IAM on the CONTROLLER, not the machine. CAPA authenticates through the
+#    control-plane node's own instance profile, so that role needs RunInstances,
+#    TerminateInstances, Describe*, CreateTags and PassRole for the worker
+#    profile above. The consumer repo attaches that policy; without it CAPA logs
+#    an authorization failure per reconcile and creates nothing.
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: ${cluster_name}
+  namespace: default
+spec:
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+    kind: AWSCluster
+    name: ${cluster_name}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+kind: AWSCluster
+metadata:
+  name: ${cluster_name}
+  namespace: default
+  annotations:
+    cluster.x-k8s.io/managed-by: ""
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+spec:
+  region: ${aws_region}
+  # Empty, because this project has no inbound SSH anywhere -- SSM is the only
+  # operator access path. CAPA treats an omitted key as "use the account default",
+  # which would silently attach one.
+  sshKeyName: ""
+  bastion:
+    enabled: false
+  # Pre-existing fabric. CAPA must adopt it, never create it: the VPC and subnets
+  # belong to the account, not to this cluster.
+  network:
+    vpc:
+      id: ${vpc_id}
+    subnets:
+      - id: ${subnet_id}
+  controlPlaneEndpoint:
+    host: ${control_plane_endpoint_host}
+    port: ${control_plane_endpoint_port}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${cluster_name}-autoscaler-worker-bootstrap
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+type: Opaque
+data:
+  value: ${bootstrap_secret_b64}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+kind: AWSMachineTemplate
+metadata:
+  name: ${cluster_name}-autoscaler-workers
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+spec:
+  template:
+    spec:
+      instanceType: ${instance_type}
+      ami:
+        id: ${ami_id}
+      iamInstanceProfile: ${iam_instance_profile}
+      subnet:
+        id: ${subnet_id}
+      additionalSecurityGroups:
+%{ for sg in security_group_ids ~}
+        - id: ${sg}
+%{ endfor ~}
+      publicIP: false
+      sshKeyName: ""
+      rootVolume:
+        size: ${root_volume_size_gb}
+        type: ${root_volume_type}
+        encrypted: true
+      # hop_limit 3, not AWS's documented 2: IMDSv2 caps the token response's TTL
+      # to it, and Cilium's pod-netns routing costs 2 hops. Confirmed live on this
+      # project's own nodes.
+      instanceMetadataOptions:
+        httpEndpoint: enabled
+        httpTokens: required
+        httpPutResponseHopLimit: 3
+      additionalTags:
+        ClusterName: ${cluster_name}
+        ManagedBy: kube-compute
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: ${cluster_name}-autoscaler-workers
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+  annotations:
+    cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "${min_size}"
+    cluster.x-k8s.io/cluster-api-autoscaler-node-group-max-size: "${max_size}"
+spec:
+  clusterName: ${cluster_name}
+  replicas: ${min_size}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${cluster_name}
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: ${cluster_name}
+    spec:
+      clusterName: ${cluster_name}
+      bootstrap:
+        dataSecretName: ${cluster_name}-autoscaler-worker-bootstrap
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+        kind: AWSMachineTemplate
+        name: ${cluster_name}-autoscaler-workers

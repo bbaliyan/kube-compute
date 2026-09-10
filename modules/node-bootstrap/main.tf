@@ -313,6 +313,7 @@ locals {
     platform_app_enabled                = local.platform_app_enabled
     workloads_app_enabled               = local.workloads_app_enabled
     cluster_autoscaler_crd_wait_enabled = local.effective_crd_wait_enabled
+    capi_install_baked                  = var.cluster_autoscaler_capi_install_baked
     genesis_apply_manifest_paths        = local.genesis_apply_manifest_paths
   })
 

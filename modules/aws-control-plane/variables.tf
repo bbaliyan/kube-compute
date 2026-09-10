@@ -286,3 +286,25 @@ variable "extra_tags" {
   type        = map(string)
   default     = {}
 }
+
+# ---- Genesis-time manifest application (Cluster API and anything like it) ----
+variable "genesis_apply_manifests" {
+  description = "Ordered {path, content} manifests written under /opt/kube-compute/manifests/ on the genesis node and applied by bootstrap.sh after the platform Application. This module does not interpret the content; the composing module renders it. Empty list (the default) applies nothing extra."
+  type = list(object({
+    path    = string
+    content = string
+  }))
+  default = []
+}
+
+variable "cluster_autoscaler_crd_wait_enabled" {
+  description = "Whether bootstrap.sh waits for Cluster API's CRDs before applying genesis_apply_manifests. Only meaningful when that list contains CAPI-dependent content."
+  type        = bool
+  default     = false
+}
+
+variable "cluster_autoscaler_capi_install_baked" {
+  description = "Whether the CAPI install manifest is baked onto the AMI at /opt/kube-compute/manifests/capi-install.yaml. False for this project's AWS image, which does not stage one -- Cluster API arrives as a platform Argo CD Application and bootstrap.sh only waits for the CRDs."
+  type        = bool
+  default     = false
+}

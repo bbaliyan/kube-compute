@@ -249,6 +249,10 @@ module "node_bootstrap" {
   platform_extra_helm_parameters  = var.platform_extra_helm_parameters
   platform_helm_values_object     = var.platform_helm_values_object
   extra_tags                      = var.extra_tags
+
+  genesis_apply_manifests               = var.genesis_apply_manifests
+  cluster_autoscaler_crd_wait_enabled   = var.cluster_autoscaler_crd_wait_enabled
+  cluster_autoscaler_capi_install_baked = var.cluster_autoscaler_capi_install_baked
 }
 
 # node-bootstrap renders a plan-time-only cloud-init payload (no live connection to wait

@@ -26,7 +26,7 @@ module "control_plane" {
   cluster_type                      = var.cluster_type
   cni                               = var.cni
   cert_mode                         = var.cert_mode
-  platform_extra_helm_parameters    = var.platform_extra_helm_parameters
+  platform_extra_helm_parameters    = local.autoscaler_platform_helm_parameters
   platform_helm_values_object       = var.platform_helm_values_object
   extra_tags                        = var.extra_tags
   aws_region                        = var.aws_region
@@ -48,6 +48,12 @@ module "control_plane" {
   ingress_ports                     = var.ingress_ports
   root_volume_size_gb               = var.root_volume_size_gb
   root_volume_type                  = var.root_volume_type
+
+  genesis_apply_manifests             = local.cluster_autoscaler_genesis_manifests
+  cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_enabled
+  # This project's AWS image stages no capi-install.yaml, so bootstrap.sh waits
+  # for the CRDs the platform Application installs rather than applying any.
+  cluster_autoscaler_capi_install_baked = false
 }
 
 module "node_pools" {
@@ -112,4 +118,179 @@ module "static_nodes" {
   registry_mirror_url = each.value.registry_mirror_url != null ? each.value.registry_mirror_url : var.registry_mirror_url
   dns_servers         = each.value.dns_servers != null ? each.value.dns_servers : var.dns_servers
   extra_tags          = merge(var.extra_tags, each.value.extra_tags)
+}
+
+# ---- Cluster API autoscaling (Phase 2) ----
+#
+# Mirrors proxmox-cluster's shape: the same enabled flag, min/max sizes and machine
+# template, delivered through node-bootstrap's genesis_apply_manifests. The one
+# structural difference is where Cluster API itself comes from -- the Proxmox VM
+# template stages a clusterctl-generated install manifest and the AWS image does
+# not, so here it arrives as a platform Argo CD Application and bootstrap.sh waits
+# for its CRDs instead of applying them.
+locals {
+  autoscaler_common_tags               = merge(var.extra_tags, { ClusterName = var.cluster_name, ManagedBy = "kube-compute" })
+  autoscaler_agent_token_fetch_command = "aws ssm get-parameter --name '${module.control_plane.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
+
+  # Deliberately NOT module.control_plane.registration_address, which resolves
+  # from the control-plane instance: this bundle is written INTO that instance's
+  # own cloud-init, so referencing it is a dependency cycle. Confirmed as one --
+  # the same cycle proxmox-cluster's equivalent local documents.
+  #
+  # Derived from variables only. api.<cluster>.<domain> is answered by the
+  # wildcard Route53 record aws-control-plane creates, which for a single control
+  # plane has exactly one target, so this is a single-target name rather than the
+  # round-robin one that causes long join hangs on the Proxmox side.
+  autoscaler_registration_address = var.cluster_domain != null ? "api.${var.cluster_name}.${var.cluster_domain}" : null
+
+  cluster_autoscaler_worker_ami_id = var.cluster_autoscaler_enabled ? coalesce(
+    var.cluster_autoscaler_worker_template.os_image_ami_id,
+    module.control_plane.effective_ami_id,
+  ) : ""
+
+  cluster_autoscaler_bundle_yaml = !var.cluster_autoscaler_enabled ? "" : templatefile(
+    "${path.module}/templates/cluster-autoscaler-workers.yaml.tftpl",
+    {
+      cluster_name         = var.cluster_name
+      aws_region           = var.aws_region
+      min_size             = var.cluster_autoscaler_worker_min_size
+      max_size             = var.cluster_autoscaler_worker_max_size
+      instance_type        = var.cluster_autoscaler_worker_template.instance_type
+      root_volume_size_gb  = var.cluster_autoscaler_worker_template.root_volume_size_gb
+      root_volume_type     = var.cluster_autoscaler_worker_template.root_volume_type
+      ami_id               = local.cluster_autoscaler_worker_ami_id
+      iam_instance_profile = try(aws_iam_instance_profile.autoscaler_worker[0].name, "")
+      vpc_id               = module.control_plane.vpc_id
+      subnet_id            = module.control_plane.subnet_id
+      security_group_ids   = [module.control_plane.cluster_security_group_id]
+      # Never consulted for anything actionable -- the AWSCluster is a placeholder
+      # to satisfy CAPA's Get -- but the CRD rejects an empty host, which is how
+      # the Proxmox equivalent found out.
+      control_plane_endpoint_host = local.autoscaler_registration_address != null ? local.autoscaler_registration_address : ""
+      control_plane_endpoint_port = 6443
+      bootstrap_secret_b64        = var.cluster_autoscaler_enabled ? base64encode(module.cluster_autoscaler_worker_bootstrap[0].cloud_init_user_data) : ""
+    }
+  )
+
+  cluster_autoscaler_genesis_manifests = !var.cluster_autoscaler_enabled ? [] : [{
+    path    = "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+    content = local.cluster_autoscaler_bundle_yaml
+  }]
+
+  # kube-platform gates both Applications on these. This module owns the decision,
+  # so it injects them through the generic parameter map rather than
+  # aws-control-plane growing two dedicated inputs.
+  autoscaler_platform_helm_parameters = merge(
+    var.platform_extra_helm_parameters,
+    var.cluster_autoscaler_enabled ? {
+      clusterAutoscalerEnabled = "true"
+      clusterApiEnabled        = "true"
+    } : {},
+  )
+}
+
+# A module call cannot carry a lifecycle precondition and a check block only warns,
+# so this exists purely to fail the apply rather than bake a null join address into
+# every autoscaled worker's Secret. Same device, and the same reason, as
+# proxmox-cluster's own terraform_data guard.
+resource "terraform_data" "autoscaler_registration_address_configured" {
+  count = var.cluster_autoscaler_enabled ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.autoscaler_registration_address != null
+      error_message = "cluster_autoscaler_enabled = true requires cluster_domain to be set: autoscaled workers join through api.<cluster_name>.<cluster_domain>, which cannot be the control plane's own IP without a dependency cycle."
+    }
+  }
+}
+
+# The CAPI manifests apply Issuer/Certificate objects, which only exist once
+# cert-manager does -- and cert-manager arrives with the platform Application.
+resource "terraform_data" "autoscaler_requires_platform_gitops" {
+  count = var.cluster_autoscaler_enabled ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = var.gitops_platform_enabled
+      error_message = "cluster_autoscaler_enabled = true requires gitops_platform_enabled = true -- Cluster API is installed by the platform Argo CD Application, and its webhooks depend on cert-manager, which the same Application installs."
+    }
+  }
+}
+
+# One shared render for every CAPI-provisioned replica, referenced by the
+# MachineDeployment through a single Secret. set_hostname = false because the
+# payload is byte-identical across replicas and so cannot carry a unique hostname;
+# CAPA's own cloud-init metadata supplies one instead.
+module "cluster_autoscaler_worker_bootstrap" {
+  source = "../node-bootstrap"
+  count  = var.cluster_autoscaler_enabled ? 1 : 0
+
+  cluster_name              = var.cluster_name
+  node_name                 = "${var.cluster_name}-autoscaler-worker"
+  node_role                 = "worker"
+  set_hostname              = false
+  registration_address      = local.autoscaler_registration_address
+  agent_token_fetch_command = local.autoscaler_agent_token_fetch_command
+  trusted_ca_pem            = var.trusted_ca_pem
+  registry_mirror_url       = var.registry_mirror_url
+  dns_servers               = var.dns_servers
+}
+
+# CAPA does not create an instance profile when the cluster is externally managed,
+# and AWSMachineTemplate takes a profile name that must already exist.
+resource "aws_iam_role" "autoscaler_worker" {
+  count       = var.cluster_autoscaler_enabled ? 1 : 0
+  name_prefix = "kube-compute-${var.cluster_name}-capi-"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+  tags = local.autoscaler_common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "autoscaler_worker_ssm_core" {
+  count      = var.cluster_autoscaler_enabled ? 1 : 0
+  role       = aws_iam_role.autoscaler_worker[0].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "autoscaler_worker_ebs_csi" {
+  count      = var.cluster_autoscaler_enabled ? 1 : 0
+  role       = aws_iam_role.autoscaler_worker[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+resource "aws_iam_role_policy" "autoscaler_worker_agent_token" {
+  count = var.cluster_autoscaler_enabled ? 1 : 0
+  name  = "kube-compute-${var.cluster_name}-capi-agent-token-read"
+  role  = aws_iam_role.autoscaler_worker[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${module.control_plane.agent_token_ssm_parameter}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = "*"
+        Condition = {
+          StringEquals = { "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com" }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "autoscaler_worker" {
+  count       = var.cluster_autoscaler_enabled ? 1 : 0
+  name_prefix = "kube-compute-${var.cluster_name}-capi-"
+  role        = aws_iam_role.autoscaler_worker[0].name
+  tags        = local.autoscaler_common_tags
 }

@@ -359,6 +359,7 @@ if [ "$CERT_MANAGER_WEBHOOK_READY" -ne 1 ]; then
   echo "kube-compute: cert-manager-webhook had no endpoints within ~450s of its CRDs appearing — capi-install.yaml's Issuer/Certificate objects would fail admission and cannot proceed" >&2
   exit 1
 fi
+%{ if capi_install_baked ~}
 $KUBECTL apply -f "$KC/manifests/capi-install.yaml"
 # Wait for CAPI's core CRDs to be Established before applying anything that
 # references them — same "CRD-established vs controller-running" race this
@@ -370,6 +371,24 @@ for attempt in $(seq 1 60); do
   fi
   sleep 2
 done
+%{ else ~}
+# No baked capi-install.yaml on this image: Cluster API arrives as a platform
+# Argo CD Application, so this waits rather than installs. The wait is far
+# longer than the baked case because Argo CD has to sync the operator, the
+# operator has to reconcile the providers, and every one of those pulls images.
+CAPI_CRDS_READY=0
+for attempt in $(seq 1 180); do
+  if $KUBECTL get crd machinedeployments.cluster.x-k8s.io >/dev/null 2>&1; then
+    CAPI_CRDS_READY=1
+    break
+  fi
+  sleep 5
+done
+if [ "$CAPI_CRDS_READY" -ne 1 ]; then
+  echo "kube-compute: CAPI CRDs did not appear within ~900s — the platform Application must have clusterApiEnabled set, and the MachineDeployment bundle below cannot be applied without them" >&2
+  exit 1
+fi
+%{ endif ~}
 %{ endif ~}
 %{ for manifest_path in genesis_apply_manifest_paths ~}
 # Not nested inside the cluster_autoscaler_crd_wait_enabled block above:

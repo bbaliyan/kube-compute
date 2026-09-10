@@ -305,3 +305,43 @@ variable "static_nodes" {
   }))
   default = {}
 }
+
+# ---- Cluster API autoscaling (Phase 2) ----
+variable "cluster_autoscaler_enabled" {
+  description = "Genesis-apply a CAPI/CAPA MachineDeployment for this cluster and turn on kube-platform's cluster-autoscaler and Cluster API Applications. False (the default) means none of it exists. Independent of static_nodes: a cluster can have named nodes for its fixed roles and an autoscaled group for elastic capacity at the same time."
+  type        = bool
+  default     = false
+}
+
+variable "cluster_autoscaler_worker_min_size" {
+  description = "Minimum worker count cluster-autoscaler maintains. Only meaningful when cluster_autoscaler_enabled is true."
+  type        = number
+  default     = 0
+}
+
+variable "cluster_autoscaler_worker_max_size" {
+  description = "Maximum worker count cluster-autoscaler will scale to. Also the cost ceiling: worst-case spend for this group is this number times the instance's hourly price times the hours it actually runs."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_max_size > 0
+    error_message = "cluster_autoscaler_worker_max_size must be > 0 when cluster_autoscaler_enabled is true -- leaving it at the 0 default renders a valid but useless MachineDeployment that can never scale up."
+  }
+}
+
+variable "cluster_autoscaler_worker_template" {
+  description = "Machine shape for CAPI-provisioned autoscaled workers. Null (the default) is valid only when cluster_autoscaler_enabled is false. os_image_ami_id null falls back to the resolved control-plane AMI, which is only correct when the architectures match -- name it explicitly for a mixed-architecture cluster."
+  type = object({
+    instance_type       = string
+    root_volume_size_gb = optional(number, 20)
+    root_volume_type    = optional(string, "gp3")
+    os_image_ami_id     = optional(string)
+  })
+  default = null
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_template != null
+    error_message = "cluster_autoscaler_worker_template is required when cluster_autoscaler_enabled is true."
+  }
+}

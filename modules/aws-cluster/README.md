@@ -33,15 +33,15 @@ genuinely inapplicable to AWS today:
   the launch template), so there is no `worker_node_refs`-shaped output for
   `node-os-patch` to iterate over in the first place. An SSM-based patch
   orchestrator for AWS is a real gap, not yet built.
-- **No cluster-autoscaler.** Neither worker path here is elastic. `aws-node-pool`
-  provisions a fixed-size ASG (`min_size = max_size = desired_capacity`);
-  `aws-static-node` provisions named instances that nothing resizes at all. The
-  Proxmox equivalent drives Cluster API through a CAPI install manifest staged onto
-  the VM template by `kube-image`, and the AWS Packer template does not stage one,
-  so the mechanism the Proxmox path uses has no producer on this side. A Cluster
-  API-driven autoscaler for AWS is a real gap, and this is the module to revisit —
-  the install would want to come from the platform GitOps repo rather than a baked
-  manifest, so that a provider version bump does not mean rebuilding an AMI.
+- **cluster-autoscaler now exists here too**, through `cluster_autoscaler_enabled`
+  and the three variables beside it, mirroring `proxmox-cluster`'s own inputs. One
+  structural difference: the Proxmox path applies a clusterctl-generated
+  `capi-install.yaml` staged onto the VM template at image build time, and the AWS
+  image stages nothing of the kind. Cluster API therefore arrives as a platform
+  Argo CD Application (`clusterApiEnabled`), and `bootstrap.sh` waits for its CRDs
+  instead of installing them. A provider version bump is then a value change in
+  `platform-versions/values.yaml`, not an AMI rebuild. See "Cluster API
+  autoscaling" below.
 
 ## Inputs
 
@@ -198,3 +198,53 @@ module "cluster" {
 `CriticalAddonsOnly=true:NoExecute`, which is what pushes the platform workloads
 onto the `platform` group. Set it only once a group exists to receive them —
 tainting a single-node cluster leaves nothing anywhere to run.
+
+## Cluster API autoscaling
+
+Off by default. Turning it on creates a `MachineDeployment` whose min and max the
+autoscaler reads from annotations, and switches on kube-platform's
+`clusterApiEnabled` and `clusterAutoscalerEnabled` Applications automatically —
+this module owns the decision, so the consumer sets one flag rather than three.
+
+```hcl
+cluster_autoscaler_enabled         = true
+cluster_autoscaler_worker_min_size = 0
+cluster_autoscaler_worker_max_size = 3
+cluster_autoscaler_worker_template = {
+  instance_type       = "t4g.large"
+  root_volume_size_gb = 40
+}
+```
+
+It composes with `static_nodes` rather than replacing it: named instances for the
+roles that are decided in Git, an autoscaled group for elastic capacity.
+
+**`cluster_domain` is required.** Autoscaled workers join through
+`api.<cluster_name>.<cluster_domain>`, answered by the wildcard Route53 record the
+control-plane module creates. It cannot be the control plane's own IP: the
+`MachineDeployment` bundle is written into that instance's cloud-init, so reading
+an output derived from the instance is a dependency cycle. A precondition fails
+the apply rather than baking a null address into every worker's Secret.
+
+**The controller authenticates as the control-plane node.** There is no IRSA on a
+self-managed cluster, so the AWS provider uses the node's instance profile. The
+policy letting it call `RunInstances`, `TerminateInstances`, `CreateTags` and
+`PassRole` for the worker profile belongs on `node_iam_role_name`, attached by the
+consumer repo. Without it the provider logs an authorization failure per reconcile
+and creates nothing.
+
+**The spend ceiling is `cluster_autoscaler_worker_max_size`.** Nothing in
+Kubernetes understands money, so the enforcing limit is a node count. Worst-case
+monthly spend is that number times the instance's hourly price times the hours the
+cluster actually runs — which for a cluster that stops nightly is roughly 300, not
+730. The `cluster_autoscaler_worst_case_node_count` output exists so a consumer can
+derive the count from a budget rather than typing it.
+
+**Known unverified.** The `AWSCluster` is marked externally managed so the
+provider does not try to own the VPC, which also means nothing ever sets its
+`status.ready`, and CAPI's machine controller gates on
+`Cluster.status.infrastructureReady`. This is the same open question
+`proxmox-cluster` records against its own bundle, unresolved there too. If no
+worker instance ever appears and the `AWSMachine` reports no error, that is the
+first thing to check. The full list is in the header of
+`templates/cluster-autoscaler-workers.yaml.tftpl`.
