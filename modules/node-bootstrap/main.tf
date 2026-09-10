@@ -252,14 +252,9 @@ locals {
     [for k, v in var.node_labels : "  - \"${k}=${v}\""],
   ))
 
-  # Worker-only, exactly like node_label_block above. The server roles render
-  # their taint inside server_static_block from control_plane_taint, and rke2
-  # accepts a single node-taint: key in config.yaml -- two blocks would produce
-  # a duplicate key and RKE2 refuses to start. Each entry is already a full
-  # "key=value:Effect" string (validated on the variable), so it needs no
-  # assembly here, only quoting: a value that starts with '*' or looks like a
-  # YAML indicator must not be reinterpreted by the parser, the same reason
-  # every tls-san entry is quoted.
+  # Worker-only: the server roles fill config.yaml's single node-taint: key from
+  # control_plane_taint, and a second block would be a duplicate key RKE2
+  # refuses to start on. Quoted for the same reason every tls-san entry is.
   node_taint_block = length(var.node_taints) == 0 ? "" : join("\n", concat(
     ["node-taint:"],
     [for t in var.node_taints : "  - \"${t}\""],

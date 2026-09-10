@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the three properties that make this module worth having over
-# aws-node-pool's ASG: individually-tracked instances (so a stop schedule and
-# per-instance IAM have stable ids to scope to), a distinct Terraform-assigned
-# hostname per node, and taints that actually reach config.yaml. Also guards the
-# architecture derivation, since one cluster now mixes arm64 and x86_64 nodes.
+# Guards what this module has that an ASG does not: individually-tracked
+# instances, a Terraform-assigned hostname each, and taints reaching config.yaml.
 
 mock_provider "aws" {
   mock_data "aws_ec2_instance_type" {
@@ -99,9 +96,6 @@ run "each_node_gets_its_own_hostname_and_the_groups_taints" {
     node_taints         = ["dedicated=true:NoSchedule"]
   }
 
-  # set_hostname is left at its default true, which the ASG path cannot do: every
-  # ASG member shares one rendered cloud-init, so aws-node-pool must pass false
-  # and let cloud-init's EC2 datasource invent a name.
   assert {
     condition     = yamldecode(module.node_bootstrap["1"].cloud_init_user_data).hostname == "bharat-dedicated-1"
     error_message = "each node's cloud-init must set its own hostname -- RKE2 registers the Kubernetes node name from it, and a name Terraform chose is the reason this module exists"
@@ -161,9 +155,6 @@ run "x86_instance_type_resolves_x86_images" {
     os_image_name = "almalinux10-*-kube-image-v1.36.2-*"
   }
 
-  # The reason one os_image_name with a wildcard architecture segment is safe:
-  # the lookup filters on architecture as well as name, so the arm64 platform
-  # node and this x86_64 node cannot resolve each other's build.
   assert {
     condition     = output.node_arch == "x86_64"
     error_message = "a non-Graviton instance type must resolve x86_64"

@@ -1,10 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the worker-taint contract. A dedicated node needs both halves: a
-# label so a workload can select it, and a taint so nothing else lands there.
-# node_labels was already covered by cloud_init_render.tftest.hcl; this file
-# covers the taint half, plus the two ways it must NOT render — on a server
-# role (where control_plane_taint owns the single node-taint: key rke2
-# accepts) and when the list is empty (no stray key in config.yaml at all).
+# Covers the taint half of a dedicated node (node_labels is already covered by
+# cloud_init_render.tftest.hcl), plus the two cases where it must not render.
 
 variables {
   cluster_name = "test"
@@ -74,9 +70,7 @@ run "server_init_taint_still_comes_from_control_plane_taint" {
     node_name           = "test-cp-1"
     cluster_token       = "SUPERSECRETTOKEN123"
     control_plane_taint = true
-    # Deliberately set on a server role: node_taints is documented worker-only,
-    # and rke2 accepts a single node-taint: key, so this must be ignored rather
-    # than rendered alongside the CriticalAddonsOnly one below.
+    # Deliberately set on a server role, where it must be ignored.
     node_taints = ["dedicated=true:NoSchedule"]
   }
 

@@ -111,7 +111,7 @@ variable "node_labels" {
 }
 
 variable "node_taints" {
-  description = "Extra node-taint: entries applied at rke2 install time, each a full \"key=value:Effect\" string (e.g. [\"dedicated=true:NoSchedule\"]). Only meaningful for node_role = worker — the control-plane roles get their taint from control_plane_taint instead, and rke2 accepts only one node-taint: key in config.yaml, so the two cannot both render. A label plus a nodeSelector makes a dedicated node merely PREFERRED; only a taint keeps other pods off it, which is why this exists separately from node_labels."
+  description = "Extra node-taint: entries applied at rke2 install time, each a full \"key=value:Effect\" string (e.g. [\"dedicated=true:NoSchedule\"]). Only meaningful for node_role = worker: the server roles fill the same single config.yaml key from control_plane_taint. A label and a nodeSelector make a node merely preferred; only a taint keeps other pods off it."
   type        = list(string)
   default     = []
 

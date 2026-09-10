@@ -1,15 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Every EC2 instance in this cluster that Terraform owns individually: the control-plane
-# node(s) plus every static node group's instances. Nothing from var.node_pools appears here,
-# because an autoscaling group creates its members directly from the launch template and
-# Terraform never sees them.
-#
-# Deliberately a local as well as an output. A consumer that generates an extra .tf file into
-# this module's directory (terragrunt's generate block does exactly that, for a nightly stop
-# schedule) cannot reference the module's own outputs, only its locals and module calls -- and
-# recomputing this list at that end would put the same concat in two places, where one of them
-# would eventually be forgotten when a new kind of node appears.
+# A local as well as an output: generated .tf files (terragrunt's generate block, for the
+# stop schedule) can reference a module's locals but not its outputs.
 locals {
   all_instance_ids = concat(
     [for name, ref in module.control_plane.control_plane_node_refs : ref.instance_id],
@@ -82,17 +74,7 @@ module "node_pools" {
   extra_tags          = each.value.extra_tags
 }
 
-# Named instances rather than an autoscaling group; see modules/aws-static-node/README.md
-# for why that is the right way round on a cluster that stops overnight.
-#
-# subnet_id falls back to the control plane's own resolved subnet, so a group lands in the
-# control plane's availability zone by construction instead of being pointed at a subnet by
-# hand. An EBS volume cannot cross zones, so a worker in the wrong one cannot mount the data
-# it was created for.
-#
-# cluster_fqdn_suffix is not exposed as a variable on this module: aws-control-plane derives
-# it from cluster_name and cluster_domain, so recomputing it here keeps the two in step
-# without a second input that could disagree with the first.
+# See modules/aws-static-node/README.md for why named instances beat an ASG here.
 module "static_nodes" {
   source   = "../aws-static-node"
   for_each = var.static_nodes
@@ -104,14 +86,15 @@ module "static_nodes" {
   agent_token_ssm_parameter = module.control_plane.agent_token_ssm_parameter
   cluster_fqdn_suffix       = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
 
-  # The ingress security group is opt-in per group: it carries this cluster's externally
-  # reachable ports, and only the group actually running the ingress controller should answer
-  # on them.
+  # Opt-in per group: only the group running the ingress controller should answer on this
+  # cluster's externally reachable ports.
   security_group_ids = concat(
     [module.control_plane.cluster_security_group_id],
     each.value.attach_ingress_sg ? [module.control_plane.node_security_group_id] : [],
   )
 
+  # Defaults to the control plane's own subnet, so a group inherits its availability zone.
+  # An EBS volume cannot cross zones, so a worker in another one cannot mount its data.
   subnet_id             = coalesce(each.value.subnet_id, module.control_plane.subnet_id)
   node_count            = each.value.node_count
   instance_type         = each.value.instance_type
@@ -123,9 +106,8 @@ module "static_nodes" {
   node_taints           = each.value.node_taints
   attach_ebs_csi_policy = each.value.attach_ebs_csi_policy
 
-  # Cluster-wide by default, overridable per group: a worker that cannot verify the corp CA
-  # or reach the registry mirror cannot pull an image, and a worker with the control plane's
-  # resolver list avoids the wildcard-search-domain trap identically.
+  # Cluster-wide by default, overridable per group. A ternary rather than coalesce(): all
+  # three are commonly null on both sides, and coalesce raises when every argument is null.
   trusted_ca_pem      = each.value.trusted_ca_pem != null ? each.value.trusted_ca_pem : var.trusted_ca_pem
   registry_mirror_url = each.value.registry_mirror_url != null ? each.value.registry_mirror_url : var.registry_mirror_url
   dns_servers         = each.value.dns_servers != null ? each.value.dns_servers : var.dns_servers

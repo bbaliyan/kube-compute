@@ -99,7 +99,7 @@ output "node_pools" {
 }
 
 output "static_nodes" {
-  description = "Map of group name (matching var.static_nodes' own keys) -> {node_provider, node_refs, instance_ids, private_ips, availability_zone, node_arch, node_iam_role_name, node_labels, node_taints}. Unlike node_pools, this carries per-instance detail, because named instances are individually visible to Terraform — instance_ids is what a stop schedule scopes its IAM policy to, and node_labels/node_taints are what a workload builds its nodeSelector and tolerations from."
+  description = "Map of group name -> {node_provider, node_refs, instance_ids, private_ips, availability_zone, node_arch, node_iam_role_name, node_labels, node_taints}. Carries per-instance detail, which var.node_pools cannot: an ASG's members are invisible to Terraform."
   value = {
     for name, group in module.static_nodes : name => {
       node_provider      = group.node_provider
@@ -116,6 +116,6 @@ output "static_nodes" {
 }
 
 output "all_instance_ids" {
-  description = "Every EC2 instance in this cluster that Terraform owns individually: the control-plane node(s) plus every static node group's instances. This is the list a nightly stop schedule takes — before static nodes existed it only ever needed the genesis instance, and passing that alone now would leave the workers running around the clock while the control plane stopped, inverting the saving the schedule exists for. Excludes anything created by an autoscaling group (var.node_pools), which Terraform never sees individually and which cannot be stopped this way regardless."
+  description = "Every EC2 instance Terraform owns individually: the control-plane node(s) plus every static node. Feed a nightly stop schedule from this, not from instance_id alone, or the workers run around the clock while the control plane stops. Excludes ASG members, which cannot be stopped this way at all."
   value       = local.all_instance_ids
 }

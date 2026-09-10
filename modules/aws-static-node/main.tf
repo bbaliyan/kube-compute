@@ -1,25 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# A group of NAMED worker instances, not an autoscaling group. aws-node-pool is
-# the ASG path and stays where it is; this module exists because three things a
-# fixed-size cluster needs are not obtainable from a group:
-#
-#   1. A stop schedule. An ASG's health check treats an instance that is not
-#      running as failed and replaces it, so a nightly ec2:StopInstances against
-#      a group member is undone within minutes. Stopping a group means Standby or
-#      a desired capacity of zero -- a different API, a different IAM action, and
-#      a different thing to reverse in the morning.
-#   2. A stable instance id. Per-instance IAM scoping (the stop schedule's own
-#      policy is written against instance ARNs) and SSM targeting both need an id
-#      that survives a reboot. An ASG hands out a new one on every replacement.
-#   3. A distinct hostname per node, assigned by Terraform rather than by
-#      cloud-init's EC2 datasource. Every ASG member shares one launch template
-#      and therefore one rendered cloud-init, which is why aws-node-pool must
-#      pass set_hostname = false. Here each node gets its own render, so its
-#      Kubernetes node name is a name a human chose.
-#
-# What is given up in exchange: nothing reacts to load, and nothing replaces a
-# failed node. That is the correct trade for a cluster whose node roles are
-# decided in Git; see README.md.
+# Named worker instances rather than an autoscaling group. See README.md for why
+# that is the right way round for a cluster that stops every evening.
 locals {
   ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
 
@@ -31,26 +12,19 @@ locals {
 
   availability_zone = data.aws_subnet.selected.availability_zone
 
-  # Keys are "1".."node_count" so instance names read <cluster>-<group>-1 rather
-  # than starting at zero, matching aws-control-plane's own cp-1/cp-2 naming.
-  node_keys = { for i in range(var.node_count) : tostring(i + 1) => i + 1 }
-
+  # Keys start at 1, matching aws-control-plane's own cp-1/cp-2 naming.
+  node_keys  = { for i in range(var.node_count) : tostring(i + 1) => i + 1 }
   node_names = { for k, _ in local.node_keys : k => "${var.cluster_name}-${var.group_name}-${k}" }
 
-  # AlmaLinux community AMIs "likely" ship SSM Agent pre-installed but not
-  # guaranteed running -- enable/start defensively, mirroring the identical
-  # local in aws-control-plane and aws-node-pool. SSM is the only operator
-  # access path in this project; there is no inbound SSH anywhere.
+  # AlmaLinux community AMIs "likely" ship SSM Agent but not guaranteed running.
   connectivity_user_data = <<-EOT
     #!/bin/bash
     systemctl enable --now amazon-ssm-agent 2>/dev/null || true
   EOT
 
-  # AWS accepts one user_data string per instance, so MIME multipart/mixed
-  # combines the SSM-enable script with node-bootstrap's #cloud-config payload
-  # without decoding and re-merging the YAML (which would couple this module to
-  # node-bootstrap's internal shape). Keyed per node, since unlike the ASG path
-  # each node has its own payload.
+  # AWS accepts one user_data string per instance, so MIME multipart/mixed joins
+  # the SSM-enable script to node-bootstrap's #cloud-config without re-merging
+  # the YAML. Keyed per node: unlike an ASG, each has its own payload.
   mime_boundary = "MIMEBOUNDARY"
 
   combined_user_data = {
@@ -71,15 +45,11 @@ locals {
     ])
   }
 
-  # AWS-native token delivery: node-bootstrap runs this on the node to fetch the
-  # agent token from SSM at join time. The token is never in user_data, which is
-  # readable by anything that reaches the instance metadata service.
+  # Run on the node at join time, so the token is never in user_data.
   agent_token_fetch_command = "aws ssm get-parameter --name '${var.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
 
-  # kube-compute.io/node-group is set from group_name unconditionally so a
-  # workload can select this group without the caller having to remember to pass
-  # a label that duplicates the name it already gave. The AZ label matches
-  # aws-node-pool's own.
+  # node-group is derived from group_name so a nodeSelector needs no separately
+  # passed label duplicating a name the caller already gave.
   node_labels = merge(
     {
       "topology.kubernetes.io/zone" = local.availability_zone
@@ -95,9 +65,7 @@ locals {
   })
 }
 
-# One role per GROUP, not per node: a role per instance would multiply for no
-# gain, since every node in a group reads the same one SSM parameter and needs
-# the same one managed policy.
+# One role per group, not per node: every node reads the same SSM parameter.
 resource "aws_iam_role" "node" {
   name_prefix = "kube-compute-${var.cluster_name}-${var.group_name}-"
   assume_role_policy = jsonencode({
@@ -116,16 +84,13 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# See the attach_ebs_csi_policy variable for why this defaults on: the CSI
-# controller is an ordinary Deployment and lands wherever the scheduler puts it.
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
   count      = var.attach_ebs_csi_policy ? 1 : 0
   role       = aws_iam_role.node.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
-# Inline JSON avoids a data.aws_iam_policy_document block that mock_provider
-# cannot evaluate.
+# Inline JSON: mock_provider cannot evaluate data.aws_iam_policy_document.
 resource "aws_iam_role_policy" "agent_token" {
   name = "kube-compute-${var.cluster_name}-${var.group_name}-agent-token-read"
   role = aws_iam_role.node.id
@@ -140,8 +105,7 @@ resource "aws_iam_role_policy" "agent_token" {
       {
         Effect = "Allow"
         Action = "kms:Decrypt"
-        # Scoped by condition, not resource: the default SSM-managed key
-        # (alias/aws/ssm) has no fixed ARN this module can name ahead of time.
+        # By condition, not resource: alias/aws/ssm has no ARN to name here.
         Resource = "*"
         Condition = {
           StringEquals = {
@@ -159,10 +123,8 @@ resource "aws_iam_instance_profile" "node" {
   tags        = local.common_tags
 }
 
-# One render per node, which is what makes set_hostname = true viable here (the
-# ASG path cannot: see the header comment). node_fqdn_label drops the cluster
-# prefix from the DNS label, since cluster_fqdn_suffix already carries the
-# cluster identity -- same split aws-control-plane makes for its cp-N nodes.
+# One render per node, which is what lets set_hostname stay true here: an ASG's
+# members share a single render and so cannot each carry a distinct hostname.
 module "node_bootstrap" {
   source   = "../node-bootstrap"
   for_each = local.node_keys
@@ -181,11 +143,8 @@ module "node_bootstrap" {
   dns_servers               = var.dns_servers
 }
 
-# No depends_on against the control plane: node-bootstrap renders a plan-time
-# payload with no live connection to wait on, and RKE2's agent retries its join
-# indefinitely, so a worker booting alongside genesis simply waits. The caller
-# passes registration_address, which already carries the ordering Terraform can
-# see.
+# No depends_on: RKE2's agent retries its join indefinitely, so a worker booting
+# alongside genesis simply waits.
 resource "aws_instance" "node" {
   for_each = local.node_keys
 
@@ -195,11 +154,9 @@ resource "aws_instance" "node" {
   vpc_security_group_ids = var.security_group_ids
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
-  # hop_limit 3, not AWS's generally-documented 2. Confirmed live on this
-  # project's control-plane node that 2 is one hop short of a pod's IMDSv2 token
-  # PUT getting its response back: IMDSv2 caps the response TTL to hop_limit as
-  # an anti-SSRF control, and Cilium's veth + pod-netns routing costs 2 hops, not
-  # the 1 AWS's generic guidance assumes. Workers run the same CNI path.
+  # hop_limit 3, not AWS's documented 2. Confirmed live that 2 is one hop short
+  # of a pod's IMDSv2 token PUT getting its response back: IMDSv2 caps that
+  # response's TTL to hop_limit, and Cilium's pod-netns routing costs 2 hops.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -220,8 +177,7 @@ resource "aws_instance" "node" {
   tags = merge(local.common_tags, { Name = local.node_names[each.key] })
 
   lifecycle {
-    # Don't replace on AlmaLinux 10 AMI patch drift; remove to deliberately
-    # upgrade, same as the control plane.
+    # Don't replace on AMI patch drift; remove to deliberately upgrade.
     ignore_changes = [ami]
   }
 }

@@ -1,10 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the composition wiring for named worker nodes: that a group inherits the
-# control plane's subnet (and therefore its availability zone) without being told,
-# that the ingress security group is opt-in per group, and that all_instance_ids
-# covers the workers as well as the control plane -- a stop schedule fed only the
-# genesis instance would leave the workers running all night, which inverts the
-# saving the schedule exists for.
+# Guards the composition wiring: subnet inheritance, opt-in ingress security
+# group, and all_instance_ids covering workers as well as the control plane.
 
 mock_provider "aws" {
   mock_resource "aws_launch_template" {
@@ -34,9 +30,8 @@ run "no_static_nodes_creates_none" {
 }
 
 run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
-  # apply (not plan): every group's registration_address, agent token parameter
-  # and security group ids read module.control_plane's resource outputs, unknown
-  # at plan time -- same reason composition.tftest.hcl's pool case uses apply.
+  # apply, not plan: the wiring reads control-plane resource outputs, unknown at
+  # plan time. Same reason composition.tftest.hcl's pool case uses apply.
   command = apply
 
   variables {
@@ -60,9 +55,6 @@ run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
     error_message = "each static_nodes entry must create exactly one node group"
   }
 
-  # The point of the coalesce on subnet_id: no caller has to name a subnet per
-  # group, and no group can end up in a different zone than the EBS volumes its
-  # workload will mount.
   assert {
     condition = alltrue([
       for name, g in module.static_nodes : g.subnet_id == module.control_plane.subnet_id
@@ -90,10 +82,8 @@ run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
     error_message = "the group label must be derived from the map key, so a nodeSelector needs no separately-passed label"
   }
 
-  # Architecture derivation itself is asserted in aws-static-node's own tests,
-  # where the instance-type data source can be overridden per run. Here the
-  # mock provider answers every group identically, so the only thing this level
-  # could prove is that the output exists.
+  # Derivation itself is asserted in aws-static-node's own tests, where the
+  # instance-type data source can be overridden per run.
   assert {
     condition = alltrue([
       for name, g in output.static_nodes : contains(["arm64", "x86_64"], g.node_arch)

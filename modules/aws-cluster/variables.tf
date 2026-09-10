@@ -276,19 +276,15 @@ variable "node_pools" {
 
 variable "static_nodes" {
   description = <<-EOT
-    Named worker node groups joining this cluster, keyed by group name (e.g. "platform", "dedicated").
-    Each group is created via aws-static-node, wired to this cluster's cluster_name/aws_region/
-    registration_address/agent_token_ssm_parameter/security groups automatically. Empty map (the
-    default) creates no worker nodes.
+    Named worker node groups keyed by group name (e.g. "platform"), each created via
+    aws-static-node with this cluster's identity, join address and security groups wired in
+    automatically. Empty map (the default) creates no workers.
 
-    Distinct from node_pools: that one creates a fixed-size autoscaling group, this one creates
-    individually-named EC2 instances. Prefer this one on a cluster that stops overnight — an
-    autoscaling group replaces a stopped member, so the stop schedule cannot target it. See
-    modules/aws-static-node/README.md for the full comparison.
+    Prefer this over node_pools on a cluster that stops overnight: an autoscaling group replaces
+    a stopped member, so a stop schedule cannot target one. See
+    modules/aws-static-node/README.md.
 
-    subnet_id defaults to the control plane's own subnet when omitted, which keeps the cluster in
-    one availability zone (an EBS volume cannot cross zones). Set it only for a deliberate
-    exception.
+    subnet_id defaults to the control plane's own, keeping the cluster in one availability zone.
   EOT
   type = map(object({
     node_count            = optional(number, 1)

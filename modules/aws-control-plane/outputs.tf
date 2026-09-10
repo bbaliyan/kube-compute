@@ -60,12 +60,12 @@ output "vpc_id" {
 }
 
 output "subnet_id" {
-  description = "Subnet ID the GENESIS node launched into (given, named-subnet resolution, or default-VPC fallback; the first control-plane AZ slot when control_plane_count > 1). Identical to the single-node resolution whenever control_plane_count = 1. Consumed by aws-static-node so a worker inherits the control plane's availability zone by construction rather than being pointed at a subnet by hand -- an EBS volume cannot cross zones, so a worker in the wrong one cannot mount the data it was created for."
+  description = "Subnet ID the genesis node launched into; the first control-plane AZ slot when control_plane_count > 1, and identical to the single-node resolution below that. Consumed by aws-static-node so a worker inherits the control plane's availability zone."
   value       = local.genesis_subnet_id
 }
 
 output "node_security_group_id" {
-  description = "Security group carrying this cluster's external ingress_ports rules (80/443/6443 and whatever else the caller opened). The control-plane node attaches it because that is where the ingress controller runs on a single-node cluster; a static worker that takes over the ingress controller needs it too, or the ports stay open on a node no longer serving them. Distinct from cluster_security_group_id, which is east-west among members only."
+  description = "Security group carrying this cluster's external ingress_ports rules. A worker that takes over the ingress controller needs it, or the ports stay open on a node no longer serving them. Distinct from cluster_security_group_id, which is east-west only."
   value       = aws_security_group.node.id
 }
 
