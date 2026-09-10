@@ -96,6 +96,10 @@ locals {
   effective_zone_id = var.hosted_zone_id != null ? var.hosted_zone_id : try(data.aws_route53_zone.private[0].zone_id, null)
   create_record     = local.has_domain && local.effective_zone_id != null
 
+  # Split from create_record so external-dns can own the wildcard without
+  # costing the cluster its api. record, which is what agents join through.
+  create_wildcard_record = local.create_record && var.manage_wildcard_dns_record
+
   # cluster_type drives the taint, never worker count: node pools are separate state this
   # module cannot see, and node counts alone are ambiguous (double-duty HA vs dedicated CP).
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
@@ -578,10 +582,23 @@ resource "aws_instance" "control_plane" {
   }
 }
 
+# api.<cluster>.<domain>, always explicit rather than left to the wildcard above.
+# DNS answers the most specific name, so this keeps pointing at the control plane
+# even where external-dns has filled the wildcard with every worker's IP -- and a
+# worker does not serve the API.
+resource "aws_route53_record" "api" {
+  count   = local.create_record ? 1 : 0
+  zone_id = local.effective_zone_id
+  name    = local.cluster_fqdn
+  type    = "A"
+  ttl     = 60
+  records = [aws_instance.control_plane.private_ip]
+}
+
 # Created only when cluster_domain is set and a zone is resolvable. Otherwise register
 # *.${cluster}.${domain} -> cluster_ip yourself using the wildcard_dns_name output.
 resource "aws_route53_record" "wildcard" {
-  count   = local.create_record ? 1 : 0
+  count   = local.create_wildcard_record ? 1 : 0
   zone_id = local.effective_zone_id
   name    = local.wildcard_name
   type    = "A"

@@ -319,35 +319,49 @@ variable "cluster_autoscaler_enabled" {
   default     = false
 }
 
-variable "cluster_autoscaler_worker_min_size" {
-  description = "Minimum worker count cluster-autoscaler maintains. Only meaningful when cluster_autoscaler_enabled is true."
-  type        = number
-  default     = 0
-}
 
-variable "cluster_autoscaler_worker_max_size" {
-  description = "Maximum worker count cluster-autoscaler will scale to. Also the cost ceiling: worst-case spend for this group is this number times the instance's hourly price times the hours it actually runs."
-  type        = number
-  default     = 0
-
-  validation {
-    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_max_size > 0
-    error_message = "cluster_autoscaler_worker_max_size must be > 0 when cluster_autoscaler_enabled is true -- leaving it at the 0 default renders a valid but useless MachineDeployment that can never scale up."
-  }
-}
-
-variable "cluster_autoscaler_worker_template" {
-  description = "Machine shape for CAPI-provisioned autoscaled workers. Null (the default) is valid only when cluster_autoscaler_enabled is false. os_image_ami_id null falls back to the resolved control-plane AMI, which is only correct when the architectures match -- name it explicitly for a mixed-architecture cluster."
-  type = object({
+variable "cluster_autoscaler_worker_groups" {
+  description = "Autoscaled worker groups, one MachineDeployment each. A group is the unit cluster-autoscaler scales, so split by anything a pod can select on: a different CPU architecture, a taint, a shape. os_image_ami_id is resolved per group from the cluster's os_image_name and the architecture AWS reports for the group's instance type, so an arm64 and an x86_64 group can share one image name."
+  type = map(object({
     instance_type       = string
+    min_size            = optional(number, 0)
+    max_size            = number
     root_volume_size_gb = optional(number, 20)
     root_volume_type    = optional(string, "gp3")
     os_image_ami_id     = optional(string)
-  })
-  default = null
+    node_labels         = optional(map(string), {})
+    node_taints         = optional(list(string), [])
+    attach_ingress_sg   = optional(bool, false)
+  }))
+  default = {}
 
   validation {
-    condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_worker_template != null
-    error_message = "cluster_autoscaler_worker_template is required when cluster_autoscaler_enabled is true."
+    condition     = alltrue([for g in var.cluster_autoscaler_worker_groups : g.max_size >= 1])
+    error_message = "every worker group needs max_size >= 1; a group that can never have a node is better deleted."
   }
+
+  validation {
+    condition     = alltrue([for g in var.cluster_autoscaler_worker_groups : g.min_size <= g.max_size])
+    error_message = "min_size cannot exceed max_size."
+  }
+
+  validation {
+    condition = alltrue([
+      for g in var.cluster_autoscaler_worker_groups : alltrue([
+        for t in g.node_taints : can(regex("^[^=:]+=[^=:]*:(NoSchedule|PreferNoSchedule|NoExecute)$", t))
+      ])
+    ])
+    error_message = "each node_taints entry must be key=value:Effect, where Effect is NoSchedule, PreferNoSchedule, or NoExecute."
+  }
+
+  validation {
+    condition     = !var.cluster_autoscaler_enabled || length(var.cluster_autoscaler_worker_groups) > 0
+    error_message = "cluster_autoscaler_enabled = true requires at least one entry in cluster_autoscaler_worker_groups."
+  }
+}
+
+variable "manage_wildcard_dns_record" {
+  description = "Forwarded to aws-control-plane. False when external-dns owns *.<cluster>.<domain>, which it must whenever ingress runs on nodes a controller creates and destroys."
+  type        = bool
+  default     = true
 }

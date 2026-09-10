@@ -131,6 +131,28 @@ output "cluster_autoscaler_worker_iam_role_name" {
 }
 
 output "cluster_autoscaler_worst_case_node_count" {
-  description = "Maximum instances the autoscaler can create for this cluster. Multiply by the hourly price of cluster_autoscaler_worker_template.instance_type and the hours the cluster actually runs to get the worst-case monthly spend the autoscaler can reach."
-  value       = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_max_size : 0
+  description = "Maximum instances the autoscaler can create across every group. Price each group's own instance_type against its max_size for the worst-case spend, since groups need not share a shape."
+  value       = sum(concat([0], [for g in local.autoscaler_groups : g.max_size]))
+}
+
+output "cluster_autoscaler_worker_groups" {
+  description = "Per-group shape actually resolved: architecture, image, and the vCPU/memory cluster-autoscaler simulates a scale-from-zero against."
+  value = {
+    for name, g in local.autoscaler_group_render : name => {
+      instance_type = g.instance_type
+      arch          = local.autoscaler_group_arch[name]
+      ami_id        = g.ami_id
+      cpu           = g.cpu
+      memory_mib    = g.memory_mib
+      min_size      = g.min_size
+      max_size      = g.max_size
+      node_labels   = g.labels
+      node_taints   = g.taints
+    }
+  }
+}
+
+output "hosted_zone_id" {
+  description = "Route53 zone the cluster's records live in, or null when no domain is configured."
+  value       = module.control_plane.hosted_zone_id
 }

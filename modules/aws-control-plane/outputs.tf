@@ -114,3 +114,8 @@ output "connectivity_user_data_base64" {
   value       = base64gzip(local.combined_user_data["0"])
   sensitive   = true
 }
+
+output "hosted_zone_id" {
+  description = "Route53 zone the cluster's records live in, resolved from hosted_zone_id or hosted_zone_name. Null when no domain is configured. Scope an external-dns policy to this rather than to every zone in the account."
+  value       = local.effective_zone_id
+}

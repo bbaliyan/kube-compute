@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Cluster + AWSCluster + Secret + AWSMachineTemplate + MachineDeployment for
-# CAPI/CAPA-managed autoscaler workers. Mirrors proxmox-cluster's own bundle
-# field for field where the two providers agree; the differences are noted below.
+# Cluster + AWSCluster, then one Secret, AWSMachineTemplate and MachineDeployment
+# per worker group. A group is the unit cluster-autoscaler scales, so anything a
+# pod can select on -- architecture, a taint, a shape -- is a separate group.
 #
-# No bootstrap-provider CRD: the Secret carries the same cloud-init node-bootstrap
-# already renders for this project's other workers, referenced via
+# No bootstrap-provider CRD: each Secret carries the same cloud-init
+# node-bootstrap renders for every other worker here, referenced through
 # Machine.spec.bootstrap.dataSecretName. CAPRKE2 is deliberately unused, for the
 # reason recorded on the Proxmox template -- its worker-join path requires a live
-# CAPRKE2-owned RKE2ControlPlane object, and this project's control plane belongs
-# to Terraform.
+# CAPRKE2-owned RKE2ControlPlane object, and this control plane belongs to
+# Terraform.
 #
 # Cluster.spec.controlPlaneRef is omitted. Cluster.spec.infrastructureRef points
 # at a real AWSCluster, because CAPA's AWSMachine reconciler does a hard Get on
@@ -23,24 +23,18 @@
 #    Cluster.status.infrastructureReady -- and CAPI's Machine controller gates
 #    machine creation on the latter. CAPI's externally-managed contract says the
 #    external controller is responsible for setting it, and nothing in this
-#    project does. This is the same open question the Proxmox template records as
-#    its own item 1, unresolved there too. If machines never appear and the
-#    AWSMachine has no error, patch AWSCluster.status.ready = true and see
-#    whether provisioning starts; if it does, this bundle needs a genesis step
-#    that does that patch.
+#    project does. Same open question the Proxmox template records, unresolved
+#    there too. If machines never appear and the AWSMachine shows no error, patch
+#    AWSCluster.status.ready = true and see whether provisioning starts.
 # 2. Required AWSClusterSpec fields beyond what is set here. The Proxmox
-#    equivalent needed two rounds of real applies to find spec.dnsServers and
-#    spec.ipv4Config. The fields set below are region, controlPlaneEndpoint,
-#    network.vpc.id, the subnet, and bastion/sshKeyName disabled. CRD admission
-#    will name anything else it wants.
-# 3. iamInstanceProfile must be a profile NAME, not an ARN, and the profile must
-#    already exist -- CAPA does not create one when the cluster is externally
-#    managed. It is created by the aws-cluster module alongside this bundle.
+#    equivalent needed two real applies to find spec.dnsServers and
+#    spec.ipv4Config. CRD admission will name anything else it wants.
+# 3. iamInstanceProfile must be a profile NAME, not an ARN, and must already
+#    exist -- CAPA creates none when the cluster is externally managed.
 # 4. IAM on the CONTROLLER, not the machine. CAPA authenticates through the
-#    control-plane node's own instance profile, so that role needs RunInstances,
+#    control-plane node's instance profile, so that role needs RunInstances,
 #    TerminateInstances, Describe*, CreateTags and PassRole for the worker
-#    profile above. The consumer repo attaches that policy; without it CAPA logs
-#    an authorization failure per reconcile and creates nothing.
+#    profile. The consumer repo attaches that policy.
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
@@ -79,43 +73,44 @@ spec:
   controlPlaneEndpoint:
     host: ${control_plane_endpoint_host}
     port: ${control_plane_endpoint_port}
+%{ for name, g in worker_groups ~}
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: ${cluster_name}-autoscaler-worker-bootstrap
+  name: ${cluster_name}-${name}-bootstrap
   namespace: default
   labels:
     cluster.x-k8s.io/cluster-name: ${cluster_name}
 type: Opaque
 data:
-  value: ${bootstrap_secret_b64}
+  value: ${g.bootstrap_secret_b64}
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: AWSMachineTemplate
 metadata:
-  name: ${cluster_name}-autoscaler-workers
+  name: ${cluster_name}-${name}
   namespace: default
   labels:
     cluster.x-k8s.io/cluster-name: ${cluster_name}
 spec:
   template:
     spec:
-      instanceType: ${instance_type}
+      instanceType: ${g.instance_type}
       ami:
-        id: ${ami_id}
+        id: ${g.ami_id}
       iamInstanceProfile: ${iam_instance_profile}
       subnet:
         id: ${subnet_id}
       additionalSecurityGroups:
-%{ for sg in security_group_ids ~}
+%{ for sg in g.security_group_ids ~}
         - id: ${sg}
 %{ endfor ~}
       publicIP: false
       sshKeyName: ""
       rootVolume:
-        size: ${root_volume_size_gb}
-        type: ${root_volume_type}
+        size: ${g.root_volume_size_gb}
+        type: ${g.root_volume_type}
         encrypted: true
       # hop_limit 3, not AWS's documented 2: IMDSv2 caps the token response's TTL
       # to it, and Cilium's pod-netns routing costs 2 hops. Confirmed live on this
@@ -126,33 +121,49 @@ spec:
         httpPutResponseHopLimit: 3
       additionalTags:
         ClusterName: ${cluster_name}
+        NodeGroup: ${name}
         ManagedBy: kube-compute
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
-  name: ${cluster_name}-autoscaler-workers
+  name: ${cluster_name}-${name}
   namespace: default
   labels:
     cluster.x-k8s.io/cluster-name: ${cluster_name}
   annotations:
-    cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "${min_size}"
-    cluster.x-k8s.io/cluster-api-autoscaler-node-group-max-size: "${max_size}"
+    cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "${g.min_size}"
+    cluster.x-k8s.io/cluster-api-autoscaler-node-group-max-size: "${g.max_size}"
+    # Read only while the group has no nodes. Without them cluster-autoscaler
+    # cannot tell whether a Pending pod would fit here, so it never scales the
+    # group off zero -- and a group whose nodes carry a taint is exactly the case
+    # that starts at zero.
+    capacity.cluster-autoscaler.kubernetes.io/cpu: "${g.cpu}"
+    capacity.cluster-autoscaler.kubernetes.io/memory: "${g.memory_mib}Mi"
+%{ if length(g.labels) > 0 ~}
+    capacity.cluster-autoscaler.kubernetes.io/labels: "${join(",", [for k, v in g.labels : "${k}=${v}"])}"
+%{ endif ~}
+%{ if length(g.taints) > 0 ~}
+    capacity.cluster-autoscaler.kubernetes.io/taints: "${join(",", g.taints)}"
+%{ endif ~}
 spec:
   clusterName: ${cluster_name}
-  replicas: ${min_size}
+  replicas: ${g.min_size}
   selector:
     matchLabels:
       cluster.x-k8s.io/cluster-name: ${cluster_name}
+      kube-compute.io/node-group: ${name}
   template:
     metadata:
       labels:
         cluster.x-k8s.io/cluster-name: ${cluster_name}
+        kube-compute.io/node-group: ${name}
     spec:
       clusterName: ${cluster_name}
       bootstrap:
-        dataSecretName: ${cluster_name}-autoscaler-worker-bootstrap
+        dataSecretName: ${cluster_name}-${name}-bootstrap
       infrastructureRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
         kind: AWSMachineTemplate
-        name: ${cluster_name}-autoscaler-workers
+        name: ${cluster_name}-${name}
+%{ endfor ~}

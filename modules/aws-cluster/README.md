@@ -201,27 +201,60 @@ tainting a single-node cluster leaves nothing anywhere to run.
 
 ## Cluster API autoscaling
 
-Off by default. Turning it on creates a `MachineDeployment` whose min and max the
-autoscaler reads from annotations, and switches on kube-platform's
-`clusterApiEnabled` and `clusterAutoscalerEnabled` Applications automatically —
-this module owns the decision, so the consumer sets one flag rather than three.
+Off by default. Turning it on creates one `MachineDeployment` per worker group,
+each with its own min and max, and switches on kube-platform's `clusterApiEnabled`
+and `clusterAutoscalerEnabled` Applications automatically — this module owns the
+decision, so the consumer sets one flag rather than three.
 
 ```hcl
-cluster_autoscaler_enabled         = true
-cluster_autoscaler_worker_min_size = 0
-cluster_autoscaler_worker_max_size = 3
-cluster_autoscaler_worker_template = {
-  instance_type       = "t4g.large"
-  root_volume_size_gb = 40
+cluster_autoscaler_enabled = true
+
+cluster_autoscaler_worker_groups = {
+  platform = {
+    instance_type     = "t4g.large"
+    min_size          = 1
+    max_size          = 3
+    attach_ingress_sg = true
+  }
+  reserved = {
+    instance_type = "r5a.large"
+    max_size      = 1
+    node_labels   = { workload = "reserved" }
+    node_taints   = ["workload=reserved:NoSchedule"]
+  }
 }
 ```
 
-It composes with `static_nodes` rather than replacing it: named instances for the
-roles that are decided in Git, an autoscaled group for elastic capacity.
+A group is the unit the autoscaler scales, so split by anything a pod can select
+on: a CPU architecture, a taint, a shape. Each group resolves its own image from
+`os_image_name` and the architecture AWS reports for its instance type, so one
+image name serves an arm64 and an x86_64 group in the same cluster.
+
+It composes with `static_nodes` rather than replacing it, but prefer a group. A
+named instance is only necessary where something outside the cluster depends on
+which machine it is.
+
+**A group starting at zero needs its shape advertised.** Nothing reports a group's
+capacity while it has no nodes, so the `MachineDeployment` also carries the vCPU,
+memory, labels and taints as `capacity.cluster-autoscaler.kubernetes.io`
+annotations. They are read from AWS rather than restated by the caller. Without
+them the autoscaler cannot tell whether a Pending pod would fit, and never scales
+the group off zero — which is exactly the case for a tainted group.
+
+**Ingress on an autoscaled node.** `attach_ingress_sg` gives a group the security
+group carrying the cluster's external ports, and labels its nodes
+`kube-compute.io/ingress=true`. Traefik is a DaemonSet behind ServiceLB, so those
+nodes serve ingress the moment they join. Terraform cannot then own the wildcard
+DNS record, because it never sees those instances: set
+`manage_wildcard_dns_record = false` and external-dns publishes them instead. The
+same flag switches on kube-platform's `externalDnsEnabled`, so the record cannot
+end up owned by nobody.
 
 **`cluster_domain` is required.** Autoscaled workers join through
-`api.<cluster_name>.<cluster_domain>`, answered by the wildcard Route53 record the
-control-plane module creates. It cannot be the control plane's own IP: the
+`api.<cluster_name>.<cluster_domain>`, an explicit Route53 record the control-plane
+module creates. A specific name beats a wildcard, so it keeps resolving to the
+control plane even where external-dns has filled the wildcard with worker
+addresses. It cannot be the control plane's own IP: the
 `MachineDeployment` bundle is written into that instance's cloud-init, so reading
 an output derived from the instance is a dependency cycle. A precondition fails
 the apply rather than baking a null address into every worker's Secret.
@@ -233,10 +266,10 @@ policy letting it call `RunInstances`, `TerminateInstances`, `CreateTags` and
 consumer repo. Without it the provider logs an authorization failure per reconcile
 and creates nothing.
 
-**The spend ceiling is `cluster_autoscaler_worker_max_size`.** Nothing in
+**The spend ceiling is every group's `max_size` added together.** Nothing in
 Kubernetes understands money, so the enforcing limit is a node count. Worst-case
-monthly spend is that number times the instance's hourly price times the hours the
-cluster actually runs — which for a cluster that stops nightly is roughly 300, not
+monthly spend is each group's maximum times its own instance's hourly price times
+the hours the cluster actually runs — which for a cluster that stops nightly is roughly 300, not
 730. The `cluster_autoscaler_worst_case_node_count` output exists so a consumer can
 derive the count from a budget rather than typing it.
 

@@ -40,6 +40,7 @@ module "control_plane" {
   subnet_name                       = var.subnet_name
   subnet_names                      = var.subnet_names
   cluster_domain                    = var.cluster_domain
+  manage_wildcard_dns_record        = var.manage_wildcard_dns_record
   hosted_zone_name                  = var.hosted_zone_name
   hosted_zone_id                    = var.hosted_zone_id
   instance_type                     = var.instance_type
@@ -144,32 +145,69 @@ locals {
   # round-robin one that causes long join hangs on the Proxmox side.
   autoscaler_registration_address = var.cluster_domain != null ? "api.${var.cluster_name}.${var.cluster_domain}" : null
 
-  cluster_autoscaler_worker_ami_id = var.cluster_autoscaler_enabled ? coalesce(
-    var.cluster_autoscaler_worker_template.os_image_ami_id,
-    module.control_plane.effective_ami_id,
-  ) : ""
+  autoscaler_groups = var.cluster_autoscaler_enabled ? var.cluster_autoscaler_worker_groups : {}
+
+  autoscaler_group_arch = {
+    for name, g in local.autoscaler_groups :
+    name => contains(data.aws_ec2_instance_type.autoscaler_worker[name].supported_architectures, "arm64") ? "arm64" : "x86_64"
+  }
+
+  autoscaler_group_ami = {
+    for name, g in local.autoscaler_groups :
+    name => g.os_image_ami_id != null ? g.os_image_ami_id : (
+      var.os_image_name != null ? data.aws_ami.autoscaler_worker[name].id : module.control_plane.effective_ami_id
+    )
+  }
+
+  # Carried on the node itself, not just the security group, so external-dns can
+  # select the nodes that actually serve ingress. The two travel together: a node
+  # with the group has the label, and nothing else does.
+  autoscaler_group_labels = {
+    for name, g in local.autoscaler_groups : name => merge(
+      g.node_labels,
+      { "kube-compute.io/node-group" = name },
+      g.attach_ingress_sg ? { "kube-compute.io/ingress" = "true" } : {},
+    )
+  }
+
+  # cluster-autoscaler simulates a scale from zero against these, since nothing
+  # reports a group's shape while it has no nodes. Read from AWS rather than
+  # restated by the caller, which would be a second place to get it wrong.
+  autoscaler_group_render = {
+    for name, g in local.autoscaler_groups : name => {
+      name                = name
+      instance_type       = g.instance_type
+      min_size            = g.min_size
+      max_size            = g.max_size
+      root_volume_size_gb = g.root_volume_size_gb
+      root_volume_type    = g.root_volume_type
+      ami_id              = local.autoscaler_group_ami[name]
+      cpu                 = data.aws_ec2_instance_type.autoscaler_worker[name].default_vcpus
+      memory_mib          = data.aws_ec2_instance_type.autoscaler_worker[name].memory_size
+      labels              = local.autoscaler_group_labels[name]
+      taints              = g.node_taints
+      security_group_ids = concat(
+        [module.control_plane.cluster_security_group_id],
+        g.attach_ingress_sg ? [module.control_plane.node_security_group_id] : [],
+      )
+      bootstrap_secret_b64 = base64encode(module.cluster_autoscaler_worker_bootstrap[name].cloud_init_user_data)
+    }
+  }
 
   cluster_autoscaler_bundle_yaml = !var.cluster_autoscaler_enabled ? "" : templatefile(
     "${path.module}/templates/cluster-autoscaler-workers.yaml.tftpl",
     {
       cluster_name         = var.cluster_name
       aws_region           = var.aws_region
-      min_size             = var.cluster_autoscaler_worker_min_size
-      max_size             = var.cluster_autoscaler_worker_max_size
-      instance_type        = var.cluster_autoscaler_worker_template.instance_type
-      root_volume_size_gb  = var.cluster_autoscaler_worker_template.root_volume_size_gb
-      root_volume_type     = var.cluster_autoscaler_worker_template.root_volume_type
-      ami_id               = local.cluster_autoscaler_worker_ami_id
+      worker_groups        = local.autoscaler_group_render
       iam_instance_profile = try(aws_iam_instance_profile.autoscaler_worker[0].name, "")
       vpc_id               = module.control_plane.vpc_id
       subnet_id            = module.control_plane.subnet_id
-      security_group_ids   = [module.control_plane.cluster_security_group_id]
       # Never consulted for anything actionable -- the AWSCluster is a placeholder
       # to satisfy CAPA's Get -- but the CRD rejects an empty host, which is how
       # the Proxmox equivalent found out.
       control_plane_endpoint_host = local.autoscaler_registration_address != null ? local.autoscaler_registration_address : ""
       control_plane_endpoint_port = 6443
-      bootstrap_secret_b64        = var.cluster_autoscaler_enabled ? base64encode(module.cluster_autoscaler_worker_bootstrap[0].cloud_init_user_data) : ""
     }
   )
 
@@ -187,6 +225,9 @@ locals {
       clusterAutoscalerEnabled = "true"
       clusterApiEnabled        = "true"
     } : {},
+    # Turned on by the same decision that turns the Terraform record off, so the
+    # two cannot disagree and leave the wildcard owned by nobody.
+    var.manage_wildcard_dns_record ? {} : { externalDnsEnabled = "true" },
   )
 }
 
@@ -223,13 +264,15 @@ resource "terraform_data" "autoscaler_requires_platform_gitops" {
 # payload is byte-identical across replicas and so cannot carry a unique hostname;
 # CAPA's own cloud-init metadata supplies one instead.
 module "cluster_autoscaler_worker_bootstrap" {
-  source = "../node-bootstrap"
-  count  = var.cluster_autoscaler_enabled ? 1 : 0
+  source   = "../node-bootstrap"
+  for_each = local.autoscaler_groups
 
   cluster_name              = var.cluster_name
-  node_name                 = "${var.cluster_name}-autoscaler-worker"
+  node_name                 = "${var.cluster_name}-${each.key}"
   node_role                 = "worker"
   set_hostname              = false
+  node_labels               = local.autoscaler_group_labels[each.key]
+  node_taints               = each.value.node_taints
   registration_address      = local.autoscaler_registration_address
   agent_token_fetch_command = local.autoscaler_agent_token_fetch_command
   trusted_ca_pem            = var.trusted_ca_pem
