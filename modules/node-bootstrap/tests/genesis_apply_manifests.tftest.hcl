@@ -65,14 +65,18 @@ run "genesis_apply_manifests_renders_entries_and_apply_steps" {
     )
     error_message = "a genesis_apply_manifests entry on a server-init node must be written via write_files"
   }
+  # Compared against base64gzip of the input rather than decoded, because a
+  # genesis manifest is written gz+b64 to stay inside EC2's user-data cap and HCL
+  # has no gunzip. Byte equality proves the content was not interpreted, which is
+  # what this guards.
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "kind: Cluster") &&
-      strcontains(base64decode(f.content), "name: test-autoscaler-workers")
+      f.encoding == "gz+b64" &&
+      f.content == base64gzip("kind: Cluster\nname: test-autoscaler-workers\n")
       if f.path == "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
     ])
-    error_message = "this module must not interpret genesis_apply_manifests content — it must be written back out verbatim"
+    error_message = "this module must not interpret genesis_apply_manifests content — it must be written back out verbatim, compressed but unaltered"
   }
   assert {
     condition = anytrue([

@@ -221,3 +221,33 @@ run "a_long_cluster_name_still_fits_the_iam_name_prefix_cap" {
     error_message = "truncation must take the cluster name, not the suffix that distinguishes these roles from the control-plane one"
   }
 }
+
+# EC2 rejects RunInstances when encoded user data exceeds 25600 bytes, and the
+# control plane's own cloud-init is where the CAPI bundle travels -- one bootstrap
+# Secret per worker group, each holding a whole worker cloud-init. That is the one
+# payload here that grows with configuration, so it gets a ceiling with a test
+# behind it rather than a comment.
+#
+# Measured: two groups land between 22000 and 24000, so the headroom is a couple
+# of kilobytes rather than comfortable, and a THIRD group exceeds the cap. The way
+# out when that day comes is to stop embedding a whole worker cloud-init per group:
+# put it in SSM Parameter Store (advanced tier holds 8192 bytes, and a gzipped
+# worker payload is about 3400) and leave a fetch stub in the Secret. This test is
+# what will tell you, rather than a failed apply with half a cluster created.
+run "the_control_plane_user_data_stays_inside_the_ec2_limit" {
+  command = apply
+
+  variables {
+    cluster_domain             = "eu-west-1.example.net"
+    cluster_autoscaler_enabled = true
+    cluster_autoscaler_worker_groups = {
+      platform = { instance_type = "t4g.large", min_size = 1, max_size = 3, attach_ingress_sg = true }
+      reserved = { instance_type = "r5a.large", max_size = 1, node_labels = { workload = "reserved" }, node_taints = ["workload=reserved:NoSchedule"] }
+    }
+  }
+
+  assert {
+    condition     = length(module.control_plane.connectivity_user_data_base64) < 25600
+    error_message = "encoded user data over 25600 bytes is rejected by EC2 at RunInstances, after every other resource in the plan has been created"
+  }
+}

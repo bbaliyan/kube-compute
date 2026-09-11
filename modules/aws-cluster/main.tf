@@ -198,7 +198,10 @@ locals {
         [module.control_plane.cluster_security_group_id],
         g.attach_ingress_sg ? [module.control_plane.node_security_group_id] : [],
       )
-      bootstrap_secret_b64 = base64encode(module.cluster_autoscaler_worker_bootstrap[name].cloud_init_user_data)
+      # gzipped, not plain: cloud-init detects the gzip header and decompresses,
+      # so CAPA can hand this to RunInstances untouched, and it is a third of the
+      # size inside a bundle that has to fit in the control plane's own user data.
+      bootstrap_secret_b64 = base64gzip(module.cluster_autoscaler_worker_bootstrap[name].cloud_init_user_data)
     }
   }
 

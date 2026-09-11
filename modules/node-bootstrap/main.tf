@@ -408,12 +408,18 @@ locals {
       content     = base64encode(local.workloads_app_yaml)
     }],
     [
+      # gz+b64, unlike every other file here: a genesis manifest is the one
+      # payload large enough to matter against EC2's 25600-byte cap on encoded
+      # user data, and a CAPI bundle carries a base64 bootstrap Secret per worker
+      # group, which plain b64 would then encode a second time. Only clusters
+      # that have genesis manifests are affected, so no existing instance's user
+      # data changes.
       for m in local.effective_genesis_apply_manifests : {
         path        = m.path
         permissions = "0600"
         owner       = "root:root"
-        encoding    = "b64"
-        content     = base64encode(m.content)
+        encoding    = "gz+b64"
+        content     = base64gzip(m.content)
       }
     ],
     !local.is_server ? [] : [

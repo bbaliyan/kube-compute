@@ -66,11 +66,11 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
   assert {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "kind: Cluster") &&
-      strcontains(base64decode(f.content), "name: bharat-autoscaler-workers")
+      f.encoding == "gz+b64" &&
+      f.content == base64gzip("kind: Cluster\nname: bharat-autoscaler-workers\n")
       if f.path == "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
     ])
-    error_message = "the entry's content must be forwarded verbatim, unmodified by this module"
+    error_message = "the entry's content must be forwarded verbatim, unmodified by this module -- node-bootstrap writes a genesis manifest gz+b64, so byte equality against base64gzip is the check, HCL having no gunzip"
   }
   assert {
     condition = anytrue([
