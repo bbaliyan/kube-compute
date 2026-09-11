@@ -73,7 +73,16 @@ locals {
   # to inputs (like module.control_plane's outputs) this leaf module does not.
   effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
   effective_crd_wait_enabled        = var.node_role == "server-init" && var.cluster_autoscaler_crd_wait_enabled
-  genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
+
+  # Same list, split by how the manifest reaches the node: embedded in user data,
+  # or fetched by the node at boot. Both are applied by the one step in
+  # bootstrap.sh, embedded first, so a caller can mix them without caring.
+  effective_genesis_fetched_manifests = var.node_role == "server-init" ? var.genesis_fetched_manifests : []
+
+  genesis_apply_manifest_paths = concat(
+    [for m in local.effective_genesis_apply_manifests : m.path],
+    [for m in local.effective_genesis_fetched_manifests : m.path],
+  )
 
   # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
   # node free of any templating engine.
@@ -328,6 +337,7 @@ locals {
     cluster_autoscaler_crd_wait_enabled = local.effective_crd_wait_enabled
     capi_install_baked                  = var.cluster_autoscaler_capi_install_baked
     genesis_apply_manifest_paths        = local.genesis_apply_manifest_paths
+    genesis_fetched_manifests           = local.effective_genesis_fetched_manifests
   })
 
   # Every key is always defined (empty where a role doesn't use it) so

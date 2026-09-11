@@ -262,6 +262,7 @@ module "node_bootstrap" {
   extra_tags                      = var.extra_tags
 
   genesis_apply_manifests               = var.genesis_apply_manifests
+  genesis_fetched_manifests             = var.genesis_fetched_manifests
   cluster_autoscaler_crd_wait_enabled   = var.cluster_autoscaler_crd_wait_enabled
   cluster_autoscaler_capi_install_baked = var.cluster_autoscaler_capi_install_baked
 }

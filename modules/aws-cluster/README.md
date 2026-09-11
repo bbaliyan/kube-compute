@@ -259,6 +259,34 @@ addresses. It cannot be the control plane's own IP: the
 an output derived from the instance is a dependency cycle. A precondition fails
 the apply rather than baking a null address into every worker's Secret.
 
+**Each group's bootstrap payload lives in SSM, not in user data.** A worker's
+cloud-init is about 6 KB encoded and there is one per group, while EC2 rejects
+`RunInstances` over 25600 bytes of encoded user data for the whole control plane.
+Measured on a real cluster: two groups inline came to 32836 bytes and the instance
+could not be created. So each group's bootstrap `Secret` goes into an SSM
+SecureString parameter under `/kube-compute/<cluster>/worker-bootstrap/<group>`,
+and the genesis node fetches it at boot and applies it beside the bundle. What
+stays in user data is fixed-size YAML per group, about 580 bytes encoded, so group
+count is no longer what threatens the limit. A test asserts the ceiling with three
+groups.
+
+Three consequences worth knowing. The parameters are Advanced tier, because a
+Standard parameter holds 4096 bytes and this is about 6300 — that tier is billed
+per parameter per month, so a worker group has a small fixed cost beyond its
+instances. A plan no longer shows what a worker will boot with; the parameter's
+value is sensitive and fetched at boot, so a bad payload surfaces on the node
+rather than in a diff.
+
+And changing a group's bootstrap configuration no longer reaches a running
+cluster on its own. It used to, by accident: the payload was in user data, and
+`user_data_replace_on_change` meant the control plane was replaced and re-applied
+everything. Now the apply updates the parameter, the `Secret` already in the
+cluster stays as it was, and new workers keep booting from the old one. Re-apply
+the manifest by hand (the genesis node keeps it under
+`/opt/kube-compute/manifests/`) or rebuild the control plane deliberately. Losing
+that accidental replacement is the point — it was a rebuilt cluster as the price
+of a label change.
+
 **The controller authenticates as the control-plane node.** There is no IRSA on a
 self-managed cluster, so the AWS provider uses the node's instance profile. The
 policy letting it call `RunInstances`, `TerminateInstances`, `CreateTags` and

@@ -307,6 +307,15 @@ variable "genesis_apply_manifests" {
   default = []
 }
 
+variable "genesis_fetched_manifests" {
+  description = "Genesis manifests the node fetches for itself at boot instead of carrying in user data. Each entry's fetch_command must write the manifest to stdout as base64-of-gzip, and runs on the genesis node under its own credentials (see agent_token_fetch_command for the same pattern). Exists because a platform can cap user data -- EC2 rejects RunInstances over 25600 bytes encoded -- while a manifest carrying one payload per worker group grows with configuration. Fetched content is invisible to a plan, so prefer genesis_apply_manifests for anything that fits. Applied by the same step, after the embedded ones. Only meaningful for node_role = server-init."
+  type = list(object({
+    path          = string
+    fetch_command = string
+  }))
+  default = []
+}
+
 variable "iscsi_initiator_enabled" {
   description = "Write a deterministic iSCSI InitiatorName (iqn.2026.lan.<cluster_name>:<node_fqdn_label, or node_name if unset>) to /etc/iscsi/initiatorname.iscsi and restart iscsid, replacing the OS-generated random one. Only meaningful where the image already has iscsi-initiator-utils baked in (kube-image's Proxmox template does; AWS uses EBS CSI and has no iSCSI initiator at all). Exists so an iSCSI target's initiator allow-list can be registered once, ahead of time, instead of re-discovered and re-registered by hand after every VM rebuild. False (the default) leaves the OS-generated random name untouched."
   type        = bool

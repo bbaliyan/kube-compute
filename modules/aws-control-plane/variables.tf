@@ -303,6 +303,15 @@ variable "genesis_apply_manifests" {
   default = []
 }
 
+variable "genesis_fetched_manifests" {
+  description = "Genesis manifests the node fetches at boot instead of carrying in user data -- {path, fetch_command}, where the command writes base64-of-gzip to stdout and runs under this instance's own IAM role. Use it for the part of the payload that grows with configuration: EC2 rejects RunInstances over 25600 bytes of encoded user data, and that ceiling is reached in practice, not in theory. The composing module renders both the command and whatever it fetches."
+  type = list(object({
+    path          = string
+    fetch_command = string
+  }))
+  default = []
+}
+
 variable "cluster_autoscaler_crd_wait_enabled" {
   description = "Whether bootstrap.sh waits for Cluster API's CRDs before applying genesis_apply_manifests. Only meaningful when that list contains CAPI-dependent content."
   type        = bool

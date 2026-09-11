@@ -37,6 +37,10 @@ run "off_by_default_creates_nothing" {
     error_message = "no CAPI worker IAM role should exist when the feature is off"
   }
   assert {
+    condition     = length(aws_ssm_parameter.autoscaler_worker_bootstrap) == 0
+    error_message = "no bootstrap parameter should exist when the feature is off -- an Advanced-tier parameter is billed monthly"
+  }
+  assert {
     condition     = local.cluster_autoscaler_bundle_yaml == ""
     error_message = "the CAPI bundle must be empty when the feature is off, so nothing is written to the genesis node"
   }
@@ -222,18 +226,56 @@ run "a_long_cluster_name_still_fits_the_iam_name_prefix_cap" {
   }
 }
 
+run "a_groups_bootstrap_secret_travels_through_ssm_not_user_data" {
+  command = apply
+
+  variables {
+    cluster_domain             = "eu-west-1.example.net"
+    cluster_autoscaler_enabled = true
+    cluster_autoscaler_worker_groups = {
+      platform = { instance_type = "t4g.large", min_size = 1, max_size = 3, attach_ingress_sg = true }
+      reserved = { instance_type = "r5a.large", max_size = 1, node_taints = ["workload=reserved:NoSchedule"] }
+    }
+  }
+
+  assert {
+    condition     = !strcontains(local.cluster_autoscaler_bundle_yaml, "kind: Secret")
+    error_message = "a worker's cloud-init must not be inline in the bundle: two of them put the control plane's user data over EC2's 25600-byte limit on a real cluster"
+  }
+  assert {
+    condition     = length(aws_ssm_parameter.autoscaler_worker_bootstrap) == 2
+    error_message = "every group needs its own bootstrap parameter, since labels and taints are baked into the cloud-init it holds"
+  }
+  assert {
+    condition = alltrue([
+      strcontains(local.autoscaler_worker_bootstrap_secrets["platform"], "\"kind\": \"Secret\""),
+      strcontains(local.autoscaler_worker_bootstrap_secrets["platform"], "bharat-platform-bootstrap"),
+    ])
+    error_message = "the parameter must hold the Secret manifest the MachineDeployment names in dataSecretName, not the bare cloud-init"
+  }
+  assert {
+    condition     = length(local.cluster_autoscaler_fetched_manifests) == 2
+    error_message = "each parameter needs a fetch instruction on the genesis node, or the MachineDeployment references a Secret that never arrives"
+  }
+  assert {
+    condition = alltrue([
+      for m in local.cluster_autoscaler_fetched_manifests :
+      strcontains(m.fetch_command, "ssm get-parameter") && strcontains(m.fetch_command, "--with-decryption")
+    ])
+    error_message = "the fetch has to decrypt: these are SecureString parameters, and a worker's bootstrap carries its registry credentials"
+  }
+}
+
 # EC2 rejects RunInstances when encoded user data exceeds 25600 bytes, and the
-# control plane's own cloud-init is where the CAPI bundle travels -- one bootstrap
-# Secret per worker group, each holding a whole worker cloud-init. That is the one
-# payload here that grows with configuration, so it gets a ceiling with a test
-# behind it rather than a comment.
+# control plane's own cloud-init is where the CAPI bundle travels. Everything in
+# that bundle is now fixed-size YAML per group -- the payload that grew with
+# configuration went to SSM -- so this is a ceiling on the whole design rather
+# than on one cluster's group count.
 #
-# Measured: two groups land between 22000 and 24000, so the headroom is a couple
-# of kilobytes rather than comfortable, and a THIRD group exceeds the cap. The way
-# out when that day comes is to stop embedding a whole worker cloud-init per group:
-# put it in SSM Parameter Store (advanced tier holds 8192 bytes, and a gzipped
-# worker payload is about 3400) and leave a fetch stub in the Secret. This test is
-# what will tell you, rather than a failed apply with half a cluster created.
+# Measured on the real corp cluster before the payload moved: 32836 bytes with two
+# groups, against the 25600 limit. Three groups here, deliberately more than any
+# cluster runs today, to catch a future change that puts something per-group back
+# into user data.
 run "the_control_plane_user_data_stays_inside_the_ec2_limit" {
   command = apply
 
@@ -243,6 +285,7 @@ run "the_control_plane_user_data_stays_inside_the_ec2_limit" {
     cluster_autoscaler_worker_groups = {
       platform = { instance_type = "t4g.large", min_size = 1, max_size = 3, attach_ingress_sg = true }
       reserved = { instance_type = "r5a.large", max_size = 1, node_labels = { workload = "reserved" }, node_taints = ["workload=reserved:NoSchedule"] }
+      batch    = { instance_type = "c6a.large", max_size = 4, node_labels = { workload = "batch" }, node_taints = ["workload=batch:NoSchedule"] }
     }
   }
 
