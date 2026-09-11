@@ -169,26 +169,6 @@ if [ -d "$KC/server-manifests" ]; then
 fi
 %{ endif ~}
 
-%{ if length(genesis_fetched_manifests) > 0 ~}
-# ---- genesis manifests this node fetches for itself, rather than carrying in
-#      user data. Done here, before RKE2 starts, so a missing parameter or a
-#      credential the role does not have fails in seconds -- the apply step that
-#      needs these files runs a quarter of an hour later, behind every readiness
-#      wait in this script, and a failure there is far harder to read. ----
-%{ for m in genesis_fetched_manifests ~}
-install -d -m 0700 "$(dirname "${m.path}")"
-# 0600 before a single byte lands: one of these can carry a Secret. Written to
-# .part and moved, because the apply step cannot tell a truncated manifest from
-# a complete one.
-install -m 0600 /dev/null "${m.path}.part"
-if ! ${m.fetch_command} | base64 -d | gzip -dc >"${m.path}.part"; then
-  echo "kube-compute: could not fetch ${m.path} -- this node's own credentials must allow it, and the cluster cannot finish building without it" >&2
-  exit 1
-fi
-mv "${m.path}.part" "${m.path}"
-%{ endfor ~}
-%{ endif ~}
-
 %{ if node_role == "server-init" ~}
 systemctl enable --now rke2-server.service
 %{ endif ~}

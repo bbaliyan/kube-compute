@@ -1,15 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-# Cluster + AWSCluster, then an AWSMachineTemplate and MachineDeployment per
-# worker group. A group is the unit cluster-autoscaler scales, so anything a pod
-# can select on -- architecture, a taint, a shape -- is a separate group.
+# Cluster + AWSCluster, then one Secret, AWSMachineTemplate and MachineDeployment
+# per worker group. A group is the unit cluster-autoscaler scales, so anything a
+# pod can select on -- architecture, a taint, a shape -- is a separate group.
 #
-# No bootstrap-provider CRD: each group's Machine.spec.bootstrap.dataSecretName
-# points at a Secret carrying the same cloud-init node-bootstrap renders for every
-# other worker here. That Secret is NOT in this file: it is one per group and the
-# largest thing in the bundle, and the control plane's user data, where this file
-# travels, is capped at 25600 bytes by EC2. The genesis node fetches each one from
-# SSM at boot instead -- see aws_ssm_parameter.autoscaler_worker_bootstrap -- so a
-# MachineDeployment here references a Secret that arrives beside it. CAPRKE2 is deliberately unused, for the
+# No bootstrap-provider CRD: each Secret carries the same cloud-init
+# node-bootstrap renders for every other worker here, referenced through
+# Machine.spec.bootstrap.dataSecretName. CAPRKE2 is deliberately unused, for the
 # reason recorded on the Proxmox template -- its worker-join path requires a live
 # CAPRKE2-owned RKE2ControlPlane object, and this control plane belongs to
 # Terraform.
@@ -78,6 +74,17 @@ spec:
     host: ${control_plane_endpoint_host}
     port: ${control_plane_endpoint_port}
 %{ for name, g in worker_groups ~}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${cluster_name}-${name}-bootstrap
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: ${cluster_name}
+type: Opaque
+data:
+  value: ${g.bootstrap_secret_b64}
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: AWSMachineTemplate

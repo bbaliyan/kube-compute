@@ -313,6 +313,12 @@ variable "static_nodes" {
 }
 
 # ---- Cluster API autoscaling (Phase 2) ----
+variable "bootstrap_payload_in_ssm" {
+  description = "Deliver each node's boot payload through SSM Parameter Store instead of user data, because EC2 rejects RunInstances over 16384 decoded bytes. Forwarded to aws-control-plane, which stores the payload in free Standard-tier SecureString parameters and boots a stub that fetches and runs it. cluster_autoscaler_enabled turns this on by itself -- a CAPI bundle carries a worker cloud-init per group and exceeds the limit on its own -- so this input is for a cluster that gets there another way, such as a large set of platform Helm values. Leaving it false and exceeding the limit fails the apply with a message naming it."
+  type        = bool
+  default     = false
+}
+
 variable "cluster_autoscaler_enabled" {
   description = "Genesis-apply a CAPI/CAPA MachineDeployment for this cluster and turn on kube-platform's cluster-autoscaler and Cluster API Applications. False (the default) means none of it exists. Independent of static_nodes: a cluster can have named nodes for its fixed roles and an autoscaled group for elastic capacity at the same time."
   type        = bool

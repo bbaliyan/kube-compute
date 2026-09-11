@@ -73,16 +73,7 @@ locals {
   # to inputs (like module.control_plane's outputs) this leaf module does not.
   effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
   effective_crd_wait_enabled        = var.node_role == "server-init" && var.cluster_autoscaler_crd_wait_enabled
-
-  # Same list, split by how the manifest reaches the node: embedded in user data,
-  # or fetched by the node at boot. Both are applied by the one step in
-  # bootstrap.sh, embedded first, so a caller can mix them without caring.
-  effective_genesis_fetched_manifests = var.node_role == "server-init" ? var.genesis_fetched_manifests : []
-
-  genesis_apply_manifest_paths = concat(
-    [for m in local.effective_genesis_apply_manifests : m.path],
-    [for m in local.effective_genesis_fetched_manifests : m.path],
-  )
+  genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
   # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
   # node free of any templating engine.
@@ -337,7 +328,6 @@ locals {
     cluster_autoscaler_crd_wait_enabled = local.effective_crd_wait_enabled
     capi_install_baked                  = var.cluster_autoscaler_capi_install_baked
     genesis_apply_manifest_paths        = local.genesis_apply_manifest_paths
-    genesis_fetched_manifests           = local.effective_genesis_fetched_manifests
   })
 
   # Every key is always defined (empty where a role doesn't use it) so
@@ -474,5 +464,48 @@ locals {
 
   # "#cloud-config" is a YAML comment, so the whole document — including this
   # required first line — round-trips through any YAML parser unchanged.
+  # The same payload as cloud_init_user_data, rendered as a shell script instead of
+  # a cloud-config: the hostname, the same files with the same modes, then the same
+  # bootstrap command. Same end state, no cloud-init features used.
+  #
+  # It exists because a platform can cap what a node boots with -- EC2 rejects
+  # RunInstances over 16384 bytes of decoded user data -- and the answer to that is
+  # the one AWS documents and Cluster API's own AWS provider implements: put the
+  # payload somewhere the node can read and boot a stub that fetches it. A fetched
+  # cloud-config is the awkward half of that, because cloud-init consumes its config
+  # at boot and cannot be handed another one afterwards. A fetched script has no
+  # such problem, so the script form is what travels.
+  #
+  # Every file is base64 in a quoted heredoc, so no content can end the heredoc or
+  # be interpreted by the shell -- the same reason the cloud-config encodes them.
+  setup_script_file_blocks = flatten([
+    for f in local.write_files : concat(
+      [
+        "install -D -m ${f.permissions} -o ${split(":", f.owner)[0]} -g ${split(":", f.owner)[1]} /dev/null ${f.path}",
+        "base64 -d <<'KUBE_COMPUTE_FILE' ${try(f.encoding, "b64") == "gz+b64" ? "| gzip -dc " : ""}>${f.path}",
+      ],
+      [f.content],
+      ["KUBE_COMPUTE_FILE"],
+    )
+  ])
+
+  node_setup_script = join("\n", concat(
+    [
+      "#!/usr/bin/env bash",
+      "# SPDX-License-Identifier: Apache-2.0",
+      "# Rendered by kube-compute's node-bootstrap module. Equivalent to the",
+      "# cloud-config form of the same payload; see node_setup_script there.",
+      "set -euo pipefail",
+      "umask 022",
+    ],
+    # hostnamectl rather than cloud-init's hostname key. The cloud-config sets
+    # prefer_fqdn_over_hostname = false, so the short name is what the system ends
+    # up with either way, and nothing here manages /etc/hosts (cloud-init does not
+    # either -- manage_etc_hosts is deliberately unset).
+    var.set_hostname ? ["hostnamectl set-hostname ${var.node_name}"] : [],
+    local.setup_script_file_blocks,
+    ["/opt/kube-compute/bootstrap.sh", ""],
+  ))
+
   cloud_init_user_data = "#cloud-config\n${yamlencode(local.cloud_config)}"
 }

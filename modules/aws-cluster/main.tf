@@ -51,8 +51,12 @@ module "control_plane" {
   root_volume_size_gb               = var.root_volume_size_gb
   root_volume_type                  = var.root_volume_type
 
+  # Always on for an autoscaled cluster, not left to the caller: the CAPI bundle
+  # carries one worker cloud-init per group, and a single group already takes the
+  # control plane past what EC2 allows in user data. The input stays for a cluster
+  # that reaches the limit some other way -- enough platform Helm values will do it.
+  bootstrap_payload_in_ssm            = var.bootstrap_payload_in_ssm || var.cluster_autoscaler_enabled
   genesis_apply_manifests             = local.cluster_autoscaler_genesis_manifests
-  genesis_fetched_manifests           = local.cluster_autoscaler_fetched_manifests
   cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_enabled
   # This project's AWS image stages no capi-install.yaml, so bootstrap.sh waits
   # for the CRDs the platform Application installs rather than applying any.
@@ -199,31 +203,11 @@ locals {
         [module.control_plane.cluster_security_group_id],
         g.attach_ingress_sg ? [module.control_plane.node_security_group_id] : [],
       )
+      # gzipped, not plain: cloud-init detects the gzip header and decompresses,
+      # so CAPA can hand this to RunInstances untouched, and it is a third of the
+      # size inside a bundle that has to fit in the control plane's own user data.
+      bootstrap_secret_b64 = base64gzip(module.cluster_autoscaler_worker_bootstrap[name].cloud_init_user_data)
     }
-  }
-
-  # One Secret per group, holding that group's whole cloud-init: it is what CAPA
-  # hands to RunInstances as the worker's user data, so every worker in a group
-  # boots from this. Gzipped, not plain -- cloud-init detects the gzip header and
-  # decompresses, so CAPA passes it through untouched at two thirds the size.
-  #
-  # Kept out of the bundle below and delivered through SSM instead. Measured on a
-  # real cluster: two groups inline put the control plane's encoded user data at
-  # 32836 bytes against EC2's 25600-byte ceiling, and the same cluster lands at
-  # 19956 with the Secrets fetched. Nothing else in that payload grows per group,
-  # so this is the one part that had to leave.
-  autoscaler_worker_bootstrap_secrets = {
-    for name, g in local.autoscaler_groups : name => yamlencode({
-      apiVersion = "v1"
-      kind       = "Secret"
-      metadata = {
-        name      = "${var.cluster_name}-${name}-bootstrap"
-        namespace = "default"
-        labels    = { "cluster.x-k8s.io/cluster-name" = var.cluster_name }
-      }
-      type = "Opaque"
-      data = { value = base64gzip(module.cluster_autoscaler_worker_bootstrap[name].cloud_init_user_data) }
-    })
   }
 
   cluster_autoscaler_bundle_yaml = !var.cluster_autoscaler_enabled ? "" : templatefile(
@@ -247,17 +231,6 @@ locals {
     path    = "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
     content = local.cluster_autoscaler_bundle_yaml
   }]
-
-  # Numbered after the bundle so the Cluster and MachineDeployments are applied
-  # first, and fetched by the genesis node itself at boot. The parameter is named
-  # through the resource rather than rebuilt as a string, which is also what makes
-  # Terraform create it before the instance that reads it.
-  cluster_autoscaler_fetched_manifests = [
-    for name, g in local.autoscaler_groups : {
-      path          = "/opt/kube-compute/manifests/21-bootstrap-${name}.yaml"
-      fetch_command = "aws ssm get-parameter --name ${aws_ssm_parameter.autoscaler_worker_bootstrap[name].name} --with-decryption --region ${var.aws_region} --query Parameter.Value --output text"
-    }
-  ]
 
   # kube-platform gates both Applications on these. This module owns the decision,
   # so it injects them through the generic parameter map rather than
@@ -362,67 +335,6 @@ resource "aws_iam_role_policy" "autoscaler_worker_agent_token" {
         Effect   = "Allow"
         Action   = "ssm:GetParameter"
         Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:parameter${module.control_plane.agent_token_ssm_parameter}"
-      },
-      {
-        Effect   = "Allow"
-        Action   = "kms:Decrypt"
-        Resource = "*"
-        Condition = {
-          StringEquals = { "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com" }
-        }
-      }
-    ]
-  })
-}
-
-# Each group's bootstrap Secret, out of band. The genesis node fetches it at boot
-# and applies it alongside the bundle, which is the only reason the control plane's
-# user data still fits: a worker cloud-init is ~6 KB encoded, EC2 allows 25600 for
-# everything, and there is one per group.
-#
-# Advanced tier because Standard caps a value at 4096 bytes, and this is about 6100.
-# That tier is billed per parameter per month, which is the running cost of a worker
-# group here -- cents, but not nothing, and worth knowing about.
-#
-# SecureString: this is a node's entire bootstrap configuration, including the
-# command that fetches the cluster's agent token and any registry credentials in
-# registries.yaml.
-resource "aws_ssm_parameter" "autoscaler_worker_bootstrap" {
-  for_each = local.autoscaler_groups
-
-  name  = "/kube-compute/${var.cluster_name}/worker-bootstrap/${each.key}"
-  type  = "SecureString"
-  tier  = "Advanced"
-  value = base64gzip(local.autoscaler_worker_bootstrap_secrets[each.key])
-  tags  = merge(local.autoscaler_common_tags, { Name = "kube-compute-${var.cluster_name}-${each.key}-bootstrap" })
-
-  lifecycle {
-    precondition {
-      # Checked here rather than discovered at apply: SSM rejects an oversized
-      # value, and by then the plan has created most of the cluster. If this ever
-      # fires, the payload has grown (a larger CA bundle, more in registries.yaml)
-      # and the fix is to move the rest of the worker cloud-init out of the
-      # parameter too, not to raise a limit -- 8192 is the tier's own maximum.
-      condition     = length(base64gzip(local.autoscaler_worker_bootstrap_secrets[each.key])) <= 8192
-      error_message = "Worker group ${each.key}'s bootstrap payload exceeds what an Advanced-tier SSM parameter holds (8192 bytes encoded). Reduce what every worker carries -- trusted_ca_pem and registries.yaml are the two that grow."
-    }
-  }
-}
-
-# The genesis node reads those parameters with its own instance role, at boot,
-# before RKE2 starts. Scoped to this cluster's worker-bootstrap prefix rather than
-# the whole /kube-compute tree.
-resource "aws_iam_role_policy" "autoscaler_genesis_bootstrap_read" {
-  count = var.cluster_autoscaler_enabled ? 1 : 0
-  name  = "kube-compute-${var.cluster_name}-worker-bootstrap-read"
-  role  = module.control_plane.node_iam_role_name
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:parameter/kube-compute/${var.cluster_name}/worker-bootstrap/*"
       },
       {
         Effect   = "Allow"

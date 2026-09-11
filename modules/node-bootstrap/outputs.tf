@@ -5,6 +5,12 @@ output "cloud_init_user_data" {
   sensitive   = true
 }
 
+output "node_setup_script" {
+  description = "The same payload as cloud_init_user_data as a shell script: hostname, the same write_files with the same modes and owners, then bootstrap.sh. For callers whose platform caps user data (EC2 allows 16384 decoded bytes) -- store this out of band and boot a stub that fetches and runs it. Sensitive for the same reasons as cloud_init_user_data."
+  value       = local.node_setup_script
+  sensitive   = true
+}
+
 output "node_name" {
   description = "Node name this payload was rendered for — the OS hostname it sets, and therefore the Kubernetes node name RKE2/kubelet will register. Echoed back so a caller can key snippet filenames off the same value without recomputing it."
   value       = var.node_name

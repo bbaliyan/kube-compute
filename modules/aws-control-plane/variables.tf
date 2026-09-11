@@ -294,20 +294,17 @@ variable "extra_tags" {
 }
 
 # ---- Genesis-time manifest application (Cluster API and anything like it) ----
+variable "bootstrap_payload_in_ssm" {
+  description = "Deliver each node's boot payload through SSM Parameter Store instead of user data: the payload is stored in free Standard-tier SecureString parameters, in 4000-byte pieces, and user data becomes a stub that fetches, reassembles and runs it under the instance's own role. Set this when the payload does not fit -- EC2 rejects RunInstances over 16384 decoded bytes, which a control plane carrying a platform Argo CD Application plus a CAPI bundle does reach. It is what AWS documents for this limit and what Cluster API's AWS provider does (secureSecretsBackend). Default false keeps user data byte-identical to what existing instances already have; turning it on changes user data, which replaces the instance."
+  type        = bool
+  default     = false
+}
+
 variable "genesis_apply_manifests" {
   description = "Ordered {path, content} manifests written under /opt/kube-compute/manifests/ on the genesis node and applied by bootstrap.sh after the platform Application. This module does not interpret the content; the composing module renders it. Empty list (the default) applies nothing extra."
   type = list(object({
     path    = string
     content = string
-  }))
-  default = []
-}
-
-variable "genesis_fetched_manifests" {
-  description = "Genesis manifests the node fetches at boot instead of carrying in user data -- {path, fetch_command}, where the command writes base64-of-gzip to stdout and runs under this instance's own IAM role. Use it for the part of the payload that grows with configuration: EC2 rejects RunInstances over 25600 bytes of encoded user data, and that ceiling is reached in practice, not in theory. The composing module renders both the command and whatever it fetches."
-  type = list(object({
-    path          = string
-    fetch_command = string
   }))
   default = []
 }

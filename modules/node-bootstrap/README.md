@@ -52,6 +52,23 @@ writes its own progress to `/var/log/kube-compute-bootstrap.log`; that log
 is the only place to watch bootstrap progress. There is no Terraform-visible
 signal, no provisioner output, and no `bootstrap_log_path`-style output.
 
+## Two renderings of one payload
+
+`cloud_init_user_data` is the primary output. `node_setup_script` is the same payload
+as a shell script: the hostname, the same `write_files` with the same modes and
+owners, then `bootstrap.sh`. Nothing chooses between them here — a caller does.
+
+It exists because a platform can cap what a node boots with. EC2 rejects user data
+over 16384 decoded bytes, and the answer AWS documents, and Cluster API's AWS
+provider implements, is to store the payload elsewhere and boot a stub that fetches
+it. A fetched cloud-config is the awkward half of that, because cloud-init consumes
+its config during boot and cannot be handed another one afterwards. A fetched script
+has no such problem. `aws-control-plane`'s `bootstrap_payload_in_ssm` is the one
+caller today; see its README.
+
+Both forms are sensitive and both end by running the same `bootstrap.sh`, so the node
+cannot tell which one delivered it.
+
 ## Genesis-apply manifests (generic; cluster-autoscaler is the one caller today)
 
 This module no longer knows anything about cluster-autoscaler, CAPI, or
@@ -61,17 +78,6 @@ CAPMOX specifically. It exposes two generic inputs instead:
   written verbatim under `/opt/kube-compute/manifests/` via `write_files` and
   `kubectl apply -f`'d in order by `bootstrap.sh`. This module does not
   interpret `content` at all.
-- `genesis_fetched_manifests` — the same thing for a manifest too large to
-  travel in user data: `{path, fetch_command}`, where the command writes
-  base64-of-gzip to stdout and runs on the genesis node under its own
-  credentials, before RKE2 starts. Fetched early on purpose, so a missing
-  parameter or a permission the node does not have fails in seconds rather
-  than a quarter of an hour later at the apply step. It exists because EC2
-  rejects `RunInstances` over 25600 bytes of encoded user data and a CAPI
-  bundle carries one bootstrap payload per worker group: `aws-cluster` puts
-  each group's Secret in an SSM parameter and fetches it here. Content
-  fetched this way is invisible to a plan, so anything that fits belongs in
-  `genesis_apply_manifests` instead.
 - `cluster_autoscaler_crd_wait_enabled` — gates a `bootstrap.sh` block that
   waits for cert-manager's CRDs (installed by the platform Argo CD
   Application, applied just before this block), applies the kube-image-baked
@@ -82,9 +88,7 @@ CAPMOX specifically. It exposes two generic inputs instead:
   name, it is not cluster-autoscaler-specific — any caller needing CAPI's
   CRDs to exist first can use it.
 
-All three are genesis-only (`server-init` only). The two manifest lists are
-applied by one step, embedded first, so a caller can mix them. Neither
-manifest input itself
+Both are genesis-only (`server-init` only). `genesis_apply_manifests` itself
 has no opinion on `gitops_platform_enabled`. `cluster_autoscaler_crd_wait_enabled`
 is different: it is NOT independent of `gitops_platform_enabled` — cert-manager
 only exists on this cluster because the platform Argo CD Application installs
