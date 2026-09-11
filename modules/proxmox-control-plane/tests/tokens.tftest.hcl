@@ -58,8 +58,7 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
     condition = alltrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
       !strcontains(base64decode(f.content), "ansible")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
     ])
-    error_message = "the bootstrap payload must not reference Ansible — this module no longer runs any playbook against the node"
+    error_message = "no part of the payload may reference Ansible — this module no longer runs any playbook against the node"
   }
 }

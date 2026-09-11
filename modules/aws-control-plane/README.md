@@ -27,41 +27,37 @@ left null — has **no RKE2 baked in**, so a node booted from it will not join a
 exists only so the AMI lookup resolves to something for plan-time testing and as a base for
 your own bake. Mirrors `proxmox-control-plane`'s `proxmox_template_vm_id` convention.
 
-### When the payload does not fit: user data becomes a pointer
+### Keeping user data under EC2's limit
 
-EC2 rejects `RunInstances` when decoded user data exceeds **16384 bytes**. This module
-reached that on a real cluster: a control plane carrying the platform Argo CD
-Application, a CAPI bundle with one bootstrap Secret per worker group and a corporate
-CA rendered 24627 bytes. Compression was already in play and there was nothing left to
-squeeze — base64 does not compress, and an inner gzip only makes the outer one useless.
+EC2 rejects `RunInstances` when decoded user data exceeds **16384 bytes**. This
+module reached that on a real cluster: a genesis node carrying the platform Argo CD
+Application, a CAPI bundle with one bootstrap Secret per worker group, and a
+corporate CA rendered 24627 bytes. Compression was already in play and there was
+nothing left to squeeze — base64 does not compress, and an inner gzip only makes the
+outer one useless.
 
-`bootstrap_payload_in_ssm = true` changes how the payload travels, not what it says.
-The payload is stored in SSM Parameter Store and user data becomes a stub that fetches
-and runs it. This is what AWS documents for the limit, and what Cluster API's own AWS
-provider does (`AWSMachine.spec.cloudInit.secureSecretsBackend`). On the same cluster,
-user data goes from 24627 bytes to 1272, and stops growing with configuration.
+What fixed it was not a side channel but taking static content out of the payload
+entirely. The bootstrap program is baked into the node image
+(`node-bootstrap/files/bootstrap.sh`) rather than rendered per node, and with
+`trusted_ca_in_image` the corporate CA is too. Both used to travel once for this node
+and again inside every worker group's cloud-init, so the same cluster now renders
+12471 bytes:
 
-The details worth knowing:
+| decoded user data | bytes |
+| --- | --- |
+| EC2 limit | 16384 |
+| before, with both in the payload | 24627 |
+| program baked | 16051 |
+| corporate CA baked as well | 12471 |
 
-- **What travels is a script, not a cloud-config.** `node-bootstrap` renders the same
-  payload both ways (`node_setup_script`): same files, same modes, same owners, same
-  `bootstrap.sh` at the end. A fetched cloud-config would have nothing to process it,
-  because cloud-init consumes its config at boot; a fetched script just runs.
-- **Free Standard-tier parameters, in fixed-size pieces.** A Standard parameter holds
-  4096 bytes and costs nothing, where Advanced tier holds 8192 and is billed monthly
-  per parameter. The count of pieces is fixed rather than derived, because the payload
-  contains a generated token and ids of resources the same plan creates, so its length
-  is not knowable at plan — and `for_each` cannot depend on an unknown. The payload is
-  padded with newlines, which base64 ignores.
-- **The parameters outlive the boot they are named for.** The node reads them again on
-  every rebuild, which is exactly when a cluster can least afford a missing input.
-- **Replacement semantics are preserved.** The stub carries the payload's SHA-256, so
-  a changed payload is still a changed user data and `user_data_replace_on_change`
-  still replaces the instance. Without that, an apply would leave a node running
-  yesterday's configuration behind a clean plan.
-- **You should not have to set this.** `aws-cluster` turns it on for any cluster with
-  `cluster_autoscaler_enabled`, and leaving it off while exceeding the limit fails the
-  apply with a message naming the input, rather than an AWS API error.
+This is why there is no S3 bucket and no SSM parameter here for boot payloads. Those
+would be one mechanism per platform for a cap only EC2 has — Proxmox's snippet cap is
+1 MiB, Azure's custom data 64 KB — and each would add something per cluster to bill
+for and to destroy. Shipping values instead of code works the same everywhere.
+
+A precondition on the instance turns AWS's rejection into a message naming the levers,
+because the size is only knowable at apply: the payload carries a freshly generated
+join token and the ids of resources the same plan creates.
 
 ## Scope
 

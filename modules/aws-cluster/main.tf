@@ -14,6 +14,7 @@ module "control_plane" {
 
   cluster_name                      = var.cluster_name
   trusted_ca_pem                    = var.trusted_ca_pem
+  trusted_ca_in_image               = var.trusted_ca_in_image
   registry_mirror_url               = var.registry_mirror_url
   dns_servers                       = var.dns_servers
   gitops_platform_enabled           = var.gitops_platform_enabled
@@ -51,11 +52,6 @@ module "control_plane" {
   root_volume_size_gb               = var.root_volume_size_gb
   root_volume_type                  = var.root_volume_type
 
-  # Always on for an autoscaled cluster, not left to the caller: the CAPI bundle
-  # carries one worker cloud-init per group, and a single group already takes the
-  # control plane past what EC2 allows in user data. The input stays for a cluster
-  # that reaches the limit some other way -- enough platform Helm values will do it.
-  bootstrap_payload_in_ssm            = var.bootstrap_payload_in_ssm || var.cluster_autoscaler_enabled
   genesis_apply_manifests             = local.cluster_autoscaler_genesis_manifests
   cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_enabled
   # This project's AWS image stages no capi-install.yaml, so bootstrap.sh waits
@@ -74,6 +70,7 @@ module "node_pools" {
   cluster_security_group_id = module.control_plane.cluster_security_group_id
 
   trusted_ca_pem      = each.value.trusted_ca_pem
+  trusted_ca_in_image = var.trusted_ca_in_image
   registry_mirror_url = each.value.registry_mirror_url
   dns_servers         = each.value.dns_servers
   subnet_id           = each.value.subnet_id
@@ -122,6 +119,7 @@ module "static_nodes" {
   # Cluster-wide by default, overridable per group. A ternary rather than coalesce(): all
   # three are commonly null on both sides, and coalesce raises when every argument is null.
   trusted_ca_pem      = each.value.trusted_ca_pem != null ? each.value.trusted_ca_pem : var.trusted_ca_pem
+  trusted_ca_in_image = var.trusted_ca_in_image
   registry_mirror_url = each.value.registry_mirror_url != null ? each.value.registry_mirror_url : var.registry_mirror_url
   dns_servers         = each.value.dns_servers != null ? each.value.dns_servers : var.dns_servers
   extra_tags          = merge(var.extra_tags, each.value.extra_tags)
@@ -292,6 +290,7 @@ module "cluster_autoscaler_worker_bootstrap" {
   registration_address      = local.autoscaler_registration_address
   agent_token_fetch_command = local.autoscaler_agent_token_fetch_command
   trusted_ca_pem            = var.trusted_ca_pem
+  trusted_ca_in_image       = var.trusted_ca_in_image
   registry_mirror_url       = var.registry_mirror_url
   dns_servers               = var.dns_servers
 }

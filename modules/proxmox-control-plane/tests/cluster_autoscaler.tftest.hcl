@@ -75,10 +75,12 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
   assert {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "$KUBECTL apply -f \"$KC/manifests/capi-install.yaml\"")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='1'") &&
+      strcontains(base64decode(f.content), "CAPI_INSTALL_BAKED='1'") &&
+      strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS='/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml'")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "cluster_autoscaler_crd_wait_enabled = true must reach bootstrap.sh's CAPI-install/CRD-wait apply step"
+    error_message = "cluster_autoscaler_crd_wait_enabled = true must reach the node: the baked bootstrap program gates its CAPI install and CRD wait on these values"
   }
 }
 

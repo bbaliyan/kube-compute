@@ -259,14 +259,15 @@ addresses. It cannot be the control plane's own IP: the
 an output derived from the instance is a dependency cycle. A precondition fails
 the apply rather than baking a null address into every worker's Secret.
 
-**An autoscaled cluster delivers its boot payload through SSM.** The CAPI bundle
-carries one worker cloud-init per group, roughly 6 KB encoded each, and EC2 allows
-16384 decoded bytes of user data for everything a node boots with. One group is
-enough to exceed it. So `cluster_autoscaler_enabled` turns on
-`bootstrap_payload_in_ssm`: the payload moves to free Standard-tier SSM parameters
-and user data becomes a stub that fetches and runs it. Nothing about the cluster
-changes, and group count stops being a thing that can break an apply. The mechanism
-and its trade-offs are documented in `modules/aws-control-plane/README.md`.
+**An autoscaled cluster's payload has to stay small.** The CAPI bundle carries one
+worker cloud-init per group inside the genesis node's own user data, and EC2 allows
+16384 decoded bytes for everything that node boots with. That budget is why the
+bootstrap program is baked into the image rather than rendered per node: it used to
+appear once for the control plane and once more in every group. Set
+`trusted_ca_in_image` when the image also bakes the corporate CA, which travelled
+the same way. With both out of the payload, a two-group cluster renders 12471 bytes
+and a group costs roughly 1 KB instead of 6. `modules/aws-control-plane/README.md`
+has the numbers and the reasoning.
 
 **The controller authenticates as the control-plane node.** There is no IRSA on a
 self-managed cluster, so the AWS provider uses the node's instance profile. The

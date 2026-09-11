@@ -28,7 +28,7 @@ that provider sent — add or delete — rejected with `NOTIMP (4)`, while the
 byte-for-byte equivalent operation via `nsupdate` succeeded every time
 (verified repeatedly: fresh test records, the actual production records, both
 TCP and UDP transports). node-bootstrap's own genesis self-registration
-already used `nsupdate` for the same reason (see its `bootstrap.sh.tftpl`) and
+already used `nsupdate` for the same reason (see its `files/bootstrap.sh`) and
 has never hit this. The exact root cause inside `hashicorp/dns`'s RFC2136
 wire encoding was never pinned down — not worth chasing further once
 `nsupdate` was proven reliable end-to-end.

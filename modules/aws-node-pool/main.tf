@@ -127,6 +127,7 @@ module "node_bootstrap" {
   agent_token_fetch_command = local.agent_token_fetch_command
   node_labels               = local.node_labels
   trusted_ca_pem            = var.trusted_ca_pem
+  trusted_ca_in_image       = var.trusted_ca_in_image
   registry_mirror_url       = var.registry_mirror_url
   dns_servers               = var.dns_servers
 }

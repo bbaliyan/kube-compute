@@ -52,106 +52,27 @@ locals {
     ])
   }
 
-  # ---- user data: payload, or pointer to it --------------------------------------
+  # ---- user data: how big it is allowed to get -----------------------------------
   #
-  # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes. This module
-  # reached that on a real cluster: a control plane carrying the platform Argo CD
-  # Application, a CAPI bundle with one bootstrap Secret per worker group, and a
-  # corporate CA came to 16635 bytes and could not be created. Compression was
-  # already in play (user_data_base64 = base64gzip below) and there was nothing left
-  # to squeeze.
+  # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes, and this
+  # module reached that on a real cluster: a genesis node carrying the platform Argo
+  # CD Application, a CAPI bundle with one bootstrap Secret per worker group, and a
+  # corporate CA came to 24627 bytes. Compression was already in play
+  # (user_data_base64 = base64gzip below) and there was nothing left to squeeze.
   #
-  # So above a budget the payload stops travelling in user data. It goes into SSM
-  # parameters and user data becomes a stub that fetches and runs it -- what AWS's
-  # own documentation recommends for this limit, and what Cluster API's AWS provider
-  # does for the same reason (AWSMachine.spec.cloudInit.secureSecretsBackend).
+  # What fixed it was not a side channel but moving static content out of the
+  # payload: the bootstrap program is baked into the node image (node-bootstrap's
+  # files/bootstrap.sh) instead of rendered per node, and the corporate CA can be
+  # too (trusted_ca_in_image). Both used to travel once for this node and again
+  # inside every worker group's cloud-init, so the same cluster now renders 12471
+  # bytes. That answer works on every platform this project supports, unlike an S3
+  # object or an SSM parameter, and it leaves nothing per-cluster to bill for.
   #
-  # An input rather than something this module measures for itself. The payload
-  # carries a freshly generated join token, so its size is unknown until apply, and
-  # a delivery mode discovered at apply time cannot drive the parameters and the IAM
-  # policy the mode needs. Cluster API's AWS provider makes the same call for the
-  # same reason (secureSecretsBackend is configuration, not a heuristic). The
-  # precondition on the instance below turns the AWS-side rejection into a message
-  # that names this variable, so nobody has to know the number.
-  payload_in_ssm = var.bootstrap_payload_in_ssm
-
-  # What RunInstances measures: the decoded size of user_data_base64. Known only at
-  # apply, which is where the precondition using it runs.
+  # The precondition on the instance below turns AWS's rejection into a message that
+  # says which lever to pull. Measured, not estimated: this is exactly what
+  # RunInstances measures.
   inline_user_data_bytes = {
     for k, v in local.combined_user_data : k => floor(length(base64gzip(v)) / 4) * 3
-  }
-
-  # The script form of the same payload. A fetched cloud-config would have nothing
-  # to process it; a fetched script runs.
-  node_setup_scripts = local.payload_in_ssm ? {
-    for k, m in merge({ "0" = module.node_bootstrap }, module.node_bootstrap_additional) :
-    k => m.node_setup_script
-  } : {}
-
-  # 4000 bytes per piece: an SSM Standard parameter's value caps at 4096 and costs
-  # nothing, where Advanced tier holds 8192 and is billed per parameter per month.
-  # A multiple of 4, so every piece stays base64-aligned.
-  payload_chunk_bytes = 4000
-
-  # A FIXED number of pieces, not one per 4000 bytes of payload. The payload's length
-  # is not knowable at plan -- it carries a generated join token and the ids of
-  # resources this same plan creates -- and a resource's for_each cannot depend on an
-  # unknown. So the count is configuration and the payload is padded to fill it.
-  #
-  # Padded with newlines, which base64 ignores: the node concatenates the pieces and
-  # decodes, and the padding disappears. That also makes every piece exactly
-  # payload_chunk_bytes, so the plan reads the same whatever the payload does.
-  #
-  # 12 pieces is 48000 base64 characters, about 36 KB of compressed payload, against
-  # the ~33 KB a real multi-group cluster renders today. Raise it if the precondition
-  # below ever fires; each piece is free, and the only cost of spare ones is a line
-  # in the plan.
-  payload_piece_count = 12
-  payload_total_bytes = local.payload_piece_count * local.payload_chunk_bytes
-
-  node_payload_encoded = { for k, v in local.node_setup_scripts : k => base64gzip(v) }
-
-  # A constant, so it is known at plan even where the payload is not. Built in two
-  # steps because range() refuses to generate more than 1024 values, and of newlines
-  # specifically because a newline is the one non-alphabet character base64 decoding
-  # is guaranteed to skip -- spaces would make it fail.
-  payload_padding_unit = join("", [for _ in range(1000) : "\n"])
-  payload_padding      = join("", [for _ in range(ceil(local.payload_total_bytes / 1000)) : local.payload_padding_unit])
-
-  node_payload_padded = {
-    for k, enc in local.node_payload_encoded :
-    k => substr("${enc}${local.payload_padding}", 0, local.payload_total_bytes)
-  }
-
-  node_payload_piece_keys = toset(flatten([
-    for k, _ in local.node_setup_scripts : [
-      for i in range(local.payload_piece_count) : "${k}/${i + 1}"
-    ]
-  ]))
-
-  node_payload_pieces = {
-    for key in local.node_payload_piece_keys : key => substr(
-      local.node_payload_padded[split("/", key)[0]],
-      (tonumber(split("/", key)[1]) - 1) * local.payload_chunk_bytes,
-      local.payload_chunk_bytes,
-    )
-  }
-
-  user_data_stub = {
-    for k, enc in local.node_payload_encoded : k => templatefile("${path.module}/templates/user-data-stub.sh.tftpl", {
-      cluster_name = var.cluster_name
-      aws_region   = var.aws_region
-      payload_sha  = sha256(enc)
-      parameter_names = [
-        for i in range(local.payload_piece_count) :
-        aws_ssm_parameter.node_payload["${k}/${i + 1}"].name
-      ]
-    })
-  }
-
-  effective_user_data = {
-    for k, v in local.combined_user_data :
-    k => local.payload_in_ssm ? local.user_data_stub[k] : v
   }
 
   # Arch from AWS's own metadata — covers all present and future instance types.
@@ -272,62 +193,6 @@ resource "aws_ssm_parameter" "agent_token" {
   tags  = local.common_tags
 }
 
-# One node's boot payload, in free Standard-tier pieces, for the nodes whose payload
-# does not fit in user data. SecureString because this is a node's whole bootstrap
-# configuration: join tokens, the trusted CA, whatever registries.yaml carries.
-#
-# These outlive the boot they are named for on purpose. The node reads them again on
-# every rebuild, which is exactly when a cluster is least able to spare a missing
-# input, so deleting them after bootstrap would trade a free parameter for a cluster
-# that cannot be rebuilt from code.
-resource "aws_ssm_parameter" "node_payload" {
-  for_each = local.node_payload_piece_keys
-
-  name  = "/kube-compute/${var.cluster_name}/node-payload/${each.key}"
-  type  = "SecureString"
-  tier  = "Standard"
-  value = local.node_payload_pieces[each.key]
-  tags = merge(local.common_tags, {
-    Name = "kube-compute-${var.cluster_name}-payload-${replace(each.key, "/", "-")}"
-  })
-
-  lifecycle {
-    precondition {
-      # The payload has to fit the pieces reserved for it. Checked at apply, because
-      # that is the first moment its length is known, and long before the node that
-      # would otherwise fail to decode it.
-      condition     = nonsensitive(length(local.node_payload_encoded[split("/", each.key)[0]])) <= local.payload_total_bytes
-      error_message = "This node's boot payload does not fit the ${local.payload_piece_count} pieces reserved for it (${local.payload_total_bytes} base64 characters). Raise payload_piece_count in aws-control-plane; the pieces are free."
-    }
-  }
-}
-
-# Read access for the instance that boots from it, scoped to this cluster's payload
-# prefix. Created only when something is actually stored there.
-resource "aws_iam_role_policy" "node_payload_read" {
-  count = local.payload_in_ssm ? 1 : 0
-  name  = "node-payload-read"
-  role  = aws_iam_role.node.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/kube-compute/${var.cluster_name}/node-payload/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = "kms:Decrypt"
-        Resource = "*"
-        Condition = {
-          StringEquals = { "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com" }
-        }
-      },
-    ]
-  })
-}
-
 # All-protocol among members (not pinned to today's CNI ports) so it outlives a CNI
 # switch. Owned here rather than a separate module since aws-node-pool attaches to it
 # by real ID (vpc_security_group_ids) — a hard AWS API dependency, unlike Proxmox's
@@ -404,6 +269,7 @@ module "node_bootstrap" {
   registration_address            = local.registration_address
   extra_tls_sans                  = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   trusted_ca_pem                  = var.trusted_ca_pem
+  trusted_ca_in_image             = var.trusted_ca_in_image
   registry_mirror_url             = var.registry_mirror_url
   dns_servers                     = var.dns_servers
   gitops_platform_enabled         = var.gitops_platform_enabled
@@ -446,6 +312,7 @@ module "node_bootstrap_additional" {
   extra_tls_sans       = [for v in [local.registration_address, local.wildcard_name] : v if v != null]
   cluster_token        = random_password.server_token.result
   trusted_ca_pem       = var.trusted_ca_pem
+  trusted_ca_in_image  = var.trusted_ca_in_image
   registry_mirror_url  = var.registry_mirror_url
   dns_servers          = var.dns_servers
   cert_mode            = var.cert_mode
@@ -479,7 +346,7 @@ resource "aws_instance" "control_plane_additional" {
     tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}-root" })
   }
 
-  user_data_base64            = base64gzip(local.effective_user_data[each.key])
+  user_data_base64            = base64gzip(local.combined_user_data[each.key])
   user_data_replace_on_change = true
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cp-${tonumber(each.key) + 1}" })
@@ -702,7 +569,7 @@ resource "aws_instance" "control_plane" {
     tags                  = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-root" })
   }
 
-  user_data_base64            = base64gzip(local.effective_user_data["0"])
+  user_data_base64            = base64gzip(local.combined_user_data["0"])
   user_data_replace_on_change = true # disposable nodes: replace on bootstrap change
 
   tags = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}" })
@@ -744,8 +611,8 @@ resource "aws_instance" "control_plane" {
       # created the role, the security groups and the token parameter. The payload's
       # size is not knowable until apply -- it carries a generated token -- so this
       # runs at apply and names the input that fixes it.
-      condition     = var.bootstrap_payload_in_ssm || local.inline_user_data_bytes["0"] <= 16384
-      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). Set bootstrap_payload_in_ssm = true to deliver it through SSM Parameter Store instead."
+      condition     = local.inline_user_data_bytes["0"] <= 16384
+      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: check that the node image bakes the bootstrap program, set trusted_ca_in_image if it also bakes the corporate CA, and look at what the platform Application's Helm values are carrying."
     }
 
     precondition {

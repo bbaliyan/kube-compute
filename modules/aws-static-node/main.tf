@@ -145,6 +145,7 @@ module "node_bootstrap" {
   node_labels               = local.node_labels
   node_taints               = var.node_taints
   trusted_ca_pem            = var.trusted_ca_pem
+  trusted_ca_in_image       = var.trusted_ca_in_image
   registry_mirror_url       = var.registry_mirror_url
   dns_servers               = var.dns_servers
 }

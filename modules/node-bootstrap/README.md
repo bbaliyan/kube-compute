@@ -52,22 +52,51 @@ writes its own progress to `/var/log/kube-compute-bootstrap.log`; that log
 is the only place to watch bootstrap progress. There is no Terraform-visible
 signal, no provisioner output, and no `bootstrap_log_path`-style output.
 
-## Two renderings of one payload
+## The program is in the image; this module sends it values
 
-`cloud_init_user_data` is the primary output. `node_setup_script` is the same payload
-as a shell script: the hostname, the same `write_files` with the same modes and
-owners, then `bootstrap.sh`. Nothing chooses between them here — a caller does.
+`bootstrap.sh` is not rendered here and does not travel in the payload. It lives at
+`files/bootstrap.sh`, the node image bakes it at `/opt/kube-compute/bootstrap.sh`,
+and this module writes the two files it reads:
 
-It exists because a platform can cap what a node boots with. EC2 rejects user data
-over 16384 decoded bytes, and the answer AWS documents, and Cluster API's AWS
-provider implements, is to store the payload elsewhere and boot a stub that fetches
-it. A fetched cloud-config is the awkward half of that, because cloud-init consumes
-its config during boot and cannot be handed another one afterwards. A fetched script
-has no such problem. `aws-control-plane`'s `bootstrap_payload_in_ssm` is the one
-caller today; see its README.
+- **`node.env`** (0644) — configuration. Every key is always defined, empty where a
+  role does not use it, so the program runs under `set -u`.
+- **`secrets.env`** (0600) — the join tokens and the TSIG secret, unchanged.
 
-Both forms are sensitive and both end by running the same `bootstrap.sh`, so the node
-cannot tell which one delivered it.
+Plus one fragment, `rke2-config-static.yaml`, holding everything in `config.yaml`
+knowable before the node boots: labels, taints, extra SANs, the server flags,
+kubelet's resolv-conf pointer. Which blocks a role gets is decided here; the program
+appends the fragment to the few lines only the node itself can produce (its own IP,
+the fetched agent token, the rejoin-probe result).
+
+**Why.** The program is ~9.6 KB and almost entirely static, and it used to be
+rendered per node by `templatefile()` and shipped in `write_files`. A genesis node
+carried three copies of it: its own, plus one inside each worker group's cloud-init
+in a CAPI bundle. EC2 allows 16384 decoded bytes of user data for everything a node
+boots with, and on a real two-group cluster the payload reached 24627. Baking the
+program took that to 16051, and `trusted_ca_in_image` — the same move applied to a
+corporate CA, which also travelled once per node and once per worker group — took it
+to 12471. The image already does this with the Cilium and Argo CD renders, for the
+same reason on Proxmox, whose snippet cap is 1 MiB.
+
+This is deliberately not a per-platform side channel. An S3 object with IAM on AWS,
+a snippet on Proxmox, a Blob with a managed identity on Azure, guestinfo on vSphere
+would be four mechanisms for a cap only EC2 has. Shipping values instead of code is
+one mechanism everywhere.
+
+**The contract.** `node_env_contract` in `main.tf` and `BOOTSTRAP_CONTRACT` in
+`files/bootstrap.sh` are the two halves of one number. Bump both together when a key
+is added, removed, or changes meaning. Three things enforce it:
+
+- An output precondition here fails the plan if the two disagree in this repo.
+- A test asserts the program references every key `node.env` defines.
+- The program itself refuses to run against a `node.env` written for another
+  contract, so a stale image fails on its first line instead of half-configuring a
+  node.
+
+An image newer than the module needs no check: an older module ships its own
+rendered copy of the program in `write_files`, which overwrites the baked one. The
+failing direction is a module newer than the image, and `runcmd` names it — it tests
+the program exists before running it and says what to rebuild.
 
 ## Genesis-apply manifests (generic; cluster-autoscaler is the one caller today)
 

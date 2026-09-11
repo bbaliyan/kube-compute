@@ -15,6 +15,17 @@ jobs:
       - name: Format check
         run: tofu fmt -check -recursive
 
+      - name: Lint the baked node bootstrap program
+        run: |
+          # Baked into the node image and run by cloud-init, so a syntax error
+          # here is a cluster that does not boot rather than a failed plan.
+          bash -n modules/node-bootstrap/files/bootstrap.sh
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -S warning modules/node-bootstrap/files/bootstrap.sh
+          else
+            echo "shellcheck not in this image; syntax check only"
+          fi
+
       - name: Validate and test each module
         run: |
           for d in modules/*/; do

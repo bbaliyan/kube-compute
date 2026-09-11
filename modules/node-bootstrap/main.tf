@@ -300,35 +300,89 @@ locals {
     "  - \"resolv-conf=${local.kubelet_resolv_conf_path}\"",
   ])
 
-  bootstrap_sh = templatefile("${path.module}/templates/bootstrap.sh.tftpl", {
-    node_role                           = var.node_role
-    cni                                 = var.cni
-    cluster_name                        = var.cluster_name
-    iscsi_initiator_label               = coalesce(var.node_fqdn_label, var.node_name)
-    iscsi_initiator_enabled             = var.iscsi_initiator_enabled
-    registration_address                = var.registration_address != null ? var.registration_address : ""
-    trusted_ca_enabled                  = var.trusted_ca_pem != null
-    registry_mirror_url                 = var.registry_mirror_url != null ? var.registry_mirror_url : ""
-    dns_self_register_zone              = local.dns_self_register_zone
-    dns_self_register_record_name       = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
-    dns_self_register_ttl               = var.dns_self_register_ttl
-    dns_server_address                  = var.dns_server_address != null ? var.dns_server_address : ""
-    dns_server_port                     = var.dns_server_port
-    nsupdate_flags                      = local.nsupdate_flags
-    tsig_key_name                       = var.tsig_key_name != null ? var.tsig_key_name : ""
-    tsig_key_algorithm                  = var.tsig_key_algorithm
-    node_label_block                    = local.node_label_block
-    node_taint_block                    = local.node_taint_block
-    static_tls_san_block                = local.static_tls_san_block
-    server_static_block                 = local.server_static_block
-    kubelet_resolv_conf_block           = local.kubelet_resolv_conf_block
-    argocd_needed                       = local.render_argocd
-    platform_app_enabled                = local.platform_app_enabled
-    workloads_app_enabled               = local.workloads_app_enabled
-    cluster_autoscaler_crd_wait_enabled = local.effective_crd_wait_enabled
-    capi_install_baked                  = var.cluster_autoscaler_capi_install_baked
-    genesis_apply_manifest_paths        = local.genesis_apply_manifest_paths
-  })
+  # The one number both halves of the boot agree on. The bootstrap program is
+  # baked into the node image; this says which node.env contract it was written
+  # against, and the program refuses to run against any other. Bump both
+  # together whenever a key below is added, removed, or changes meaning.
+  node_env_contract = 1
+
+  # The program itself, read only so this module can check it declares the same
+  # contract number. It is never shipped from here -- the node image bakes it,
+  # and this repo is where the image's copy comes from. Reading it is what makes
+  # a bump on one side alone a failed plan instead of a failed boot.
+  bootstrap_program = file("${path.module}/files/bootstrap.sh")
+
+  # Configuration for the baked bootstrap program, as data. These used to be
+  # templatefile() arguments, which rendered a per-node copy of a ~9.6 KB script
+  # into user data -- and a genesis node carried three of them, its own plus one
+  # inside each worker group's cloud-init in a CAPI bundle. That is what exceeded
+  # EC2's 16384-byte decoded user-data limit. The program is the image's business
+  # now; only these values are this module's.
+  #
+  # Every key is always defined (empty where a role does not use it) so the
+  # program can run under `set -u`.
+  node_config_values = {
+    KUBE_COMPUTE_CONTRACT         = tostring(local.node_env_contract)
+    NODE_ROLE                     = var.node_role
+    CNI                           = var.cni
+    CLUSTER_NAME                  = var.cluster_name
+    REGISTRATION_ADDRESS          = var.registration_address != null ? var.registration_address : ""
+    TRUSTED_CA_ENABLED            = var.trusted_ca_pem != null ? "1" : "0"
+    REGISTRY_MIRROR_URL           = var.registry_mirror_url != null ? var.registry_mirror_url : ""
+    ISCSI_INITIATOR_ENABLED       = var.iscsi_initiator_enabled ? "1" : "0"
+    ISCSI_INITIATOR_LABEL         = coalesce(var.node_fqdn_label, var.node_name)
+    DNS_SELF_REGISTER_ZONE        = local.dns_self_register_zone
+    DNS_SELF_REGISTER_RECORD_NAME = var.dns_self_register_record_name != null ? var.dns_self_register_record_name : ""
+    DNS_SELF_REGISTER_TTL         = tostring(var.dns_self_register_ttl)
+    DNS_SERVER_ADDRESS            = var.dns_server_address != null ? var.dns_server_address : ""
+    DNS_SERVER_PORT               = tostring(var.dns_server_port)
+    NSUPDATE_FLAGS                = local.nsupdate_flags
+    TSIG_KEY_NAME                 = var.tsig_key_name != null ? var.tsig_key_name : ""
+    TSIG_KEY_ALGORITHM            = var.tsig_key_algorithm
+    ARGOCD_NEEDED                 = local.render_argocd ? "1" : "0"
+    PLATFORM_APP_ENABLED          = local.platform_app_enabled ? "1" : "0"
+    WORKLOADS_APP_ENABLED         = local.workloads_app_enabled ? "1" : "0"
+    CAPI_CRD_WAIT_ENABLED         = local.effective_crd_wait_enabled ? "1" : "0"
+    CAPI_INSTALL_BAKED            = var.cluster_autoscaler_capi_install_baked ? "1" : "0"
+    # Space-separated because the program word-splits it. Every path is composed
+    # by this module under /opt/kube-compute/manifests, so none can contain one.
+    GENESIS_APPLY_MANIFESTS = join(" ", local.genesis_apply_manifest_paths)
+  }
+
+  # Single-quoted with the POSIX '\'' escape, the same way secrets.env is, so
+  # any character in a value is safe to embed.
+  node_env = join("\n", concat(
+    [
+      "# SPDX-License-Identifier: Apache-2.0",
+      "# Written by kube-compute's node-bootstrap module, read by the bootstrap",
+      "# program baked into this image. Configuration only -- tokens and the TSIG",
+      "# secret live in secrets.env, which is 0600.",
+    ],
+    [for k in sort(keys(local.node_config_values)) : "${k}='${replace(local.node_config_values[k], "'", "'\\''")}'"],
+    [""],
+  ))
+
+  # Everything in config.yaml that is known before this node boots, in the order
+  # config.yaml needs it, as one fragment the program appends to the lines only
+  # the node itself can produce (its own IP, the fetched agent token, the
+  # rejoin-probe result). Assembled here rather than on the node: which blocks a
+  # role gets is this module's business, and it keeps the program free of any
+  # label, taint or SAN logic.
+  #
+  # Byte-for-byte what the heredocs in the old rendered script emitted, including
+  # the blank lines an empty block leaves behind -- inert in YAML, and worth more
+  # than the bytes as proof this change moved the payload without rewriting it.
+  config_static = var.node_role == "worker" ? join("\n", [
+    local.node_label_block,
+    local.node_taint_block,
+    local.kubelet_resolv_conf_block,
+    "",
+    ]) : join("\n", [
+    local.static_tls_san_block,
+    local.server_static_block,
+    local.kubelet_resolv_conf_block,
+    "",
+  ])
 
   # Every key is always defined (empty where a role doesn't use it) so
   # bootstrap.sh can run under `set -u` after sourcing it. Single-quoted with
@@ -365,14 +419,24 @@ locals {
         content     = base64encode(local.secrets_env)
       },
       {
-        path        = "/opt/kube-compute/bootstrap.sh"
-        permissions = "0700"
+        path        = "/opt/kube-compute/node.env"
+        permissions = "0644"
         owner       = "root:root"
         encoding    = "b64"
-        content     = base64encode(local.bootstrap_sh)
+        content     = base64encode(local.node_env)
+      },
+      {
+        # Always written, even when every block in it is empty: the program cats
+        # it unconditionally, and a conditional file would buy nothing but a
+        # missing-file branch on the node.
+        path        = "/opt/kube-compute/rke2-config-static.yaml"
+        permissions = "0600"
+        owner       = "root:root"
+        encoding    = "b64"
+        content     = base64encode(local.config_static)
       },
     ],
-    var.trusted_ca_pem == null ? [] : [{
+    var.trusted_ca_pem == null || var.trusted_ca_in_image ? [] : [{
       path        = "/etc/pki/ca-trust/source/anchors/trusted-ca.crt"
       permissions = "0644"
       owner       = "root:root"
@@ -454,7 +518,13 @@ locals {
       # just kubelet's.
       prefer_fqdn_over_hostname = false
       write_files               = local.write_files
-      runcmd                    = [["/opt/kube-compute/bootstrap.sh"]]
+      runcmd = [
+        # The program is baked into the image, not written above. An image
+        # predating it would otherwise fail with cloud-init's own bare "No such
+        # file or directory" against a path this module used to write itself.
+        ["/bin/sh", "-c", "test -x /opt/kube-compute/bootstrap.sh || { echo 'kube-compute: this image bakes no /opt/kube-compute/bootstrap.sh, which node.env contract ${local.node_env_contract} requires -- rebuild the node image from a ref that bakes it' >&2; exit 1; }"],
+        ["/opt/kube-compute/bootstrap.sh"],
+      ]
     },
     var.set_hostname ? { hostname = var.node_name } : {},
     var.set_hostname && var.cluster_fqdn_suffix != null && var.cluster_fqdn_suffix != "" ? {
@@ -464,48 +534,5 @@ locals {
 
   # "#cloud-config" is a YAML comment, so the whole document — including this
   # required first line — round-trips through any YAML parser unchanged.
-  # The same payload as cloud_init_user_data, rendered as a shell script instead of
-  # a cloud-config: the hostname, the same files with the same modes, then the same
-  # bootstrap command. Same end state, no cloud-init features used.
-  #
-  # It exists because a platform can cap what a node boots with -- EC2 rejects
-  # RunInstances over 16384 bytes of decoded user data -- and the answer to that is
-  # the one AWS documents and Cluster API's own AWS provider implements: put the
-  # payload somewhere the node can read and boot a stub that fetches it. A fetched
-  # cloud-config is the awkward half of that, because cloud-init consumes its config
-  # at boot and cannot be handed another one afterwards. A fetched script has no
-  # such problem, so the script form is what travels.
-  #
-  # Every file is base64 in a quoted heredoc, so no content can end the heredoc or
-  # be interpreted by the shell -- the same reason the cloud-config encodes them.
-  setup_script_file_blocks = flatten([
-    for f in local.write_files : concat(
-      [
-        "install -D -m ${f.permissions} -o ${split(":", f.owner)[0]} -g ${split(":", f.owner)[1]} /dev/null ${f.path}",
-        "base64 -d <<'KUBE_COMPUTE_FILE' ${try(f.encoding, "b64") == "gz+b64" ? "| gzip -dc " : ""}>${f.path}",
-      ],
-      [f.content],
-      ["KUBE_COMPUTE_FILE"],
-    )
-  ])
-
-  node_setup_script = join("\n", concat(
-    [
-      "#!/usr/bin/env bash",
-      "# SPDX-License-Identifier: Apache-2.0",
-      "# Rendered by kube-compute's node-bootstrap module. Equivalent to the",
-      "# cloud-config form of the same payload; see node_setup_script there.",
-      "set -euo pipefail",
-      "umask 022",
-    ],
-    # hostnamectl rather than cloud-init's hostname key. The cloud-config sets
-    # prefer_fqdn_over_hostname = false, so the short name is what the system ends
-    # up with either way, and nothing here manages /etc/hosts (cloud-init does not
-    # either -- manage_etc_hosts is deliberately unset).
-    var.set_hostname ? ["hostnamectl set-hostname ${var.node_name}"] : [],
-    local.setup_script_file_blocks,
-    ["/opt/kube-compute/bootstrap.sh", ""],
-  ))
-
   cloud_init_user_data = "#cloud-config\n${yamlencode(local.cloud_config)}"
 }

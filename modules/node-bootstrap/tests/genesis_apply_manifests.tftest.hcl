@@ -31,11 +31,11 @@ run "genesis_apply_manifests_empty_by_default_leaves_no_trace" {
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "capi-install.yaml") &&
-      !strcontains(base64decode(f.content), "machinedeployments.cluster.x-k8s.io")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='0'") &&
+      strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS=''")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "with cluster_autoscaler_crd_wait_enabled = false (the default), bootstrap.sh must carry no CAPI install/apply lines"
+    error_message = "with cluster_autoscaler_crd_wait_enabled = false (the default), the node must be told to wait for nothing and apply nothing"
   }
 }
 
@@ -81,12 +81,23 @@ run "genesis_apply_manifests_renders_entries_and_apply_steps" {
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "$KUBECTL apply -f \"$KC/manifests/capi-install.yaml\"") &&
-      strcontains(base64decode(f.content), "machinedeployments.cluster.x-k8s.io") &&
-      strcontains(base64decode(f.content), "$KUBECTL apply -f \"/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml\"")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='1'") &&
+      strcontains(base64decode(f.content), "CAPI_INSTALL_BAKED='1'") &&
+      strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS='/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml'")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "bootstrap.sh must apply the baked capi-install.yaml, wait for CAPI's CRDs, then apply each genesis_apply_manifests entry in order"
+    error_message = "the node must be told to install the baked capi-install.yaml, wait for CAPI's CRDs, and which manifests to apply in order"
+  }
+  # The other half of that contract, in the program rather than the payload.
+  assert {
+    condition = alltrue([
+      for line in [
+        "$KUBECTL apply -f \"$KC/manifests/capi-install.yaml\"",
+        "machinedeployments.cluster.x-k8s.io",
+        "for manifest_path in $GENESIS_APPLY_MANIFESTS",
+      ] : strcontains(local.bootstrap_program, line)
+    ])
+    error_message = "the baked program must still install capi-install.yaml, wait for CAPI's CRDs, and apply the listed manifests in order"
   }
 }
 
@@ -118,10 +129,11 @@ run "genesis_apply_manifests_worker_node_never_renders_the_genesis_apply" {
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "capi-install.yaml")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='0'") &&
+      strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS=''")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "a worker must never carry the CAPI-install/CRD-wait apply steps"
+    error_message = "a worker must never be handed the CAPI-install/CRD-wait work, even with genesis_apply_manifests populated"
   }
 }
 

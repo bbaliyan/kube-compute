@@ -26,6 +26,12 @@ variable "trusted_ca_pem" {
   sensitive   = true
 }
 
+variable "trusted_ca_in_image" {
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. Passed through to node-bootstrap, which then keeps the PEM out of user data while still using its value for containerd's TLS pin. It is a property of the image, so it applies to every node booting from it."
+  type        = bool
+  default     = false
+}
+
 variable "registry_mirror_url" {
   description = "Optional OCI registry mirror. Null = pull from upstream."
   type        = string

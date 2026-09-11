@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Guards the lean-cloud-init contract: the payload must be a single valid
-# cloud-config document, must set a distinct hostname, must carry the runtime
-# bootstrap script, and must gate the genesis-only Cilium/Argo CD apply steps
-# on node_role == "server-init". This module renders neither manifest itself
-# (kube-image bakes both onto the template) — no `helm`/network dependency
-# for these tests to mock.
+# cloud-config document, must set a distinct hostname, must invoke the baked
+# bootstrap program, and must carry the values that program needs -- node.env
+# for the flags that gate its genesis-only work, and one config.yaml fragment
+# for everything knowable before the node boots. This module renders neither
+# the Cilium nor the Argo CD manifest itself (the image bakes both) — no
+# `helm`/network dependency for these tests to mock.
+#
+# What the program DOES with a flag is not assertable here: the program is a
+# baked file, not part of the payload. These tests assert the values it is
+# handed, plus that it references every key node.env defines.
 
 variables {
   cluster_name = "test"
@@ -41,15 +46,40 @@ run "server_init_payload_is_valid_cloud_config" {
     error_message = "prefer_fqdn_over_hostname must be false — RHEL-family cloud-init otherwise silently applies fqdn as the real system hostname even though a distinct short hostname is also set, which then makes NetworkManager derive a DNS search-domain entry matching the cluster's own wildcard DNS zone"
   }
   assert {
-    condition     = yamldecode(output.cloud_init_user_data).runcmd == [["/opt/kube-compute/bootstrap.sh"]]
-    error_message = "the payload must invoke the bootstrap script from runcmd"
+    condition     = yamldecode(output.cloud_init_user_data).runcmd[1] == ["/opt/kube-compute/bootstrap.sh"]
+    error_message = "the payload must invoke the baked bootstrap program from runcmd"
+  }
+  assert {
+    condition     = strcontains(yamldecode(output.cloud_init_user_data).runcmd[0][2], "bakes no /opt/kube-compute/bootstrap.sh")
+    error_message = "runcmd must first check the program is actually baked into this image — without it an image predating the bake fails with cloud-init's own bare 'No such file or directory' against a path this module used to write itself"
+  }
+  assert {
+    condition = !contains(
+      [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
+      "/opt/kube-compute/bootstrap.sh"
+    )
+    error_message = "the program must NOT travel in user data -- shipping it is what put this payload over EC2's 16384-byte limit, once here and once more inside every worker group's cloud-init"
   }
   assert {
     condition = contains(
       [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/bootstrap.sh"
+      "/opt/kube-compute/node.env"
     )
-    error_message = "the payload must deliver the bootstrap script via write_files"
+    error_message = "the payload must deliver node.env — it is how every per-cluster value now reaches the baked program"
+  }
+  # The drift guard on a contract that is now split across two repos: a key
+  # renamed on either side of it silently stops reaching the node, and `set -u`
+  # in the program would only catch the half that goes missing there.
+  assert {
+    condition = alltrue([
+      for k in keys(local.node_config_values) :
+      strcontains(local.bootstrap_program, k)
+    ])
+    error_message = "every key node.env defines must be read by the baked program, or the two halves of the boot have drifted apart"
+  }
+  assert {
+    condition     = strcontains(local.bootstrap_program, "BOOTSTRAP_CONTRACT=${local.node_env_contract}")
+    error_message = "the baked program's contract number must match node_env_contract — the program refuses to run against any other, so a bump on one side alone fails every node's boot"
   }
   assert {
     condition = alltrue([
@@ -68,7 +98,7 @@ run "server_init_payload_is_valid_cloud_config" {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
       strcontains(base64decode(f.content), "\"*.test.example\"")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
     ])
     error_message = "a wildcard tls-san must be emitted quoted — '*' is YAML's alias indicator, so an unquoted entry is invalid YAML and RKE2 refuses to start"
   }
@@ -78,17 +108,18 @@ run "server_init_payload_is_valid_cloud_config" {
       strcontains(base64decode(f.content), "secrets-encryption: true") &&
       strcontains(base64decode(f.content), "disable-cloud-controller: true") &&
       strcontains(base64decode(f.content), "ingress-controller: none")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
     ])
     error_message = "the ported config.yaml must keep secrets-encryption, disable-cloud-controller, and ingress-controller: none"
   }
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "install -m 0600 \"$KC/manifests/cilium.yaml\"")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "CNI='cilium'") &&
+      strcontains(base64decode(f.content), "NODE_ROLE='server-init'")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "a server-init node with cni = cilium must install the (kube-image-baked) genesis Cilium manifest into RKE2's auto-deploy directory"
+    error_message = "node.env must carry the two values that gate the genesis Cilium apply: the CNI and the role"
   }
   assert {
     condition = contains(
@@ -101,7 +132,7 @@ run "server_init_payload_is_valid_cloud_config" {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
       !strcontains(base64decode(f.content), "kubelet-arg")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
     ])
     error_message = "with dns_servers unset, no kubelet-arg resolv-conf override should be emitted at all"
   }
@@ -143,7 +174,7 @@ run "dns_servers_set_gives_kubelet_a_search_domain_free_resolv_conf" {
       for f in yamldecode(output.cloud_init_user_data).write_files :
       strcontains(base64decode(f.content), "kubelet-arg:") &&
       strcontains(base64decode(f.content), "resolv-conf=/etc/rancher/rke2/resolv-conf-no-search.conf")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
     ])
     error_message = "config.yaml must point kubelet at the search-domain-free resolv-conf override"
   }
@@ -160,38 +191,33 @@ run "worker_payload_skips_genesis_only_content" {
     node_labels               = { "topology.kubernetes.io/zone" = "eu-west-1a" }
   }
 
+  # A worker is denied the genesis work by the flags it is given, not by a
+  # different program: the same baked file boots every role.
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "manifests/cilium.yaml")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "NODE_ROLE='worker'") &&
+      strcontains(base64decode(f.content), "ARGOCD_NEEDED='0'") &&
+      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='0'")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "a worker must not install the genesis Cilium manifest — Cilium is cluster-wide state applied once by genesis"
+    error_message = "a worker must be handed none of the genesis-only work: no Argo CD bootstrap, no CAPI wait, and a role the program gates the Cilium apply on"
   }
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "manifests/00-argocd.yaml")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "REGISTRATION_ADDRESS='10.0.0.10'")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "a worker must not apply the Argo CD manifest"
+    error_message = "a worker must be told where to join — the program builds its server URL from this"
   }
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "server: https://10.0.0.10:9345") &&
       strcontains(base64decode(f.content), "topology.kubernetes.io/zone=eu-west-1a")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
     ])
-    error_message = "a worker's config.yaml render must carry its join URL and its node labels"
-  }
-  assert {
-    condition = anytrue([
-      for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "systemctl enable --now rke2-agent.service")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
-    ])
-    error_message = "a worker must start rke2-agent, never rke2-server — one shared image installs both units and the role picks at launch"
+    error_message = "a worker's config.yaml fragment must carry its node labels"
   }
 }
 
@@ -205,21 +231,20 @@ run "server_join_uses_the_staggered_self_healing_join" {
     cluster_token        = "SUPERSECRETTOKEN123"
   }
 
+  # The staggered self-healing join loop lives in the baked program, gated on
+  # this one value; what a joining server must not inherit is genesis work.
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "join-race exhausted after 6 attempts")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
+      strcontains(base64decode(f.content), "NODE_ROLE='server-join'") &&
+      strcontains(base64decode(f.content), "ARGOCD_NEEDED='0'")
+      if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "a server-join node must keep the self-healing join retry loop — etcd admits one non-voting learner at a time, so a concurrent join must wipe local server state and retry"
+    error_message = "a joining server must be marked as one — the program keys its staggered self-healing join, and its skip of the genesis Cilium and Argo CD applies, on the role"
   }
   assert {
-    condition = anytrue([
-      for f in yamldecode(output.cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "manifests/cilium.yaml")
-      if f.path == "/opt/kube-compute/bootstrap.sh"
-    ])
-    error_message = "a joining server must not re-apply the genesis Cilium manifest"
+    condition     = strcontains(local.bootstrap_program, "join-race exhausted after 6 attempts")
+    error_message = "the baked program must keep the self-healing join retry loop — etcd admits one non-voting learner at a time, so a concurrent join must wipe local server state and retry"
   }
 }
 

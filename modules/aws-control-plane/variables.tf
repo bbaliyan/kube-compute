@@ -17,6 +17,12 @@ variable "trusted_ca_pem" {
   sensitive   = true
 }
 
+variable "trusted_ca_in_image" {
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. Passed through to node-bootstrap, which then keeps the PEM out of user data while still using its value for containerd's TLS pin and the platform Application's trustedCaPemB64 parameter. See node-bootstrap's own description: a corporate CA otherwise travels once for this node and again inside every worker group's cloud-init, against EC2's 16384-byte limit."
+  type        = bool
+  default     = false
+}
+
 variable "registry_mirror_url" {
   description = "Optional OCI registry mirror (Nexus/Harbor/Artifactory/any). Null = pull from upstream."
   type        = string
@@ -294,12 +300,6 @@ variable "extra_tags" {
 }
 
 # ---- Genesis-time manifest application (Cluster API and anything like it) ----
-variable "bootstrap_payload_in_ssm" {
-  description = "Deliver each node's boot payload through SSM Parameter Store instead of user data: the payload is stored in free Standard-tier SecureString parameters, in 4000-byte pieces, and user data becomes a stub that fetches, reassembles and runs it under the instance's own role. Set this when the payload does not fit -- EC2 rejects RunInstances over 16384 decoded bytes, which a control plane carrying a platform Argo CD Application plus a CAPI bundle does reach. It is what AWS documents for this limit and what Cluster API's AWS provider does (secureSecretsBackend). Default false keeps user data byte-identical to what existing instances already have; turning it on changes user data, which replaces the instance."
-  type        = bool
-  default     = false
-}
-
 variable "genesis_apply_manifests" {
   description = "Ordered {path, content} manifests written under /opt/kube-compute/manifests/ on the genesis node and applied by bootstrap.sh after the platform Application. This module does not interpret the content; the composing module renders it. Empty list (the default) applies nothing extra."
   type = list(object({

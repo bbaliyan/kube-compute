@@ -5,7 +5,7 @@
 # (add and delete alike) rejected with "NOTIMP", while the byte-for-byte
 # equivalent operation via nsupdate succeeded every time, including
 # node-bootstrap's own genesis self-registration (which already shells out to
-# nsupdate for the same reason — see that module's bootstrap.sh.tftpl). Root
+# nsupdate for the same reason — see that module's files/bootstrap.sh). Root
 # cause not pinned down beyond "something in that provider's RFC2136 wire
 # encoding" — not worth chasing further when nsupdate is proven reliable.
 # Requires nsupdate (bind-utils/dnsutils) on the machine running `tofu apply`.

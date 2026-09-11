@@ -57,11 +57,10 @@ run "worker_pool_wiring" {
       for k, snippet in proxmox_virtual_environment_file.node_init :
       alltrue([
         for f in yamldecode(snippet.source_raw[0].data).write_files :
-        !strcontains(base64decode(f.content), "aws_ssm") && !strcontains(base64decode(f.content), "amazon.aws")
-        if f.path == "/opt/kube-compute/bootstrap.sh"
+        !strcontains(base64decode(f.content), "aws ssm") && !strcontains(base64decode(f.content), "amazon.aws")
       ])
     ])
-    error_message = "a Proxmox worker's bootstrap payload must never reference an AWS SSM transport"
+    error_message = "no part of a Proxmox worker's payload may reference an AWS SSM transport — there is no secret store here, so the token is embedded verbatim in an echo"
   }
   assert {
     condition = length(distinct([
