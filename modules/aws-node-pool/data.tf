@@ -30,6 +30,16 @@ data "aws_ami" "by_name" {
   }
 }
 
+# The image's own root device name, which a launch template must map to resize the root disk.
+data "aws_ami" "selected" {
+  for_each = var.instance_type_max_sizes
+
+  filter {
+    name   = "image-id"
+    values = [local.effective_ami_id[each.key]]
+  }
+}
+
 # Owner 764336703387 is the AlmaLinux OS Foundation.
 data "aws_ami" "almalinux10" {
   for_each = var.os_image_ami_id == null && var.os_image_name == null ? var.instance_type_max_sizes : {}

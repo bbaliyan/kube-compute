@@ -3,6 +3,9 @@ mock_provider "aws" {
   mock_data "aws_ec2_instance_type" {
     defaults = { supported_architectures = ["x86_64"] }
   }
+  mock_data "aws_ami" {
+    defaults = { id = "ami-0123456789abcdef0", root_device_name = "/dev/sda1" }
+  }
   # The Auto Scaling group validates the launch template id's lt- shape.
   mock_resource "aws_launch_template" {
     defaults = { id = "lt-0123456789abcdef0" }
@@ -38,6 +41,10 @@ run "each_instance_type_is_its_own_group_scaling_from_zero" {
   assert {
     condition     = aws_launch_template.node["t3a.xlarge"].instance_type == "t3a.xlarge"
     error_message = "a group's launch template must launch its own instance type"
+  }
+  assert {
+    condition     = alltrue([for lt in aws_launch_template.node : lt.block_device_mappings[0].device_name == "/dev/sda1"])
+    error_message = "the root volume must be mapped to the image's own root device, or AWS attaches it as a second disk and the root keeps the image's size"
   }
   assert {
     condition     = alltrue([for g in aws_autoscaling_group.node : g.vpc_zone_identifier == toset(["subnet-worker-a"])])

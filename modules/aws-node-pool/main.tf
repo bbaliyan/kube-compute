@@ -175,7 +175,7 @@ resource "aws_launch_template" "node" {
   }
 
   block_device_mappings {
-    device_name = "/dev/xvda"
+    device_name = data.aws_ami.selected[each.key].root_device_name
     ebs {
       volume_type           = var.root_volume_type
       volume_size           = var.root_volume_size_gb
