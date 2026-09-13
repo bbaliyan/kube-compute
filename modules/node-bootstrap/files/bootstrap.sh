@@ -41,6 +41,25 @@ fi
 
 KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
 
+# Polls for something the platform Application installs. On a dedicated control
+# plane that first needs a worker to join and run Argo CD, hence the long ceiling.
+PLATFORM_WAIT_SECONDS=1800
+wait_until() {
+  local what=$1 deadline=$((SECONDS + PLATFORM_WAIT_SECONDS))
+  shift
+  until "$@" >/dev/null 2>&1; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "kube-compute: gave up after ${PLATFORM_WAIT_SECONDS}s waiting for $what" >&2
+      return 1
+    fi
+    sleep 5
+  done
+}
+
+cert_manager_webhook_has_endpoints() {
+  [ -n "$($KUBECTL get endpoints cert-manager-webhook -n cert-manager -o jsonpath='{.subsets}' 2>/dev/null)" ]
+}
+
 # Own IP, discovered on the node itself — the same probe the Ansible role's
 # dns-self-register task used. RKE2 needs it for node-ip and (on a server) as
 # the first tls-san entry.
@@ -368,30 +387,8 @@ if [ "$CAPI_CRD_WAIT_ENABLED" = "1" ]; then
   #      exist. This script does not interpret GENESIS_APPLY_MANIFESTS'
   #      content — the composing module decides what goes in the list; this is
   #      just the ordered apply. ----
-  CERT_MANAGER_CRDS_READY=0
-  for attempt in $(seq 1 90); do
-    if $KUBECTL get crd certificates.cert-manager.io >/dev/null 2>&1 && $KUBECTL get crd issuers.cert-manager.io >/dev/null 2>&1; then
-      CERT_MANAGER_CRDS_READY=1
-      break
-    fi
-    sleep 5
-  done
-  if [ "$CERT_MANAGER_CRDS_READY" -ne 1 ]; then
-    echo "kube-compute: cert-manager CRDs did not appear within ~450s of applying the platform Application — capi-install.yaml requires them and cannot proceed" >&2
-    exit 1
-  fi
-  CERT_MANAGER_WEBHOOK_READY=0
-  for attempt in $(seq 1 90); do
-    if [ -n "$($KUBECTL get endpoints cert-manager-webhook -n cert-manager -o jsonpath='{.subsets}' 2>/dev/null)" ]; then
-      CERT_MANAGER_WEBHOOK_READY=1
-      break
-    fi
-    sleep 5
-  done
-  if [ "$CERT_MANAGER_WEBHOOK_READY" -ne 1 ]; then
-    echo "kube-compute: cert-manager-webhook had no endpoints within ~450s of its CRDs appearing — capi-install.yaml's Issuer/Certificate objects would fail admission and cannot proceed" >&2
-    exit 1
-  fi
+  wait_until "cert-manager CRDs" $KUBECTL get crd certificates.cert-manager.io issuers.cert-manager.io || exit 1
+  wait_until "cert-manager-webhook endpoints" cert_manager_webhook_has_endpoints || exit 1
   if [ "$CAPI_INSTALL_BAKED" = "1" ]; then
     $KUBECTL apply -f "$KC/manifests/capi-install.yaml"
     # Wait for CAPI's core CRDs to be Established before applying anything that
@@ -409,18 +406,7 @@ if [ "$CAPI_CRD_WAIT_ENABLED" = "1" ]; then
     # Argo CD Application, so this waits rather than installs. The wait is far
     # longer than the baked case because Argo CD has to sync the operator, the
     # operator has to reconcile the providers, and every one of those pulls images.
-    CAPI_CRDS_READY=0
-    for attempt in $(seq 1 180); do
-      if $KUBECTL get crd machinedeployments.cluster.x-k8s.io >/dev/null 2>&1; then
-        CAPI_CRDS_READY=1
-        break
-      fi
-      sleep 5
-    done
-    if [ "$CAPI_CRDS_READY" -ne 1 ]; then
-      echo "kube-compute: CAPI CRDs did not appear within ~900s — the platform Application must have clusterApiEnabled set, and the MachineDeployment bundle below cannot be applied without them" >&2
-      exit 1
-    fi
+    wait_until "Cluster API CRDs" $KUBECTL get crd machinedeployments.cluster.x-k8s.io || exit 1
   fi
 fi
 
@@ -432,7 +418,7 @@ fi
 # Unquoted on purpose: this is a space-separated list that must word-split.
 # shellcheck disable=SC2086
 for manifest_path in $GENESIS_APPLY_MANIFESTS; do
-  $KUBECTL apply -f "$manifest_path"
+  wait_until "$manifest_path to apply" $KUBECTL apply -f "$manifest_path" || { $KUBECTL apply -f "$manifest_path"; exit 1; }
 done
 
 echo "kube-compute: bootstrap complete $(date -Is)"

@@ -32,7 +32,8 @@
 # 3. iamInstanceProfile must be a profile NAME, not an ARN, and must already
 #    exist -- CAPA creates none when the cluster is externally managed.
 # 4. IAM on the CONTROLLER, not the machine. CAPA authenticates through the
-#    control-plane node's instance profile, so that role needs RunInstances,
+#    instance profile of the node it runs on (platform_node_iam_role_name), so
+#    that role needs RunInstances,
 #    TerminateInstances, Describe*, CreateTags and PassRole for the worker
 #    profile. The consumer repo attaches that policy.
 apiVersion: cluster.x-k8s.io/v1beta1

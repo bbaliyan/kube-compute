@@ -120,13 +120,23 @@ output "all_instance_ids" {
   value       = local.all_instance_ids
 }
 
+output "platform_node_iam_role_name" {
+  description = "IAM role of the nodes running the platform stack: platform_node_group's, or the control plane's when none is set. Policies for platform controllers that authenticate as their node (Cluster API, external-dns, External Secrets) belong on it."
+  value       = local.platform_node_iam_role_name
+}
+
+output "workload_node_iam_role_names" {
+  description = "IAM roles of every node a workload pod can be scheduled on. Policies a workload authenticates with through its node belong on each of them."
+  value       = local.workload_node_iam_role_names
+}
+
 output "cluster_autoscaler_enabled" {
   description = "Whether the Cluster API autoscaling path is on for this cluster."
   value       = var.cluster_autoscaler_enabled
 }
 
 output "cluster_autoscaler_worker_iam_role_name" {
-  description = "IAM role attached to CAPI-provisioned workers, or null when autoscaling is off. Reference it to attach additional policies. Note the CAPA controller itself authenticates as the CONTROL-PLANE node instead, so the policy letting it create instances belongs on node_iam_role_name."
+  description = "IAM role attached to CAPI-provisioned workers, or null when autoscaling is off. Reference it to attach additional policies. The CAPA controller itself authenticates as the node it runs on, so the policy letting it create instances belongs on platform_node_iam_role_name."
   value       = try(aws_iam_role.autoscaler_worker[0].name, null)
 }
 

@@ -78,6 +78,11 @@ run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
   }
 
   assert {
+    condition     = output.static_nodes["platform"].node_labels["kube-compute.io/ingress"] == "true" && !contains(keys(output.static_nodes["dedicated"].node_labels), "kube-compute.io/ingress")
+    error_message = "a group with the ingress security group must carry the ingress label external-dns selects on, and no other group may"
+  }
+
+  assert {
     condition     = output.static_nodes["dedicated"].node_labels["kube-compute.io/node-group"] == "dedicated"
     error_message = "the group label must be derived from the map key, so a nodeSelector needs no separately-passed label"
   }
@@ -90,4 +95,41 @@ run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
     ])
     error_message = "every group must report a resolved architecture, which is what its AMI lookup filtered on"
   }
+}
+
+run "platform_node_group_pins_the_platform_and_carries_its_iam" {
+  command = apply
+
+  variables {
+    cluster_type        = "dedicated_control_plane"
+    platform_node_group = "platform"
+    static_nodes = {
+      platform = {
+        instance_type = "t3a.xlarge"
+      }
+    }
+  }
+
+  assert {
+    condition     = local.platform_helm_values_object.platformNodeSelector["kube-compute.io/node-group"] == "platform"
+    error_message = "the platform Application must be told to pin its components to the platform group's label"
+  }
+  assert {
+    condition     = output.platform_node_iam_role_name == module.static_nodes["platform"].node_iam_role_name
+    error_message = "platform controllers authenticate as the platform node, so their policies must target its role"
+  }
+  assert {
+    condition     = output.workload_node_iam_role_names == [module.static_nodes["platform"].node_iam_role_name]
+    error_message = "a dedicated control plane runs no workloads, so its role must not be among the workload roles"
+  }
+}
+
+run "platform_node_group_must_name_a_static_group" {
+  command = plan
+
+  variables {
+    platform_node_group = "missing"
+  }
+
+  expect_failures = [var.platform_node_group]
 }

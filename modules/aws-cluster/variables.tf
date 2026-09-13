@@ -318,6 +318,17 @@ variable "static_nodes" {
   default = {}
 }
 
+variable "platform_node_group" {
+  description = "static_nodes key of the group that runs the platform stack. The platform Application pins its components to that group's node-group label, and platform_node_iam_role_name resolves to its role. Null leaves platform placement to the scheduler and platform IAM on the control plane."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.platform_node_group == null ? true : contains(keys(var.static_nodes), var.platform_node_group)
+    error_message = "platform_node_group must name a static_nodes group."
+  }
+}
+
 # ---- Cluster API autoscaling (Phase 2) ----
 variable "cluster_autoscaler_enabled" {
   description = "Genesis-apply a CAPI/CAPA MachineDeployment for this cluster and turn on kube-platform's cluster-autoscaler and Cluster API Applications. False (the default) means none of it exists. Independent of static_nodes: a cluster can have named nodes for its fixed roles and an autoscaled group for elastic capacity at the same time."

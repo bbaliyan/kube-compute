@@ -7,6 +7,25 @@ locals {
     [for name, ref in module.control_plane.control_plane_node_refs : ref.instance_id],
     flatten([for name, group in module.static_nodes : group.instance_ids]),
   )
+
+  platform_node_iam_role_name = coalesce(
+    one([for name, group in module.static_nodes : group.node_iam_role_name if name == var.platform_node_group]),
+    module.control_plane.node_iam_role_name,
+  )
+
+  workload_node_iam_role_names = concat(
+    var.cluster_type == "dedicated_control_plane" ? [] : [module.control_plane.node_iam_role_name],
+    [for group in module.static_nodes : group.node_iam_role_name],
+    aws_iam_role.autoscaler_worker[*].name,
+  )
+
+  platform_helm_values_object = merge(
+    var.platform_helm_values_object,
+    {
+      for group in var.platform_node_group == null ? [] : [var.platform_node_group] :
+      "platformNodeSelector" => { "kube-compute.io/node-group" = group }
+    },
+  )
 }
 
 module "control_plane" {
@@ -29,7 +48,7 @@ module "control_plane" {
   cni                               = var.cni
   cert_mode                         = var.cert_mode
   platform_extra_helm_parameters    = local.autoscaler_platform_helm_parameters
-  platform_helm_values_object       = var.platform_helm_values_object
+  platform_helm_values_object       = local.platform_helm_values_object
   extra_tags                        = var.extra_tags
   aws_region                        = var.aws_region
   control_plane_count               = var.control_plane_count
@@ -112,7 +131,7 @@ module "static_nodes" {
   os_image_name         = each.value.os_image_name != null ? each.value.os_image_name : var.os_image_name
   root_volume_size_gb   = each.value.root_volume_size_gb
   root_volume_type      = each.value.root_volume_type
-  node_labels           = each.value.node_labels
+  node_labels           = merge(each.value.node_labels, each.value.attach_ingress_sg ? { "kube-compute.io/ingress" = "true" } : {})
   node_taints           = each.value.node_taints
   attach_ebs_csi_policy = each.value.attach_ebs_csi_policy
 
