@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Common inputs (pass through to node-bootstrap) ----
 variable "cluster_name" {
-  description = "Cluster identity this pool joins. Must match the control plane's cluster_name. Lowercase, starts with a letter."
+  description = "Cluster identity this group joins. Must match the control plane's cluster_name."
   type        = string
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_name))
@@ -10,87 +9,94 @@ variable "cluster_name" {
   }
 }
 
+variable "group_name" {
+  description = "Names the group, e.g. \"workers-large\". Used in the Auto Scaling group and IAM names and as the kube-compute.io/node-group label."
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,20}$", var.group_name))
+    error_message = "group_name must be lowercase alphanumeric/hyphens, start with a letter, max 21 chars."
+  }
+}
+
 variable "trusted_ca_pem" {
-  description = "Optional PEM cert(s) added to the worker's OS trust store. Null = none. Sensitive."
+  description = "Optional PEM cert(s) added to each node's OS trust store. Null = none. Sensitive."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "trusted_ca_in_image" {
-  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. Passed through to node-bootstrap, which then keeps the PEM out of user data while still using its value for containerd's TLS pin. It is a property of the image, so it applies to every node booting from it."
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt, so it stays out of user data."
   type        = bool
   default     = false
 }
 
 variable "registry_mirror_url" {
-  description = "Optional OCI registry mirror (Nexus/Harbor/Artifactory/any). Null = pull from upstream."
+  description = "Optional OCI registry mirror. Null = pull from upstream."
   type        = string
   default     = null
 }
 
 variable "dns_servers" {
-  description = "Upstream DNS resolver IPs, passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf — defense in depth, same purpose and default as aws-control-plane's own dns_servers variable. Set it to the same value passed there whenever this cluster's control plane has one (a wildcard cluster DNS record collides with every node's pods identically, not just the control plane's)."
+  description = "Upstream DNS resolver IPs for a search-domain-free kubelet resolv-conf. Pass the same value the control plane got."
   type        = list(string)
   default     = null
 }
 
-# ---- AWS-specific inputs ----
 variable "aws_region" {
-  description = "AWS region the pool runs in. Must match the control plane's region."
+  description = "AWS region the group runs in. Must match the control plane's region."
   type        = string
 }
 
 variable "registration_address" {
-  description = "The control plane's registration_address output. Workers join via config.yaml's server: https://<this>:9345 (RKE2's supervisor/join port, distinct from the 6443 Kubernetes API port)."
+  description = "The control plane's registration_address output. Nodes join via https://<this>:9345."
   type        = string
 }
 
 variable "agent_token_ssm_parameter" {
-  description = "This cluster's aws-control-plane agent_token_ssm_parameter output. This module's IAM role is scoped to read only this one SSM parameter."
+  description = "The control plane's agent_token_ssm_parameter output. The group's IAM role can read only this parameter."
   type        = string
 }
 
 variable "cluster_security_group_id" {
-  description = "This cluster's aws-control-plane cluster_security_group_id output. Attached to every worker instance for east-west cluster access; this module owns no other ingress security group in this slice (workers accept no traffic from outside the cluster yet)."
+  description = "The control plane's cluster_security_group_id output, for east-west traffic. Nodes in this group take no external traffic."
   type        = string
 }
 
 variable "subnet_id" {
-  description = "Subnet the pool launches into. Pools are AZ-pinned by design: one pool = one subnet = one availability zone. The module never creates network fabric."
+  description = "Subnet the group launches into. Pass the control plane's subnet_id output: an EBS volume cannot cross availability zones, so a node in another zone cannot mount the data it was created for."
   type        = string
 }
 
-variable "desired_count" {
-  description = "Fixed pool size. min_size = max_size = desired_capacity = this value — a fixed pool is the safe default for stateful workloads. Elastic (min<max + autoscaler) pools are a future, opt-in option, not this variable."
+variable "max_size" {
+  description = "Most nodes cluster-autoscaler may run in this group. The group starts at zero and returns to zero when idle."
   type        = number
-  default     = 2
   validation {
-    condition     = var.desired_count >= 1
-    error_message = "desired_count must be at least 1."
+    condition     = var.max_size >= 1
+    error_message = "max_size must be at least 1."
   }
 }
 
 variable "instance_type" {
-  description = "EC2 instance type (bundles vCPU + memory) for every worker in this pool. CPU arch (arm64/x86_64) is derived from the family via AWS's own instance-type metadata."
+  description = "EC2 instance type for every node. The architecture, and so the image, follows from it."
   type        = string
   default     = "m7g.medium"
 }
 
 variable "os_image_ami_id" {
-  description = "AMI ID for the workers. Tested with AlmaLinux 10 (RHEL-family — cloud-init uses dnf and update-ca-trust). Other RHEL-family images (Rocky, AL2023) may work but are untested — no compatibility guarantee. Null = latest AlmaLinux 10 for the derived architecture via data lookup."
+  description = "AMI ID. Null = resolve os_image_name, or the latest AlmaLinux 10, for the instance type's architecture."
   type        = string
   default     = null
 }
 
 variable "os_image_name" {
-  description = "AMI name for the workers, e.g. kube-image's self-descriptive build name. Alternative to os_image_ami_id — the module resolves the ID via a data lookup scoped to this account's own AMIs and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
+  description = "AMI name, e.g. kube-image's build name, resolved against this account's own AMIs and the instance type's architecture. Accepts EC2 Name-filter wildcards. Ignored when os_image_ami_id is set."
   type        = string
   default     = null
 }
 
 variable "root_volume_size_gb" {
-  description = "Root EBS volume size (GB) for every worker."
+  description = "Root EBS volume size (GB)."
   type        = number
   default     = 20
 }
@@ -101,14 +107,24 @@ variable "root_volume_type" {
   default     = "gp3"
 }
 
-variable "extra_node_labels" {
-  description = "Additional node-label: entries beyond the automatic AZ label (topology.kubernetes.io/zone) this module always sets from the pool's own subnet."
+variable "node_labels" {
+  description = "Node labels beyond the zone and node-group labels this module always sets."
   type        = map(string)
   default     = {}
 }
 
+variable "node_taints" {
+  description = "Node taints, each \"key=value:Effect\". A pod needs a matching toleration to land here."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for t in var.node_taints : can(regex("^[^=:]+=[^=:]*:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
+    error_message = "each node_taints entry must be key=value:Effect, where Effect is NoSchedule, PreferNoSchedule, or NoExecute."
+  }
+}
+
 variable "extra_tags" {
-  description = "Additional tags applied to every AWS resource this module creates (worker instances, IAM role, SSM staging bucket)."
+  description = "Additional tags applied to every resource this module creates and every instance the group launches."
   type        = map(string)
   default     = {}
 }

@@ -29,8 +29,7 @@ your own bake. Mirrors `proxmox-control-plane`'s `proxmox_template_vm_id` conven
 
 ### Keeping user data under EC2's limit
 
-EC2 rejects `RunInstances` when decoded user data exceeds 16384 bytes, and an autoscaled
-genesis node carries one worker cloud-init per group inside its own. Static content
+EC2 rejects `RunInstances` when decoded user data exceeds 16384 bytes. Static content
 therefore stays out of the payload: the bootstrap program is baked into the node image,
 and with `trusted_ca_in_image` a CA is too. A precondition on the instance names those
 levers when the limit is exceeded.

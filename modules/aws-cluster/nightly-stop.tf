@@ -2,24 +2,7 @@
 
 locals {
   nightly_stop_minute_of_day = try(tonumber(split(":", var.nightly_stop.time)[0]) * 60 + tonumber(split(":", var.nightly_stop.time)[1]), 0)
-  nightly_scale_down_minute  = (local.nightly_stop_minute_of_day + 1440 - 5) % 1440
-  nightly_resume_minute      = (local.nightly_stop_minute_of_day + 30) % 1440
-
-  nightly_stop_platform_parameters = var.nightly_stop != null && var.cluster_autoscaler_enabled ? {
-    nightScaleDownEnabled  = "true"
-    nightScaleDownSchedule = format("%d %d * * *", local.nightly_scale_down_minute % 60, floor(local.nightly_scale_down_minute / 60))
-    nightResumeSchedule    = format("%d %d * * *", local.nightly_resume_minute % 60, floor(local.nightly_resume_minute / 60))
-    nightScaleDownTimeZone = try(var.nightly_stop.timezone, "")
-  } : {}
-}
-
-resource "terraform_data" "night_scale_down_is_derived" {
-  lifecycle {
-    precondition {
-      condition     = alltrue([for key in keys(var.platform_extra_helm_parameters) : !startswith(key, "nightScaleDown") && key != "nightResumeSchedule"])
-      error_message = "Set nightly_stop instead of the night scale-down platform parameters: the scale-down, the resume and the stop are derived from it together."
-    }
-  }
+  nightly_stop_expression    = format("cron(%d %d * * ? *)", local.nightly_stop_minute_of_day % 60, floor(local.nightly_stop_minute_of_day / 60))
 }
 
 resource "aws_iam_role" "nightly_stop" {
@@ -45,11 +28,18 @@ resource "aws_iam_role_policy" "nightly_stop" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "ec2:StopInstances"
-      Resource = [for id in local.all_instance_ids : "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:instance/${id}"]
-    }]
+    Statement = concat(
+      [{
+        Effect   = "Allow"
+        Action   = "ec2:StopInstances"
+        Resource = [for id in local.all_instance_ids : "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:instance/${id}"]
+      }],
+      local.autoscaling_enabled ? [{
+        Effect   = "Allow"
+        Action   = "autoscaling:SetDesiredCapacity"
+        Resource = [for group in module.autoscaled_nodes : group.autoscaling_group_arn]
+      }] : [],
+    )
   })
 }
 
@@ -61,7 +51,7 @@ resource "aws_scheduler_schedule" "nightly_stop" {
     mode = "OFF"
   }
 
-  schedule_expression          = format("cron(%d %d * * ? *)", local.nightly_stop_minute_of_day % 60, floor(local.nightly_stop_minute_of_day / 60))
+  schedule_expression          = local.nightly_stop_expression
   schedule_expression_timezone = var.nightly_stop.timezone
 
   target {
@@ -70,6 +60,30 @@ resource "aws_scheduler_schedule" "nightly_stop" {
 
     input = jsonencode({
       InstanceIds = local.all_instance_ids
+    })
+  }
+}
+
+# Autoscaled nodes cannot be stopped, only removed. With the control plane stopping at
+# the same moment, nothing is left running to scale them back up.
+resource "aws_scheduler_schedule" "nightly_scale_to_zero" {
+  for_each = var.nightly_stop == null ? {} : var.autoscaled_nodes
+  name     = "${var.cluster_name}-${each.key}-to-zero"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = local.nightly_stop_expression
+  schedule_expression_timezone = var.nightly_stop.timezone
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:autoscaling:setDesiredCapacity"
+    role_arn = aws_iam_role.nightly_stop[0].arn
+
+    input = jsonencode({
+      AutoScalingGroupName = module.autoscaled_nodes[each.key].autoscaling_group_name
+      DesiredCapacity      = 0
     })
   }
 }

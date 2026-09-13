@@ -221,6 +221,42 @@ run "worker_payload_skips_genesis_only_content" {
   }
 }
 
+run "aws_provider_id_is_set_before_rke2_starts" {
+  command = plan
+
+  variables {
+    node_role                 = "worker"
+    node_name                 = "test-worker-0"
+    registration_address      = "10.0.0.10"
+    agent_token_fetch_command = "echo tok"
+    aws_provider_id           = true
+  }
+
+  assert {
+    condition = (
+      strcontains(yamldecode(output.cloud_init_user_data).runcmd[0][2], "provider-id=aws:///%s/%s") &&
+      yamldecode(output.cloud_init_user_data).runcmd[2] == ["/opt/kube-compute/bootstrap.sh"]
+    )
+    error_message = "the providerID drop-in must be written before the bootstrap program starts RKE2, or the node registers without one and cluster-autoscaler cannot match it to its instance"
+  }
+}
+
+run "no_aws_provider_id_by_default" {
+  command = plan
+
+  variables {
+    node_role                 = "worker"
+    node_name                 = "test-worker-0"
+    registration_address      = "10.0.0.10"
+    agent_token_fetch_command = "echo tok"
+  }
+
+  assert {
+    condition     = length(yamldecode(output.cloud_init_user_data).runcmd) == 2
+    error_message = "without aws_provider_id the payload must be unchanged, or every existing node's user data changes and the node is replaced"
+  }
+}
+
 run "server_join_uses_the_staggered_self_healing_join" {
   command = plan
 

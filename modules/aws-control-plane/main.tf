@@ -269,10 +269,10 @@ module "node_bootstrap" {
   platform_extra_helm_parameters  = var.platform_extra_helm_parameters
   platform_helm_values_object     = var.platform_helm_values_object
   extra_tags                      = var.extra_tags
+  aws_provider_id                 = var.aws_provider_id
 
-  genesis_apply_manifests               = var.genesis_apply_manifests
-  cluster_autoscaler_crd_wait_enabled   = var.cluster_autoscaler_crd_wait_enabled
-  cluster_autoscaler_capi_install_baked = var.cluster_autoscaler_capi_install_baked
+  # The AWS image bakes no Cluster API install manifest.
+  cluster_autoscaler_capi_install_baked = false
 }
 
 # node-bootstrap renders a plan-time-only cloud-init payload (no live connection to wait
@@ -302,6 +302,7 @@ module "node_bootstrap_additional" {
   dns_servers          = var.dns_servers
   cert_mode            = var.cert_mode
   extra_tags           = var.extra_tags
+  aws_provider_id      = var.aws_provider_id
   # gitops_* intentionally omitted (defaults to null): Argo/platform bootstrap runs on the
   # first server only — node-bootstrap also enforces this at the task level.
 }

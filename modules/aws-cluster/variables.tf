@@ -1,8 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-# Merged-directory composition of aws-control-plane + aws-node-pool, mirroring
-# proxmox-cluster's shape and conventions — see this module's README for what
-# proxmox-cluster carries that this module deliberately does NOT (node-os-patch,
-# cluster-autoscaler) and why.
 
 variable "cluster_name" {
   description = "Cluster identity. Used in tags, the FQDN, and the kubeconfig SAN. Lowercase, starts with a letter."
@@ -266,35 +262,12 @@ variable "root_volume_type" {
   default     = "gp3"
 }
 
-# ---- Worker pools (optional, merged into this same directory/state) ----
-variable "node_pools" {
-  description = "Fixed-size worker pools (ASGs) joining this cluster, keyed by pool name (e.g. \"pool-a\"). Each pool is created via aws-node-pool, wired to this cluster's cluster_name/aws_region/registration_address/agent_token_ssm_parameter/cluster_security_group_id automatically — do not set those fields inside a pool object, they are ignored. Empty map (the default) creates no worker pools. Field names, types, and defaults mirror aws-node-pool's own variables.tf exactly (minus the auto-wired fields above)."
-  type = map(object({
-    trusted_ca_pem      = optional(string)
-    registry_mirror_url = optional(string)
-    dns_servers         = optional(list(string))
-    subnet_id           = string
-    desired_count       = optional(number, 2)
-    instance_type       = optional(string, "m7g.medium")
-    os_image_ami_id     = optional(string)
-    os_image_name       = optional(string)
-    root_volume_size_gb = optional(number, 20)
-    root_volume_type    = optional(string, "gp3")
-    extra_node_labels   = optional(map(string), {})
-    extra_tags          = optional(map(string), {})
-  }))
-  default = {}
-}
-
 variable "static_nodes" {
   description = <<-EOT
     Named worker node groups keyed by group name (e.g. "platform"), each created via
     aws-static-node with this cluster's identity, join address and security groups wired in
-    automatically. Empty map (the default) creates no workers.
-
-    Prefer this over node_pools on a cluster that stops overnight: an autoscaling group replaces
-    a stopped member, so a stop schedule cannot target one. See
-    modules/aws-static-node/README.md.
+    automatically. For capacity the cluster must always have; elastic capacity belongs in
+    autoscaled_nodes. Empty map (the default) creates none.
 
     subnet_id defaults to the control plane's own, keeping the cluster in one availability zone.
   EOT
@@ -329,7 +302,7 @@ variable "platform_node_group" {
 }
 
 variable "nightly_stop" {
-  description = "Stops every node Terraform owns at time (HH:MM, 24-hour) in timezone each day. On an autoscaled cluster the workers are scaled to zero five minutes earlier with autoscaling paused, and autoscaling resumes when the cluster next starts, or 30 minutes after the stop time if the nodes were not stopped. Null never stops the cluster."
+  description = "Each day at time (HH:MM, 24-hour) in timezone, stops the control plane and static nodes and scales every autoscaled group to zero. Nothing starts the cluster again. Null never stops it."
   type = object({
     time     = string
     timezone = string
@@ -342,49 +315,35 @@ variable "nightly_stop" {
   }
 }
 
-# ---- Cluster API autoscaling (Phase 2) ----
-variable "cluster_autoscaler_enabled" {
-  description = "Genesis-apply a CAPI/CAPA MachineDeployment for this cluster and turn on kube-platform's cluster-autoscaler and Cluster API Applications. False (the default) means none of it exists. Independent of static_nodes: a cluster can have named nodes for its fixed roles and an autoscaled group for elastic capacity at the same time."
-  type        = bool
-  default     = false
-}
+variable "autoscaled_nodes" {
+  description = <<-EOT
+    Worker groups cluster-autoscaler scales between zero and max_size, keyed by group name, each
+    an EC2 Auto Scaling group via aws-node-pool in the control plane's subnet. One instance type
+    per group; for a pending pod the autoscaler picks the group that leaves the least capacity
+    idle. Split groups by anything a pod selects on: a shape, an architecture, a taint.
 
-
-variable "cluster_autoscaler_worker_groups" {
-  description = "Autoscaled worker groups, one MachineDeployment each. A group is the unit cluster-autoscaler scales, so split by anything a pod can select on: a different CPU architecture, a taint, a shape. os_image_ami_id is resolved per group from the cluster's os_image_name and the architecture AWS reports for the group's instance type, so an arm64 and an x86_64 group can share one image name."
+    The platform Application runs the autoscaler, and the platform node's IAM role gets its
+    permissions. Every node of an autoscaled cluster registers its instance as its providerID, so
+    adding the first group or removing the last replaces the control plane and static nodes.
+  EOT
   type = map(object({
     instance_type       = string
-    min_size            = optional(number, 0)
     max_size            = number
+    os_image_ami_id     = optional(string)
     root_volume_size_gb = optional(number, 20)
     root_volume_type    = optional(string, "gp3")
-    os_image_ami_id     = optional(string)
     node_labels         = optional(map(string), {})
     node_taints         = optional(list(string), [])
   }))
   default = {}
 
   validation {
-    condition     = alltrue([for g in var.cluster_autoscaler_worker_groups : g.max_size >= 1])
-    error_message = "every worker group needs max_size >= 1; a group that can never have a node is better deleted."
+    condition     = alltrue([for g in var.autoscaled_nodes : g.max_size >= 1])
+    error_message = "every autoscaled group needs max_size >= 1."
   }
 
   validation {
-    condition     = alltrue([for g in var.cluster_autoscaler_worker_groups : g.min_size <= g.max_size])
-    error_message = "min_size cannot exceed max_size."
-  }
-
-  validation {
-    condition = alltrue([
-      for g in var.cluster_autoscaler_worker_groups : alltrue([
-        for t in g.node_taints : can(regex("^[^=:]+=[^=:]*:(NoSchedule|PreferNoSchedule|NoExecute)$", t))
-      ])
-    ])
-    error_message = "each node_taints entry must be key=value:Effect, where Effect is NoSchedule, PreferNoSchedule, or NoExecute."
-  }
-
-  validation {
-    condition     = !var.cluster_autoscaler_enabled || length(var.cluster_autoscaler_worker_groups) > 0
-    error_message = "cluster_autoscaler_enabled = true requires at least one entry in cluster_autoscaler_worker_groups."
+    condition     = length(var.autoscaled_nodes) == 0 || var.gitops_platform_enabled
+    error_message = "autoscaled_nodes requires gitops_platform_enabled: cluster-autoscaler is installed by the platform Application."
   }
 }

@@ -330,3 +330,9 @@ variable "cluster_autoscaler_crd_wait_enabled" {
   type        = bool
   default     = false
 }
+
+variable "aws_provider_id" {
+  description = "Registers the node with providerID aws:///<zone>/<instance-id>, read from EC2 instance metadata before RKE2 starts. cluster-autoscaler and the AWS cloud controller manager find a node's instance by it."
+  type        = bool
+  default     = false
+}

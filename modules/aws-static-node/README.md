@@ -23,10 +23,9 @@ module "platform_nodes" {
 
 ## Why this exists next to aws-node-pool
 
-`aws-node-pool` creates an autoscaling group with `min_size = max_size =
-desired_capacity`. The obvious reading is that a group is the normal way to make
-workers and this module is the odd one out. It is the other way round for the
-clusters this project runs, for three reasons.
+`aws-node-pool` creates an autoscaling group that cluster-autoscaler scales from
+zero. Capacity a cluster must always have — the platform, above all — belongs
+here instead, for three reasons.
 
 **A stop schedule cannot target a group member.** These are development clusters
 that stop every evening. An autoscaling group's health check treats an instance
@@ -51,10 +50,7 @@ name. Here each node has its own render, so `bharat-dedicated-1` is the name
 that shows up in `kubectl get nodes`.
 
 What is given up: nothing reacts to load, and nothing replaces a failed node.
-For a cluster whose node roles are decided in Git and whose workloads are
-stateful, that is the right trade. The elastic path is Cluster API, not an
-autoscaling group with a scaling policy bolted on — see the `aws-cluster`
-README.
+Elastic capacity is `aws-node-pool`'s job.
 
 ## Availability zone
 

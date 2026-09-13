@@ -85,21 +85,8 @@ output "agent_token_ssm_parameter" {
   value       = module.control_plane.agent_token_ssm_parameter
 }
 
-output "node_pools" {
-  description = "Map of pool name (matching var.node_pools' own keys) -> {node_provider, autoscaling_group_name, launch_template_id, availability_zone, worker_iam_role_name}, one entry per configured pool. Empty map when var.node_pools is empty. No worker_node_refs (unlike proxmox-cluster's node_pools output): the ASG creates instances directly from the launch template, so Terraform never sees individual pool members — see this module's README for what that means for node-os-patch."
-  value = {
-    for name, pool in module.node_pools : name => {
-      node_provider          = pool.node_provider
-      autoscaling_group_name = pool.autoscaling_group_name
-      launch_template_id     = pool.launch_template_id
-      availability_zone      = pool.availability_zone
-      worker_iam_role_name   = pool.worker_iam_role_name
-    }
-  }
-}
-
 output "static_nodes" {
-  description = "Map of group name -> {node_provider, node_refs, instance_ids, private_ips, availability_zone, node_arch, node_iam_role_name, node_labels, node_taints}. Carries per-instance detail, which var.node_pools cannot: an ASG's members are invisible to Terraform."
+  description = "Map of group name -> {node_provider, node_refs, instance_ids, private_ips, availability_zone, node_arch, node_iam_role_name, node_labels, node_taints}."
   value = {
     for name, group in module.static_nodes : name => {
       node_provider      = group.node_provider
@@ -116,12 +103,12 @@ output "static_nodes" {
 }
 
 output "all_instance_ids" {
-  description = "Every EC2 instance Terraform owns individually: the control-plane node(s) plus every static node. Feed a nightly stop schedule from this, not from instance_id alone, or the workers run around the clock while the control plane stops. Excludes ASG members, which cannot be stopped this way at all."
+  description = "Every EC2 instance Terraform owns individually: the control-plane node(s) plus every static node. Excludes autoscaled nodes, which can be removed but not stopped."
   value       = local.all_instance_ids
 }
 
 output "platform_node_iam_role_name" {
-  description = "IAM role of the nodes running the platform stack: platform_node_group's, or the control plane's when none is set. Policies for platform controllers that authenticate as their node (Cluster API, External Secrets) belong on it."
+  description = "IAM role of the nodes running the platform stack: platform_node_group's, or the control plane's when none is set. Policies for platform controllers that authenticate as their node, such as External Secrets, belong on it."
   value       = local.platform_node_iam_role_name
 }
 
@@ -130,34 +117,16 @@ output "workload_node_iam_role_names" {
   value       = local.workload_node_iam_role_names
 }
 
-output "cluster_autoscaler_enabled" {
-  description = "Whether the Cluster API autoscaling path is on for this cluster."
-  value       = var.cluster_autoscaler_enabled
-}
-
-output "cluster_autoscaler_worker_iam_role_name" {
-  description = "IAM role attached to CAPI-provisioned workers, or null when autoscaling is off. Reference it to attach additional policies. The CAPA controller itself authenticates as the node it runs on, so the policy letting it create instances belongs on platform_node_iam_role_name."
-  value       = try(aws_iam_role.autoscaler_worker[0].name, null)
-}
-
-output "cluster_autoscaler_worst_case_node_count" {
-  description = "Maximum instances the autoscaler can create across every group. Price each group's own instance_type against its max_size for the worst-case spend, since groups need not share a shape."
-  value       = sum(concat([0], [for g in local.autoscaler_groups : g.max_size]))
-}
-
-output "cluster_autoscaler_worker_groups" {
-  description = "Per-group shape actually resolved: architecture, image, and the vCPU/memory cluster-autoscaler simulates a scale-from-zero against."
+output "autoscaled_nodes" {
+  description = "Map of group name -> {autoscaling_group_name, availability_zone, node_arch, node_iam_role_name, node_labels, node_taints}."
   value = {
-    for name, g in local.autoscaler_group_render : name => {
-      instance_type = g.instance_type
-      arch          = local.autoscaler_group_arch[name]
-      ami_id        = g.ami_id
-      cpu           = g.cpu
-      memory_mib    = g.memory_mib
-      min_size      = g.min_size
-      max_size      = g.max_size
-      node_labels   = g.labels
-      node_taints   = g.taints
+    for name, group in module.autoscaled_nodes : name => {
+      autoscaling_group_name = group.autoscaling_group_name
+      availability_zone      = group.availability_zone
+      node_arch              = group.node_arch
+      node_iam_role_name     = group.node_iam_role_name
+      node_labels            = group.node_labels
+      node_taints            = group.node_taints
     }
   }
 }

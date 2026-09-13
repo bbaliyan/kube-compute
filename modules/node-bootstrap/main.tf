@@ -497,6 +497,16 @@ locals {
     ],
   )
 
+  # A config.yaml.d drop-in, because only the node itself knows its instance id.
+  aws_provider_id_script = <<-EOT
+    set -eu
+    TOKEN=$(curl -sSf --retry 5 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 300' http://169.254.169.254/latest/api/token)
+    ZONE=$(curl -sSf --retry 5 -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
+    INSTANCE_ID=$(curl -sSf --retry 5 -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+    install -d -m 0755 /etc/rancher/rke2/config.yaml.d
+    printf 'kubelet-arg+:\n  - "provider-id=aws:///%s/%s"\n' "$ZONE" "$INSTANCE_ID" >/etc/rancher/rke2/config.yaml.d/50-aws-provider-id.yaml
+  EOT
+
   # RKE2/kubelet default the registered Kubernetes node name to the OS
   # hostname, so every node in a cluster MUST get a distinct value here.
   # var.set_hostname = false omits both keys entirely (see that variable's
@@ -518,13 +528,16 @@ locals {
       # just kubelet's.
       prefer_fqdn_over_hostname = false
       write_files               = local.write_files
-      runcmd = [
-        # The program is baked into the image, not written above. An image
-        # predating it would otherwise fail with cloud-init's own bare "No such
-        # file or directory" against a path this module used to write itself.
-        ["/bin/sh", "-c", "test -x /opt/kube-compute/bootstrap.sh || { echo 'kube-compute: this image bakes no /opt/kube-compute/bootstrap.sh, which node.env contract ${local.node_env_contract} requires -- rebuild the node image from a ref that bakes it' >&2; exit 1; }"],
-        ["/opt/kube-compute/bootstrap.sh"],
-      ]
+      runcmd = concat(
+        var.aws_provider_id ? [["/bin/sh", "-c", local.aws_provider_id_script]] : [],
+        [
+          # The program is baked into the image, not written above. An image
+          # predating it would otherwise fail with cloud-init's own bare "No such
+          # file or directory" against a path this module used to write itself.
+          ["/bin/sh", "-c", "test -x /opt/kube-compute/bootstrap.sh || { echo 'kube-compute: this image bakes no /opt/kube-compute/bootstrap.sh, which node.env contract ${local.node_env_contract} requires -- rebuild the node image from a ref that bakes it' >&2; exit 1; }"],
+          ["/opt/kube-compute/bootstrap.sh"],
+        ],
+      )
     },
     var.set_hostname ? { hostname = var.node_name } : {},
     var.set_hostname && var.cluster_fqdn_suffix != null && var.cluster_fqdn_suffix != "" ? {

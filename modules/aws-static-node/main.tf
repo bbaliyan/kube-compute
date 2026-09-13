@@ -148,6 +148,7 @@ module "node_bootstrap" {
   trusted_ca_in_image       = var.trusted_ca_in_image
   registry_mirror_url       = var.registry_mirror_url
   dns_servers               = var.dns_servers
+  aws_provider_id           = var.aws_provider_id
 }
 
 # No depends_on: RKE2's agent retries its join indefinitely, so a worker booting

@@ -138,6 +138,12 @@ variable "attach_ebs_csi_policy" {
   default     = true
 }
 
+variable "aws_provider_id" {
+  description = "Registers every node with providerID aws:///<zone>/<instance-id>. Needed on every node of a cluster whose nodes cluster-autoscaler and the AWS cloud controller manager look up by instance. Changing it replaces the nodes."
+  type        = bool
+  default     = false
+}
+
 variable "extra_tags" {
   description = "Additional tags applied to every resource this module creates."
   type        = map(string)
