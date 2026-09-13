@@ -110,7 +110,7 @@ locals {
   # when it is shorter than the limit, so this changes no existing role's prefix.
   node_iam_name_prefix = format("kube-compute-%s-", substr(var.cluster_name, 0, 24))
 
-  # Split from create_record so external-dns can own the wildcard without
+  # Split from create_record so another module can own the wildcard without
   # costing the cluster its api. record, which is what agents join through.
   create_wildcard_record = local.create_record && var.manage_wildcard_dns_record
 
@@ -609,8 +609,7 @@ resource "aws_instance" "control_plane" {
 
 # api.<cluster>.<domain>, always explicit rather than left to the wildcard above.
 # DNS answers the most specific name, so this keeps pointing at the control plane
-# even where external-dns has filled the wildcard with every worker's IP -- and a
-# worker does not serve the API.
+# even where the wildcard points at nodes that do not serve the API.
 resource "aws_route53_record" "api" {
   count   = local.create_record ? 1 : 0
   zone_id = local.effective_zone_id

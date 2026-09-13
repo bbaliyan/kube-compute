@@ -309,7 +309,6 @@ variable "static_nodes" {
     node_labels           = optional(map(string), {})
     node_taints           = optional(list(string), [])
     attach_ebs_csi_policy = optional(bool, true)
-    attach_ingress_sg     = optional(bool, false)
     trusted_ca_pem        = optional(string)
     registry_mirror_url   = optional(string)
     dns_servers           = optional(list(string))
@@ -319,7 +318,7 @@ variable "static_nodes" {
 }
 
 variable "platform_node_group" {
-  description = "static_nodes key of the group that runs the platform stack. The platform Application pins its components to that group's node-group label, and platform_node_iam_role_name resolves to its role. Null leaves platform placement to the scheduler and platform IAM on the control plane."
+  description = "static_nodes key of the group that runs the platform stack, ingress included. The platform Application pins its components to that group's node-group label, the group alone takes the ingress security group, the wildcard DNS record points at its nodes, and platform_node_iam_role_name resolves to its role. Null leaves all of that on the control plane."
   type        = string
   default     = null
 
@@ -362,7 +361,6 @@ variable "cluster_autoscaler_worker_groups" {
     os_image_ami_id     = optional(string)
     node_labels         = optional(map(string), {})
     node_taints         = optional(list(string), [])
-    attach_ingress_sg   = optional(bool, false)
   }))
   default = {}
 
@@ -389,10 +387,4 @@ variable "cluster_autoscaler_worker_groups" {
     condition     = !var.cluster_autoscaler_enabled || length(var.cluster_autoscaler_worker_groups) > 0
     error_message = "cluster_autoscaler_enabled = true requires at least one entry in cluster_autoscaler_worker_groups."
   }
-}
-
-variable "manage_wildcard_dns_record" {
-  description = "Forwarded to aws-control-plane. False when external-dns owns *.<cluster>.<domain>, which it must whenever ingress runs on nodes a controller creates and destroys."
-  type        = bool
-  default     = true
 }

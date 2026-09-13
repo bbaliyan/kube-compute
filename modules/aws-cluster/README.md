@@ -66,10 +66,9 @@ That matters because an EBS volume cannot cross zones: a worker in the wrong one
 cannot mount the data it was created for. Set `subnet_id` only for a deliberate
 exception.
 
-`attach_ingress_sg` is off by default and should be on for exactly the group that
-runs the ingress controller. The security group it adds carries this cluster's
-externally reachable `ingress_ports`; moving the ingress pods to a group without
-it leaves those ports answering on a node that no longer serves them.
+`platform_node_group` names the group that runs the platform stack, Traefik
+included. That group alone takes the security group carrying `ingress_ports`, and
+the wildcard DNS record points at its nodes instead of the control plane.
 
 **Prefer `static_nodes` over `node_pools` on a cluster that stops overnight.** An
 autoscaling group treats a stopped member as unhealthy and replaces it, so a stop
@@ -181,8 +180,6 @@ module "cluster" {
     platform = {
       instance_type       = "t4g.large"
       root_volume_size_gb = 40
-      attach_ingress_sg   = true # this group runs the ingress controller
-      node_labels         = { "workload" = "platform" }
     }
     dedicated = {
       instance_type       = "r5a.large"
@@ -191,13 +188,14 @@ module "cluster" {
       node_labels         = { "workload" = "reserved" }
     }
   }
+  platform_node_group = "platform"
 }
 ```
 
 `cluster_type = "dedicated_control_plane"` taints the control-plane node with
-`CriticalAddonsOnly=true:NoExecute`, which is what pushes the platform workloads
-onto the `platform` group. Set it only once a group exists to receive them —
-tainting a single-node cluster leaves nothing anywhere to run.
+`CriticalAddonsOnly=true:NoExecute`, and `platform_node_group` pins the platform
+stack to the `platform` group. Set the taint only once a group exists to receive
+them — tainting a single-node cluster leaves nothing anywhere to run.
 
 ## Cluster API autoscaling
 
@@ -210,11 +208,9 @@ decision, so the consumer sets one flag rather than three.
 cluster_autoscaler_enabled = true
 
 cluster_autoscaler_worker_groups = {
-  platform = {
-    instance_type     = "t4g.large"
-    min_size          = 1
-    max_size          = 3
-    attach_ingress_sg = true
+  workers = {
+    instance_type = "t3a.large"
+    max_size      = 3
   }
   reserved = {
     instance_type = "r5a.large"
@@ -241,20 +237,14 @@ annotations. They are read from AWS rather than restated by the caller. Without
 them the autoscaler cannot tell whether a Pending pod would fit, and never scales
 the group off zero — which is exactly the case for a tainted group.
 
-**Ingress on an autoscaled node.** `attach_ingress_sg` gives a group the security
-group carrying the cluster's external ports, and labels its nodes
-`kube-compute.io/ingress=true`. Traefik is a DaemonSet behind ServiceLB, so those
-nodes serve ingress the moment they join. Terraform cannot then own the wildcard
-DNS record, because it never sees those instances: set
-`manage_wildcard_dns_record = false` and external-dns publishes them instead. The
-same flag switches on kube-platform's `externalDnsEnabled`, so the record cannot
-end up owned by nobody.
+**Autoscaled workers never serve ingress.** They carry only the east-west security
+group; ingress stays on the platform group, whose addresses Terraform knows.
 
 **`cluster_domain` is required.** Autoscaled workers join through
 `api.<cluster_name>.<cluster_domain>`, an explicit Route53 record the control-plane
 module creates. A specific name beats a wildcard, so it keeps resolving to the
-control plane even where external-dns has filled the wildcard with worker
-addresses. It cannot be the control plane's own IP: the
+control plane even where the wildcard points at the platform node. It cannot be
+the control plane's own IP: the
 `MachineDeployment` bundle is written into that instance's cloud-init, so reading
 an output derived from the instance is a dependency cycle. A precondition fails
 the apply rather than baking a null address into every worker's Secret.

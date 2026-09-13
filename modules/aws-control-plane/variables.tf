@@ -322,7 +322,7 @@ variable "cluster_autoscaler_capi_install_baked" {
 }
 
 variable "manage_wildcard_dns_record" {
-  description = "Whether this module owns the *.<cluster>.<domain> A record. False hands it to something in-cluster (external-dns) that can publish every ingress-capable node, which Terraform cannot do for instances a controller creates. The explicit api.<cluster>.<domain> record is created either way, and a specific name beats a wildcard, so the join address keeps resolving to the control plane."
+  description = "Whether this module owns the *.<cluster>.<domain> A record. aws-cluster sets it false when ingress runs on a platform node group and points the record there itself. The explicit api.<cluster>.<domain> record is created either way, and a specific name beats a wildcard, so the join address keeps resolving to the control plane."
   type        = bool
   default     = true
 }

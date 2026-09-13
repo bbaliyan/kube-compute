@@ -58,10 +58,9 @@ run "every_group_renders_its_own_deployment" {
     cluster_autoscaler_enabled = true
     cluster_autoscaler_worker_groups = {
       platform = {
-        instance_type     = "t4g.large"
-        min_size          = 1
-        max_size          = 3
-        attach_ingress_sg = true
+        instance_type = "t4g.large"
+        min_size      = 1
+        max_size      = 3
       }
       reserved = {
         instance_type       = "r5a.large"
@@ -148,28 +147,20 @@ run "a_tainted_group_can_be_scaled_off_zero" {
   }
 }
 
-run "an_ingress_group_takes_the_ingress_security_group_and_label" {
+run "autoscaled_workers_never_take_the_ingress_security_group" {
   command = apply
 
   variables {
     cluster_domain             = "eu-west-1.example.net"
     cluster_autoscaler_enabled = true
     cluster_autoscaler_worker_groups = {
-      platform = {
-        instance_type     = "t4g.large"
-        max_size          = 2
-        attach_ingress_sg = true
-      }
+      workers = { instance_type = "t4g.large", max_size = 2 }
     }
   }
 
   assert {
-    condition     = length(local.autoscaler_group_render["platform"].security_group_ids) == 2
-    error_message = "an ingress group needs the external-ports security group as well as the east-west one, or Traefik answers on a node nothing can reach"
-  }
-  assert {
-    condition     = output.cluster_autoscaler_worker_groups["platform"].node_labels["kube-compute.io/ingress"] == "true"
-    error_message = "the ingress label travels with the security group -- it is how external-dns picks the nodes to publish"
+    condition     = local.autoscaler_group_render["workers"].security_group_ids == [module.control_plane.cluster_security_group_id]
+    error_message = "ingress runs with the platform, so a worker must only carry the east-west security group"
   }
 }
 
@@ -250,7 +241,7 @@ run "the_control_plane_user_data_stays_inside_the_ec2_limit" {
     cluster_domain             = "eu-west-1.example.net"
     cluster_autoscaler_enabled = true
     cluster_autoscaler_worker_groups = {
-      platform = { instance_type = "t4g.large", min_size = 1, max_size = 3, attach_ingress_sg = true }
+      platform = { instance_type = "t4g.large", min_size = 1, max_size = 3 }
       reserved = { instance_type = "r5a.large", max_size = 1, node_labels = { workload = "reserved" }, node_taints = ["workload=reserved:NoSchedule"] }
     }
   }

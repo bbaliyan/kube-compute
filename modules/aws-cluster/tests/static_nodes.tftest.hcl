@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the composition wiring: subnet inheritance, opt-in ingress security
-# group, and all_instance_ids covering workers as well as the control plane.
+# Guards the composition wiring: subnet inheritance, platform placement and
+# ingress, and all_instance_ids covering workers as well as the control plane.
 
 mock_provider "aws" {
   mock_resource "aws_launch_template" {
@@ -27,9 +27,13 @@ run "no_static_nodes_creates_none" {
     condition     = length(output.all_instance_ids) == 1
     error_message = "with no static nodes, all_instance_ids must be the genesis control-plane instance alone"
   }
+  assert {
+    condition     = length(aws_route53_record.platform_wildcard) == 0
+    error_message = "without a platform group the control plane keeps its own wildcard record"
+  }
 }
 
-run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
+run "groups_inherit_the_control_planes_subnet" {
   # apply, not plan: the wiring reads control-plane resource outputs, unknown at
   # plan time. Same reason composition.tftest.hcl's pool case uses apply.
   command = apply
@@ -37,9 +41,8 @@ run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
   variables {
     static_nodes = {
       platform = {
-        instance_type     = "t4g.large"
-        attach_ingress_sg = true
-        node_count        = 1
+        instance_type = "t4g.large"
+        node_count    = 1
       }
       dedicated = {
         instance_type = "r5a.large"
@@ -78,11 +81,6 @@ run "groups_inherit_the_control_planes_subnet_and_opt_in_to_ingress" {
   }
 
   assert {
-    condition     = output.static_nodes["platform"].node_labels["kube-compute.io/ingress"] == "true" && !contains(keys(output.static_nodes["dedicated"].node_labels), "kube-compute.io/ingress")
-    error_message = "a group with the ingress security group must carry the ingress label external-dns selects on, and no other group may"
-  }
-
-  assert {
     condition     = output.static_nodes["dedicated"].node_labels["kube-compute.io/node-group"] == "dedicated"
     error_message = "the group label must be derived from the map key, so a nodeSelector needs no separately-passed label"
   }
@@ -102,12 +100,19 @@ run "platform_node_group_pins_the_platform_and_carries_its_iam" {
 
   variables {
     cluster_type        = "dedicated_control_plane"
+    cluster_domain      = "eu-west-1.example.net"
+    hosted_zone_id      = "Z0123456789ABCDEFGHIJ"
     platform_node_group = "platform"
     static_nodes = {
       platform = {
         instance_type = "t3a.xlarge"
       }
     }
+  }
+
+  assert {
+    condition     = aws_route53_record.platform_wildcard[0].records == toset(values(module.static_nodes["platform"].private_ips))
+    error_message = "the wildcard record must point at the platform node, where Traefik runs"
   }
 
   assert {

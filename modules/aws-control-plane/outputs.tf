@@ -116,6 +116,6 @@ output "connectivity_user_data_base64" {
 }
 
 output "hosted_zone_id" {
-  description = "Route53 zone the cluster's records live in, resolved from hosted_zone_id or hosted_zone_name. Null when no domain is configured. Scope an external-dns policy to this rather than to every zone in the account."
+  description = "Route53 zone the cluster's records live in, resolved from hosted_zone_id or hosted_zone_name. Null when no domain is configured."
   value       = local.effective_zone_id
 }

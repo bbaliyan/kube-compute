@@ -60,7 +60,7 @@ module "control_plane" {
   subnet_name                       = var.subnet_name
   subnet_names                      = var.subnet_names
   cluster_domain                    = var.cluster_domain
-  manage_wildcard_dns_record        = var.manage_wildcard_dns_record
+  manage_wildcard_dns_record        = var.platform_node_group == null
   hosted_zone_name                  = var.hosted_zone_name
   hosted_zone_id                    = var.hosted_zone_id
   instance_type                     = var.instance_type
@@ -115,11 +115,10 @@ module "static_nodes" {
   agent_token_ssm_parameter = module.control_plane.agent_token_ssm_parameter
   cluster_fqdn_suffix       = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
 
-  # Opt-in per group: only the group running the ingress controller should answer on this
-  # cluster's externally reachable ports.
+  # Ingress runs with the platform, so only the platform group answers on the external ports.
   security_group_ids = concat(
     [module.control_plane.cluster_security_group_id],
-    each.value.attach_ingress_sg ? [module.control_plane.node_security_group_id] : [],
+    each.key == var.platform_node_group ? [module.control_plane.node_security_group_id] : [],
   )
 
   # Defaults to the control plane's own subnet, so a group inherits its availability zone.
@@ -131,7 +130,7 @@ module "static_nodes" {
   os_image_name         = each.value.os_image_name != null ? each.value.os_image_name : var.os_image_name
   root_volume_size_gb   = each.value.root_volume_size_gb
   root_volume_type      = each.value.root_volume_type
-  node_labels           = merge(each.value.node_labels, each.value.attach_ingress_sg ? { "kube-compute.io/ingress" = "true" } : {})
+  node_labels           = each.value.node_labels
   node_taints           = each.value.node_taints
   attach_ebs_csi_policy = each.value.attach_ebs_csi_policy
 
@@ -142,6 +141,16 @@ module "static_nodes" {
   registry_mirror_url = each.value.registry_mirror_url != null ? each.value.registry_mirror_url : var.registry_mirror_url
   dns_servers         = each.value.dns_servers != null ? each.value.dns_servers : var.dns_servers
   extra_tags          = merge(var.extra_tags, each.value.extra_tags)
+}
+
+# The control plane's own wildcard record is off whenever this one exists.
+resource "aws_route53_record" "platform_wildcard" {
+  count   = var.platform_node_group != null && module.control_plane.wildcard_dns_name != null && module.control_plane.hosted_zone_id != null ? 1 : 0
+  zone_id = module.control_plane.hosted_zone_id
+  name    = module.control_plane.wildcard_dns_name
+  type    = "A"
+  ttl     = 60
+  records = values(module.static_nodes[var.platform_node_group].private_ips)
 }
 
 # ---- Cluster API autoscaling (Phase 2) ----
@@ -189,15 +198,8 @@ locals {
     )
   }
 
-  # Carried on the node itself, not just the security group, so external-dns can
-  # select the nodes that actually serve ingress. The two travel together: a node
-  # with the group has the label, and nothing else does.
   autoscaler_group_labels = {
-    for name, g in local.autoscaler_groups : name => merge(
-      g.node_labels,
-      { "kube-compute.io/node-group" = name },
-      g.attach_ingress_sg ? { "kube-compute.io/ingress" = "true" } : {},
-    )
+    for name, g in local.autoscaler_groups : name => merge(g.node_labels, { "kube-compute.io/node-group" = name })
   }
 
   # cluster-autoscaler simulates a scale from zero against these, since nothing
@@ -217,10 +219,7 @@ locals {
       labels              = local.autoscaler_group_labels[name]
       taints              = g.node_taints
       tags                = merge(local.autoscaler_common_tags, { NodeGroup = name })
-      security_group_ids = concat(
-        [module.control_plane.cluster_security_group_id],
-        g.attach_ingress_sg ? [module.control_plane.node_security_group_id] : [],
-      )
+      security_group_ids  = [module.control_plane.cluster_security_group_id]
       # gzipped, not plain: cloud-init detects the gzip header and decompresses,
       # so CAPA can hand this to RunInstances untouched, and it is a third of the
       # size inside a bundle that has to fit in the control plane's own user data.
@@ -259,9 +258,6 @@ locals {
       clusterAutoscalerEnabled = "true"
       clusterApiEnabled        = "true"
     } : {},
-    # Turned on by the same decision that turns the Terraform record off, so the
-    # two cannot disagree and leave the wildcard owned by nobody.
-    var.manage_wildcard_dns_record ? {} : { externalDnsEnabled = "true" },
     local.nightly_stop_platform_parameters,
   )
 }

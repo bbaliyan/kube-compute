@@ -121,7 +121,7 @@ output "all_instance_ids" {
 }
 
 output "platform_node_iam_role_name" {
-  description = "IAM role of the nodes running the platform stack: platform_node_group's, or the control plane's when none is set. Policies for platform controllers that authenticate as their node (Cluster API, external-dns, External Secrets) belong on it."
+  description = "IAM role of the nodes running the platform stack: platform_node_group's, or the control plane's when none is set. Policies for platform controllers that authenticate as their node (Cluster API, External Secrets) belong on it."
   value       = local.platform_node_iam_role_name
 }
 
