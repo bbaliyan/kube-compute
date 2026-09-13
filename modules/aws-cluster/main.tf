@@ -262,6 +262,7 @@ locals {
     # Turned on by the same decision that turns the Terraform record off, so the
     # two cannot disagree and leave the wildcard owned by nobody.
     var.manage_wildcard_dns_record ? {} : { externalDnsEnabled = "true" },
+    local.nightly_stop_platform_parameters,
   )
 }
 

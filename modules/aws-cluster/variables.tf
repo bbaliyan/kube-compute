@@ -329,6 +329,20 @@ variable "platform_node_group" {
   }
 }
 
+variable "nightly_stop" {
+  description = "Stops every node Terraform owns at time (HH:MM, 24-hour) in timezone each day. On an autoscaled cluster the workers are scaled to zero five minutes earlier with autoscaling paused, and autoscaling resumes when the cluster next starts, or 30 minutes after the stop time if the nodes were not stopped. Null never stops the cluster."
+  type = object({
+    time     = string
+    timezone = string
+  })
+  default = null
+
+  validation {
+    condition     = var.nightly_stop == null ? true : can(regex("^([01][0-9]|2[0-3]):[0-5][0-9]$", var.nightly_stop.time))
+    error_message = "nightly_stop.time must be HH:MM on a 24-hour clock."
+  }
+}
+
 # ---- Cluster API autoscaling (Phase 2) ----
 variable "cluster_autoscaler_enabled" {
   description = "Genesis-apply a CAPI/CAPA MachineDeployment for this cluster and turn on kube-platform's cluster-autoscaler and Cluster API Applications. False (the default) means none of it exists. Independent of static_nodes: a cluster can have named nodes for its fixed roles and an autoscaled group for elastic capacity at the same time."
