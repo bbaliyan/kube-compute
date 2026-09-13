@@ -71,6 +71,7 @@ run "every_group_renders_its_own_deployment" {
         node_taints         = ["workload=reserved:NoSchedule"]
       }
     }
+    extra_tags = { CostCentre = "platform" }
   }
 
   assert {
@@ -99,6 +100,14 @@ run "every_group_renders_its_own_deployment" {
   assert {
     condition     = strcontains(local.cluster_autoscaler_bundle_yaml, "httpPutResponseHopLimit: 3")
     error_message = "autoscaled workers run the same Cilium pod-netns path, so they need the same hop limit as every other node here"
+  }
+  assert {
+    condition = alltrue([
+      strcontains(local.cluster_autoscaler_bundle_yaml, "\"CostCentre\": \"platform\""),
+      strcontains(local.cluster_autoscaler_bundle_yaml, "\"NodeGroup\": \"reserved\""),
+      strcontains(local.cluster_autoscaler_bundle_yaml, "kube-compute.io/autoscale: enabled"),
+    ])
+    error_message = "autoscaled instances must carry the cluster's tags like every other node, and each MachineDeployment the label cluster-autoscaler discovers groups by"
   }
   assert {
     condition     = output.cluster_autoscaler_worst_case_node_count == 4

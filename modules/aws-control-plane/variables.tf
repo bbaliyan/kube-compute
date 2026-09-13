@@ -18,7 +18,7 @@ variable "trusted_ca_pem" {
 }
 
 variable "trusted_ca_in_image" {
-  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. Passed through to node-bootstrap, which then keeps the PEM out of user data while still using its value for containerd's TLS pin and the platform Application's trustedCaPemB64 parameter. See node-bootstrap's own description: a corporate CA otherwise travels once for this node and again inside every worker group's cloud-init, against EC2's 16384-byte limit."
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. Passed through to node-bootstrap, which then keeps the PEM out of user data."
   type        = bool
   default     = false
 }
@@ -142,7 +142,7 @@ variable "static_registration_address" {
 # Networking: the module takes a network HANDLE and never creates fabric (VPC/subnet/IGW/NAT).
 variable "subnet_id" {
   description = <<-EOT
-    Subnet to launch the node into. Pass it to plug in your own/corp networking. Null = the module
+    Subnet to launch the node into. Pass it to plug in your own networking. Null = the module
     falls back to a subnet in the account's DEFAULT VPC (a data lookup; the module never CREATES a
     VPC/subnet). Accounts whose default VPC was deleted must pass a subnet_id or subnet_name.
   EOT

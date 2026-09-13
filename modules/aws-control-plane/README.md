@@ -29,35 +29,11 @@ your own bake. Mirrors `proxmox-control-plane`'s `proxmox_template_vm_id` conven
 
 ### Keeping user data under EC2's limit
 
-EC2 rejects `RunInstances` when decoded user data exceeds **16384 bytes**. This
-module reached that on a real cluster: a genesis node carrying the platform Argo CD
-Application, a CAPI bundle with one bootstrap Secret per worker group, and a
-corporate CA rendered 24627 bytes. Compression was already in play and there was
-nothing left to squeeze — base64 does not compress, and an inner gzip only makes the
-outer one useless.
-
-What fixed it was not a side channel but taking static content out of the payload
-entirely. The bootstrap program is baked into the node image
-(`node-bootstrap/files/bootstrap.sh`) rather than rendered per node, and with
-`trusted_ca_in_image` the corporate CA is too. Both used to travel once for this node
-and again inside every worker group's cloud-init, so the same cluster now renders
-12471 bytes:
-
-| decoded user data | bytes |
-| --- | --- |
-| EC2 limit | 16384 |
-| before, with both in the payload | 24627 |
-| program baked | 16051 |
-| corporate CA baked as well | 12471 |
-
-This is why there is no S3 bucket and no SSM parameter here for boot payloads. Those
-would be one mechanism per platform for a cap only EC2 has — Proxmox's snippet cap is
-1 MiB, Azure's custom data 64 KB — and each would add something per cluster to bill
-for and to destroy. Shipping values instead of code works the same everywhere.
-
-A precondition on the instance turns AWS's rejection into a message naming the levers,
-because the size is only knowable at apply: the payload carries a freshly generated
-join token and the ids of resources the same plan creates.
+EC2 rejects `RunInstances` when decoded user data exceeds 16384 bytes, and an autoscaled
+genesis node carries one worker cloud-init per group inside its own. Static content
+therefore stays out of the payload: the bootstrap program is baked into the node image,
+and with `trusted_ca_in_image` a CA is too. A precondition on the instance names those
+levers when the limit is exceeded.
 
 ## Scope
 
@@ -87,7 +63,7 @@ existing networking, or it falls back to the account's default VPC.
 
 Three ways to specify the subnet (pick one):
 
-- **`subnet_id`** — pass the literal subnet ID to launch into your own or corp subnet.
+- **`subnet_id`** — pass the literal subnet ID to launch into your own subnet.
 - **`subnet_name`** — pass the Name tag; the module resolves the ID via a data lookup. Pair with
   `vpc_name` to scope the search when the tag is not globally unique.
 - **Neither** — the module falls back to a subnet in the account's **default VPC** (data lookup;

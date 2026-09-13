@@ -148,6 +148,7 @@ metadata:
   name: ${cluster_name}-autoscaler-workers
   namespace: default
   labels:
+    kube-compute.io/autoscale: enabled
     cluster.x-k8s.io/cluster-name: ${cluster_name}
   annotations:
     cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "${min_size}"

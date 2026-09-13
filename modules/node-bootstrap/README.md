@@ -68,20 +68,10 @@ kubelet's resolv-conf pointer. Which blocks a role gets is decided here; the pro
 appends the fragment to the few lines only the node itself can produce (its own IP,
 the fetched agent token, the rejoin-probe result).
 
-**Why.** The program is ~9.6 KB and almost entirely static, and it used to be
-rendered per node by `templatefile()` and shipped in `write_files`. A genesis node
-carried three copies of it: its own, plus one inside each worker group's cloud-init
-in a CAPI bundle. EC2 allows 16384 decoded bytes of user data for everything a node
-boots with, and on a real two-group cluster the payload reached 24627. Baking the
-program took that to 16051, and `trusted_ca_in_image` — the same move applied to a
-corporate CA, which also travelled once per node and once per worker group — took it
-to 12471. The image already does this with the Cilium and Argo CD renders, for the
-same reason on Proxmox, whose snippet cap is 1 MiB.
-
-This is deliberately not a per-platform side channel. An S3 object with IAM on AWS,
-a snippet on Proxmox, a Blob with a managed identity on Azure, guestinfo on vSphere
-would be four mechanisms for a cap only EC2 has. Shipping values instead of code is
-one mechanism everywhere.
+**Why.** The program is almost entirely static, and a genesis node used to carry it
+once for itself and again inside every worker group's cloud-init, against EC2's
+16384-byte user-data limit. Shipping values instead of code keeps the payload small on
+every platform, with no per-platform side channel.
 
 **The contract.** `node_env_contract` in `main.tf` and `BOOTSTRAP_CONTRACT` in
 `files/bootstrap.sh` are the two halves of one number. Bump both together when a key

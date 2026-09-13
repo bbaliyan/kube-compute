@@ -216,6 +216,7 @@ locals {
       memory_mib          = data.aws_ec2_instance_type.autoscaler_worker[name].memory_size
       labels              = local.autoscaler_group_labels[name]
       taints              = g.node_taints
+      tags                = merge(local.autoscaler_common_tags, { NodeGroup = name })
       security_group_ids = concat(
         [module.control_plane.cluster_security_group_id],
         g.attach_ingress_sg ? [module.control_plane.node_security_group_id] : [],

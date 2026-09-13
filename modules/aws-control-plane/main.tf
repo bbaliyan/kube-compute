@@ -52,25 +52,10 @@ locals {
     ])
   }
 
-  # ---- user data: how big it is allowed to get -----------------------------------
-  #
-  # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes, and this
-  # module reached that on a real cluster: a genesis node carrying the platform Argo
-  # CD Application, a CAPI bundle with one bootstrap Secret per worker group, and a
-  # corporate CA came to 24627 bytes. Compression was already in play
-  # (user_data_base64 = base64gzip below) and there was nothing left to squeeze.
-  #
-  # What fixed it was not a side channel but moving static content out of the
-  # payload: the bootstrap program is baked into the node image (node-bootstrap's
-  # files/bootstrap.sh) instead of rendered per node, and the corporate CA can be
-  # too (trusted_ca_in_image). Both used to travel once for this node and again
-  # inside every worker group's cloud-init, so the same cluster now renders 12471
-  # bytes. That answer works on every platform this project supports, unlike an S3
-  # object or an SSM parameter, and it leaves nothing per-cluster to bill for.
-  #
-  # The precondition on the instance below turns AWS's rejection into a message that
-  # says which lever to pull. Measured, not estimated: this is exactly what
-  # RunInstances measures.
+  # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes. Static
+  # content is kept out of the payload for that reason: the bootstrap program is
+  # baked into the node image, and so can a CA be (trusted_ca_in_image). The
+  # precondition on the instance turns AWS's rejection into a message naming both.
   inline_user_data_bytes = {
     for k, v in local.combined_user_data : k => floor(length(base64gzip(v)) / 4) * 3
   }
@@ -612,7 +597,7 @@ resource "aws_instance" "control_plane" {
       # size is not knowable until apply -- it carries a generated token -- so this
       # runs at apply and names the input that fixes it.
       condition     = local.inline_user_data_bytes["0"] <= 16384
-      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: check that the node image bakes the bootstrap program, set trusted_ca_in_image if it also bakes the corporate CA, and look at what the platform Application's Helm values are carrying."
+      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: check that the node image bakes the bootstrap program, set trusted_ca_in_image if it also bakes the CA, and look at what the platform Application's Helm values are carrying."
     }
 
     precondition {

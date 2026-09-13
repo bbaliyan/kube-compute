@@ -71,13 +71,8 @@ fi
 
 TRUSTED_CA_PATH=/etc/pki/ca-trust/source/anchors/trusted-ca.crt
 if [ "$TRUSTED_CA_ENABLED" = "1" ]; then
-  # The PEM arrives one of two ways: written by cloud-init just now, or baked
-  # into the image at this same path (which is what keeps it out of the payload,
-  # where a corporate CA costs ~1.7 KB in the genesis node's own user data and
-  # again inside every worker group's cloud-init). Either way it has to be here:
-  # registries.yaml pins containerd's TLS to this exact file, so a node without
-  # it cannot pull from the corporate mirror, and failing now beats failing at
-  # the first image pull with a TLS error that names nothing.
+  # Written by cloud-init or baked into the image. registries.yaml pins
+  # containerd's TLS to this file, so a node without it cannot pull images.
   if [ ! -s "$TRUSTED_CA_PATH" ]; then
     echo "kube-compute: no trusted CA at $TRUSTED_CA_PATH -- either this module was told the image bakes one (trusted_ca_in_image) and it does not, or cloud-init failed to write it" >&2
     exit 1

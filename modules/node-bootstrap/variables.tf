@@ -92,14 +92,14 @@ variable "cni" {
 }
 
 variable "trusted_ca_pem" {
-  description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private/corp/homelab CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
+  description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private or homelab CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "trusted_ca_in_image" {
-  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. true stops this module writing the PEM into user data, while still passing its value everywhere else it is needed (containerd's TLS pin in registries.yaml, the platform Application's trustedCaPemB64 parameter). Worth an input because a corporate CA is org-wide static content that costs ~1.7 KB in a genesis node's own payload and ~1.7 KB again inside every worker group's cloud-init in a CAPI bundle -- four copies on a two-group cluster, against EC2's 16384-byte user-data limit. Set it only for an image that really bakes one: the bootstrap program checks the file exists and fails the boot if it does not, because containerd cannot reach the mirror without it. Default false keeps the PEM travelling in user data."
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. true keeps the PEM out of user data while still using its value for containerd's TLS pin and the platform Application's trustedCaPemB64 parameter. The bootstrap program fails the boot if the image does not carry the file."
   type        = bool
   default     = false
 }

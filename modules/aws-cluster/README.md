@@ -260,20 +260,15 @@ an output derived from the instance is a dependency cycle. A precondition fails
 the apply rather than baking a null address into every worker's Secret.
 
 **An autoscaled cluster's payload has to stay small.** The CAPI bundle carries one
-worker cloud-init per group inside the genesis node's own user data, and EC2 allows
-16384 decoded bytes for everything that node boots with. That budget is why the
-bootstrap program is baked into the image rather than rendered per node: it used to
-appear once for the control plane and once more in every group. Set
-`trusted_ca_in_image` when the image also bakes the corporate CA, which travelled
-the same way. With both out of the payload, a two-group cluster renders 12471 bytes
-and a group costs roughly 1 KB instead of 6. `modules/aws-control-plane/README.md`
-has the numbers and the reasoning.
+worker cloud-init per group inside the genesis node's own user data, which EC2 caps at
+16384 decoded bytes. Set `trusted_ca_in_image` when the node image bakes the CA, so it
+does not travel once per group.
 
-**The controller authenticates as the control-plane node.** There is no IRSA on a
-self-managed cluster, so the AWS provider uses the node's instance profile. The
+**The controller authenticates as the node it runs on.** There is no IRSA on a
+self-managed cluster, so the AWS provider uses that node's instance profile. The
 policy letting it call `RunInstances`, `TerminateInstances`, `CreateTags` and
-`PassRole` for the worker profile belongs on `node_iam_role_name`, attached by the
-consumer repo. Without it the provider logs an authorization failure per reconcile
+`PassRole` for the worker profile belongs on `platform_node_iam_role_name`, attached
+by the consumer repo. Without it the provider logs an authorization failure per reconcile
 and creates nothing.
 
 **The spend ceiling is every group's `max_size` added together.** Nothing in

@@ -121,9 +121,9 @@ spec:
         httpTokens: required
         httpPutResponseHopLimit: 3
       additionalTags:
-        ClusterName: ${cluster_name}
-        NodeGroup: ${name}
-        ManagedBy: kube-compute
+%{ for key, value in g.tags ~}
+        ${jsonencode(key)}: ${jsonencode(value)}
+%{ endfor ~}
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
@@ -131,6 +131,7 @@ metadata:
   name: ${cluster_name}-${name}
   namespace: default
   labels:
+    kube-compute.io/autoscale: enabled
     cluster.x-k8s.io/cluster-name: ${cluster_name}
   annotations:
     cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "${g.min_size}"

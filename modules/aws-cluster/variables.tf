@@ -21,7 +21,7 @@ variable "trusted_ca_pem" {
 }
 
 variable "trusted_ca_in_image" {
-  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt, in which case no node in this cluster ships the PEM in its user data -- neither the control plane, nor a node pool, nor a worker group in the CAPI bundle, where a corporate CA would otherwise appear once per group. Its value is still used for containerd's TLS pin and the platform Application's trustedCaPemB64 parameter, so the cluster is configured identically either way. Set it only for an image that really bakes one: the bootstrap program fails the boot when the file is absent, because containerd cannot reach the mirror without it."
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt, so no node in this cluster ships the PEM in its user data. The value is still used for containerd's TLS pin and the platform Application, and the bootstrap program fails the boot if the image does not carry the file."
   type        = bool
   default     = false
 }
