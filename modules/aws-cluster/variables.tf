@@ -322,12 +322,18 @@ variable "autoscaled_nodes" {
     pod the autoscaler picks the size that leaves the least capacity idle. Every node of a role
     carries kube-compute.io/node-group=<role>, its labels and its taints, whatever its size.
 
+    max_cpu_cores and max_memory_gib cap what the role's nodes may add up to. cluster-autoscaler
+    limits only cluster-wide totals, so with several roles it enforces the sum of their caps; each
+    role's own groups are held to as many instances as fit its caps.
+
     The platform Application runs the autoscaler, and the platform node's IAM role gets its
     permissions. Every node of an autoscaled cluster registers its instance as its providerID, so
     adding the first role or removing the last replaces the control plane and static nodes.
   EOT
   type = map(object({
     instance_types      = list(string)
+    max_cpu_cores       = number
+    max_memory_gib      = number
     os_image_ami_id     = optional(string)
     root_volume_size_gb = optional(number, 20)
     root_volume_type    = optional(string, "gp3")
@@ -342,26 +348,12 @@ variable "autoscaled_nodes" {
   }
 
   validation {
+    condition     = alltrue([for role in var.autoscaled_nodes : role.max_cpu_cores >= 1 && role.max_memory_gib >= 1])
+    error_message = "every autoscaled role needs max_cpu_cores and max_memory_gib of at least 1."
+  }
+
+  validation {
     condition     = length(var.autoscaled_nodes) == 0 || var.gitops_platform_enabled
     error_message = "autoscaled_nodes requires gitops_platform_enabled: cluster-autoscaler is installed by the platform Application."
-  }
-}
-
-variable "autoscaling_limits" {
-  description = "The most vCPUs and GiB of memory cluster-autoscaler may add across every autoscaled node. The autoscaler's own limit counts every node in the cluster, so the control plane and static nodes are added on top. Required with autoscaled_nodes."
-  type = object({
-    cpu_cores  = number
-    memory_gib = number
-  })
-  default = null
-
-  validation {
-    condition     = var.autoscaling_limits == null ? true : var.autoscaling_limits.cpu_cores >= 1 && var.autoscaling_limits.memory_gib >= 1
-    error_message = "autoscaling_limits.cpu_cores and memory_gib must each be at least 1."
-  }
-
-  validation {
-    condition     = length(var.autoscaled_nodes) == 0 || var.autoscaling_limits != null
-    error_message = "autoscaled_nodes requires autoscaling_limits, so spend has a ceiling."
   }
 }

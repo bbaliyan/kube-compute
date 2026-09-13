@@ -131,7 +131,7 @@ output "autoscaled_nodes" {
 }
 
 output "cluster_autoscaler_limits" {
-  description = "The cluster-wide totals passed to cluster-autoscaler: autoscaling_limits plus the control plane and static nodes. Null without autoscaled_nodes."
+  description = "The cluster-wide totals passed to cluster-autoscaler: every role's max_cpu_cores and max_memory_gib plus the control plane and static nodes. Null without autoscaled_nodes."
   value = local.autoscaling_enabled ? {
     cores_total  = local.platform_extra_helm_parameters.clusterAutoscalerCoresTotal
     memory_total = local.platform_extra_helm_parameters.clusterAutoscalerMemoryTotal

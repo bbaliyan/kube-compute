@@ -28,8 +28,7 @@ run "off_by_default_stops_nothing" {
   command = plan
 
   variables {
-    autoscaled_nodes   = { workers = { instance_types = ["t3a.large"] } }
-    autoscaling_limits = { cpu_cores = 8, memory_gib = 32 }
+    autoscaled_nodes = { workers = { instance_types = ["t3a.large"], max_cpu_cores = 8, max_memory_gib = 32 } }
   }
 
   assert {
@@ -59,9 +58,8 @@ run "an_autoscaled_cluster_scales_every_group_to_zero_as_it_stops" {
   command = apply
 
   variables {
-    nightly_stop       = { time = "00:02", timezone = "Europe/London" }
-    autoscaled_nodes   = { workers = { instance_types = ["t3a.large", "t3a.xlarge"] } }
-    autoscaling_limits = { cpu_cores = 8, memory_gib = 32 }
+    nightly_stop     = { time = "00:02", timezone = "Europe/London" }
+    autoscaled_nodes = { workers = { instance_types = ["t3a.large", "t3a.xlarge"], max_cpu_cores = 8, max_memory_gib = 32 } }
   }
 
   assert {

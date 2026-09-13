@@ -24,9 +24,12 @@ module "cluster" {
   platform_node_group = "platform"
 
   autoscaled_nodes = {
-    workers = { instance_types = ["m7a.large", "m7a.xlarge", "m7a.2xlarge"] }
+    workers = {
+      instance_types = ["m7a.large", "m7a.xlarge", "m7a.2xlarge"]
+      max_cpu_cores  = 16
+      max_memory_gib = 64
+    }
   }
-  autoscaling_limits = { cpu_cores = 16, memory_gib = 64 }
 
   nightly_stop = { time = "20:00", timezone = "Australia/Sydney" }
 }
@@ -82,13 +85,17 @@ group, or removing the last, replaces the control plane and static nodes.**
 
 ### Limits
 
-`autoscaling_limits` caps the vCPUs and memory the autoscaler may add, whichever
-sizes it picks. Its own `--cores-total` and `--memory-total` count every node in
-the cluster, so this module passes the limits plus the control plane and static
-nodes, as read from AWS; `cluster_autoscaler_limits` shows the result. A pod
-that would need more stays Pending. Each Auto Scaling group's maximum is how many
-of its type fit the limits alone, and an instance type larger than the limits
-fails the plan.
+A role's `max_cpu_cores` and `max_memory_gib` cap the vCPUs and memory its nodes
+may add up to, whichever sizes the autoscaler picks. The autoscaler's own
+`--cores-total` and `--memory-total` count every node in the cluster, so this
+module passes every role's caps plus the control plane and static nodes, as read
+from AWS; `cluster_autoscaler_limits` shows the result. A pod that would need
+more stays Pending.
+
+Those totals are cluster-wide: with several roles, the autoscaler enforces the
+sum of their caps. Each Auto Scaling group's maximum is how many of its type fit
+its role's caps alone, and an instance type larger than its role's caps fails the
+plan.
 
 ## Nightly stop
 

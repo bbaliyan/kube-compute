@@ -47,22 +47,31 @@ run "a_role_scales_every_size_within_the_limits" {
     autoscaled_nodes = {
       workers = {
         instance_types = ["t3a.large", "t3a.xlarge"]
+        max_cpu_cores  = 6
+        max_memory_gib = 20
         node_taints    = ["workload=shared:PreferNoSchedule"]
       }
+      reserved = {
+        instance_types = ["r5a.large"]
+        max_cpu_cores  = 2
+        max_memory_gib = 8
+      }
     }
-    autoscaling_limits = { cpu_cores = 6, memory_gib = 20 }
   }
 
   assert {
-    condition     = alltrue([for group in module.autoscaled_nodes["workers"].autoscaling_groups : group.max_size == 2])
-    error_message = "each size's group may hold only as many instances as fit the limits: 20 GiB fits two 8 GiB nodes"
+    condition = (
+      alltrue([for group in module.autoscaled_nodes["workers"].autoscaling_groups : group.max_size == 2]) &&
+      module.autoscaled_nodes["reserved"].autoscaling_groups["r5a.large"].max_size == 1
+    )
+    error_message = "each size's group may hold only as many instances as fit its role's caps: 20 GiB fits two 8 GiB nodes"
   }
   assert {
     condition = (
-      local.platform_extra_helm_parameters.clusterAutoscalerCoresTotal == "0:10" &&
-      local.platform_extra_helm_parameters.clusterAutoscalerMemoryTotal == "0:36"
+      local.platform_extra_helm_parameters.clusterAutoscalerCoresTotal == "0:12" &&
+      local.platform_extra_helm_parameters.clusterAutoscalerMemoryTotal == "0:44"
     )
-    error_message = "the autoscaler's totals must be the limits plus the control plane and static nodes, which it counts too"
+    error_message = "the autoscaler's totals must be every role's caps plus the control plane and static nodes, which it counts too"
   }
   assert {
     condition = (
@@ -81,7 +90,7 @@ run "a_role_scales_every_size_within_the_limits" {
     error_message = "the autoscaler and cloud controller manager run on the platform node, so its role must carry their permissions"
   }
   assert {
-    condition     = jsondecode(aws_iam_role_policy.autoscaling[0].policy).Statement[1].Resource == [for group in values(module.autoscaled_nodes["workers"].autoscaling_groups) : group.arn]
+    condition     = toset(jsondecode(aws_iam_role_policy.autoscaling[0].policy).Statement[1].Resource) == toset(flatten([for role in module.autoscaled_nodes : [for group in values(role.autoscaling_groups) : group.arn]]))
     error_message = "scaling and terminating must be limited to this cluster's own groups"
   }
   assert {
@@ -90,29 +99,28 @@ run "a_role_scales_every_size_within_the_limits" {
   }
 }
 
-run "an_instance_type_larger_than_the_limits_is_rejected" {
+run "an_instance_type_larger_than_its_roles_caps_is_rejected" {
   command = plan
 
   variables {
     autoscaled_nodes = {
-      workers = { instance_types = ["t3a.large"] }
+      workers = { instance_types = ["t3a.large"], max_cpu_cores = 1, max_memory_gib = 64 }
     }
-    autoscaling_limits = { cpu_cores = 1, memory_gib = 64 }
   }
 
   expect_failures = [terraform_data.autoscaling_limits]
 }
 
-run "autoscaling_without_limits_is_rejected" {
+run "a_role_without_caps_is_rejected" {
   command = plan
 
   variables {
     autoscaled_nodes = {
-      workers = { instance_types = ["t3a.large"] }
+      workers = { instance_types = ["t3a.large"], max_cpu_cores = 0, max_memory_gib = 0 }
     }
   }
 
-  expect_failures = [var.autoscaling_limits]
+  expect_failures = [var.autoscaled_nodes]
 }
 
 run "autoscaling_without_the_platform_is_rejected" {
@@ -121,9 +129,8 @@ run "autoscaling_without_the_platform_is_rejected" {
   variables {
     gitops_platform_enabled = false
     autoscaled_nodes = {
-      workers = { instance_types = ["t3a.large"] }
+      workers = { instance_types = ["t3a.large"], max_cpu_cores = 8, max_memory_gib = 32 }
     }
-    autoscaling_limits = { cpu_cores = 8, memory_gib = 32 }
   }
 
   expect_failures = [var.autoscaled_nodes]

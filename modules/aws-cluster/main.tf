@@ -41,13 +41,18 @@ locals {
     [for group in var.static_nodes : group.node_count * data.aws_ec2_instance_type.sized[group.instance_type].memory_size],
   ))
 
-  # How many of each instance type fit the limits on their own.
+  # How many of each instance type fit its role's caps on their own.
   autoscaled_max_sizes = {
-    for type in local.autoscaled_instance_types : type => floor(min(
-      var.autoscaling_limits.cpu_cores / data.aws_ec2_instance_type.sized[type].default_vcpus,
-      var.autoscaling_limits.memory_gib * 1024 / data.aws_ec2_instance_type.sized[type].memory_size,
-    ))
+    for role, config in var.autoscaled_nodes : role => {
+      for type in config.instance_types : type => floor(min(
+        config.max_cpu_cores / data.aws_ec2_instance_type.sized[type].default_vcpus,
+        config.max_memory_gib * 1024 / data.aws_ec2_instance_type.sized[type].memory_size,
+      ))
+    }
   }
+
+  autoscaled_cpu_cores  = sum(concat([0], [for config in var.autoscaled_nodes : config.max_cpu_cores]))
+  autoscaled_memory_gib = sum(concat([0], [for config in var.autoscaled_nodes : config.max_memory_gib]))
 
   autoscaling_group_arns = flatten([for role in module.autoscaled_nodes : [for group in values(role.autoscaling_groups) : group.arn]])
 
@@ -57,8 +62,8 @@ locals {
       clusterAutoscalerEnabled       = "true"
       clusterAutoscalerCloudProvider = "aws"
       awsRegion                      = var.aws_region
-      clusterAutoscalerCoresTotal    = "0:${local.fixed_cpu_cores + var.autoscaling_limits.cpu_cores}"
-      clusterAutoscalerMemoryTotal   = "0:${ceil(local.fixed_memory_mib / 1024) + var.autoscaling_limits.memory_gib}"
+      clusterAutoscalerCoresTotal    = "0:${local.fixed_cpu_cores + local.autoscaled_cpu_cores}"
+      clusterAutoscalerMemoryTotal   = "0:${ceil(local.fixed_memory_mib / 1024) + local.autoscaled_memory_gib}"
     } : {},
   )
 }
@@ -161,9 +166,9 @@ module "autoscaled_nodes" {
   cluster_security_group_id = module.control_plane.cluster_security_group_id
   subnet_id                 = module.control_plane.subnet_id
 
-  # At least one, so an instance type too large for the limits fails on
+  # At least one, so an instance type too large for its role's caps fails on
   # terraform_data.autoscaling_limits instead of inside this module.
-  instance_type_max_sizes = { for type in each.value.instance_types : type => max(1, local.autoscaled_max_sizes[type]) }
+  instance_type_max_sizes = { for type, max_size in local.autoscaled_max_sizes[each.key] : type => max(1, max_size) }
 
   os_image_ami_id     = each.value.os_image_ami_id
   os_image_name       = var.os_image_name
@@ -184,8 +189,8 @@ resource "terraform_data" "autoscaling_limits" {
 
   lifecycle {
     precondition {
-      condition     = alltrue([for max_size in values(local.autoscaled_max_sizes) : max_size >= 1])
-      error_message = "Instance types larger than autoscaling_limits could never be launched: ${join(", ", [for type, max_size in local.autoscaled_max_sizes : type if max_size < 1])}."
+      condition     = alltrue(flatten([for sizes in values(local.autoscaled_max_sizes) : [for max_size in values(sizes) : max_size >= 1]]))
+      error_message = "Instance types larger than their role's max_cpu_cores or max_memory_gib could never be launched: ${join(", ", flatten([for role, sizes in local.autoscaled_max_sizes : [for type, max_size in sizes : "${role} ${type}" if max_size < 1]]))}."
     }
   }
 }

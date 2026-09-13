@@ -2,7 +2,8 @@
 
 One role of RKE2 worker nodes that cluster-autoscaler scales from zero, joining an
 existing `aws-control-plane` cluster. `aws-cluster` creates one per
-`autoscaled_nodes` entry and derives each maximum from `autoscaling_limits`.
+`autoscaled_nodes` entry and derives each maximum from the role's `max_cpu_cores`
+and `max_memory_gib`.
 
 ```hcl
 module "workers" {
