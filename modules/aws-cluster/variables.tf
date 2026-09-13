@@ -317,18 +317,17 @@ variable "nightly_stop" {
 
 variable "autoscaled_nodes" {
   description = <<-EOT
-    Worker groups cluster-autoscaler scales between zero and max_size, keyed by group name, each
-    an EC2 Auto Scaling group via aws-node-pool in the control plane's subnet. One instance type
-    per group; for a pending pod the autoscaler picks the group that leaves the least capacity
-    idle. Split groups by anything a pod selects on: a shape, an architecture, a taint.
+    Roles cluster-autoscaler adds nodes to, keyed by role name (e.g. "workers"). Each instance type
+    of a role is an EC2 Auto Scaling group from zero, in the control plane's subnet; for a pending
+    pod the autoscaler picks the size that leaves the least capacity idle. Every node of a role
+    carries kube-compute.io/node-group=<role>, its labels and its taints, whatever its size.
 
     The platform Application runs the autoscaler, and the platform node's IAM role gets its
     permissions. Every node of an autoscaled cluster registers its instance as its providerID, so
-    adding the first group or removing the last replaces the control plane and static nodes.
+    adding the first role or removing the last replaces the control plane and static nodes.
   EOT
   type = map(object({
-    instance_type       = string
-    max_size            = number
+    instance_types      = list(string)
     os_image_ami_id     = optional(string)
     root_volume_size_gb = optional(number, 20)
     root_volume_type    = optional(string, "gp3")
@@ -338,12 +337,31 @@ variable "autoscaled_nodes" {
   default = {}
 
   validation {
-    condition     = alltrue([for g in var.autoscaled_nodes : g.max_size >= 1])
-    error_message = "every autoscaled group needs max_size >= 1."
+    condition     = alltrue([for role in var.autoscaled_nodes : length(role.instance_types) > 0 && length(distinct(role.instance_types)) == length(role.instance_types)])
+    error_message = "every autoscaled role needs at least one instance type, each listed once."
   }
 
   validation {
     condition     = length(var.autoscaled_nodes) == 0 || var.gitops_platform_enabled
     error_message = "autoscaled_nodes requires gitops_platform_enabled: cluster-autoscaler is installed by the platform Application."
+  }
+}
+
+variable "autoscaling_limits" {
+  description = "The most vCPUs and GiB of memory cluster-autoscaler may add across every autoscaled node. The autoscaler's own limit counts every node in the cluster, so the control plane and static nodes are added on top. Required with autoscaled_nodes."
+  type = object({
+    cpu_cores  = number
+    memory_gib = number
+  })
+  default = null
+
+  validation {
+    condition     = var.autoscaling_limits == null ? true : var.autoscaling_limits.cpu_cores >= 1 && var.autoscaling_limits.memory_gib >= 1
+    error_message = "autoscaling_limits.cpu_cores and memory_gib must each be at least 1."
+  }
+
+  validation {
+    condition     = length(var.autoscaled_nodes) == 0 || var.autoscaling_limits != null
+    error_message = "autoscaled_nodes requires autoscaling_limits, so spend has a ceiling."
   }
 }

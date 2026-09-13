@@ -10,7 +10,7 @@ variable "cluster_name" {
 }
 
 variable "group_name" {
-  description = "Names the group, e.g. \"workers-large\". Used in the Auto Scaling group and IAM names and as the kube-compute.io/node-group label."
+  description = "Names the role these nodes play, e.g. \"workers\". Every node carries it as the kube-compute.io/node-group label, whatever its instance type."
   type        = string
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{0,20}$", var.group_name))
@@ -68,29 +68,27 @@ variable "subnet_id" {
   type        = string
 }
 
-variable "max_size" {
-  description = "Most nodes cluster-autoscaler may run in this group. The group starts at zero and returns to zero when idle."
-  type        = number
+variable "instance_type_max_sizes" {
+  description = "Instance types this role launches, each with the most instances of that type cluster-autoscaler may run. Each type is its own Auto Scaling group, starting at zero: cluster-autoscaler requires every instance in a group to have the same shape."
+  type        = map(number)
   validation {
-    condition     = var.max_size >= 1
-    error_message = "max_size must be at least 1."
+    condition     = length(var.instance_type_max_sizes) > 0
+    error_message = "instance_type_max_sizes needs at least one instance type."
+  }
+  validation {
+    condition     = alltrue([for max_size in values(var.instance_type_max_sizes) : max_size >= 1])
+    error_message = "every instance type needs a max size of at least 1."
   }
 }
 
-variable "instance_type" {
-  description = "EC2 instance type for every node. The architecture, and so the image, follows from it."
-  type        = string
-  default     = "m7g.medium"
-}
-
 variable "os_image_ami_id" {
-  description = "AMI ID. Null = resolve os_image_name, or the latest AlmaLinux 10, for the instance type's architecture."
+  description = "AMI ID for every instance type. Null = resolve os_image_name, or the latest AlmaLinux 10, for each instance type's architecture."
   type        = string
   default     = null
 }
 
 variable "os_image_name" {
-  description = "AMI name, e.g. kube-image's build name, resolved against this account's own AMIs and the instance type's architecture. Accepts EC2 Name-filter wildcards. Ignored when os_image_ami_id is set."
+  description = "AMI name, e.g. kube-image's build name, resolved against this account's own AMIs for each instance type's architecture. Accepts EC2 Name-filter wildcards. Ignored when os_image_ami_id is set."
   type        = string
   default     = null
 }
@@ -108,7 +106,7 @@ variable "root_volume_type" {
 }
 
 variable "node_labels" {
-  description = "Node labels beyond the zone and node-group labels this module always sets."
+  description = "Node labels beyond the zone, instance-type and node-group labels this module always sets."
   type        = map(string)
   default     = {}
 }
@@ -124,7 +122,7 @@ variable "node_taints" {
 }
 
 variable "extra_tags" {
-  description = "Additional tags applied to every resource this module creates and every instance the group launches."
+  description = "Additional tags applied to every resource this module creates and every instance the groups launch."
   type        = map(string)
   default     = {}
 }

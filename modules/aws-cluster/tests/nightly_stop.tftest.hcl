@@ -7,6 +7,13 @@ mock_provider "aws" {
   mock_resource "aws_iam_role" {
     defaults = { arn = "arn:aws:iam::123456789012:role/kube-compute-bharat-stop" }
   }
+  mock_data "aws_ec2_instance_type" {
+    defaults = {
+      supported_architectures = ["x86_64"]
+      default_vcpus           = 2
+      memory_size             = 8192
+    }
+  }
 }
 
 variables {
@@ -19,6 +26,11 @@ variables {
 
 run "off_by_default_stops_nothing" {
   command = plan
+
+  variables {
+    autoscaled_nodes   = { workers = { instance_types = ["t3a.large"] } }
+    autoscaling_limits = { cpu_cores = 8, memory_gib = 32 }
+  }
 
   assert {
     condition     = length(aws_scheduler_schedule.nightly_stop) == 0 && length(aws_scheduler_schedule.nightly_scale_to_zero) == 0
@@ -39,36 +51,41 @@ run "a_cluster_without_autoscaling_only_stops_its_nodes" {
   }
   assert {
     condition     = length(aws_scheduler_schedule.nightly_scale_to_zero) == 0 && length(jsondecode(aws_iam_role_policy.nightly_stop[0].policy).Statement) == 1
-    error_message = "a cluster without autoscaled groups must only be allowed to stop its instances"
+    error_message = "a cluster without autoscaled nodes must only be allowed to stop its instances"
   }
 }
 
-run "an_autoscaled_cluster_scales_its_groups_to_zero_as_it_stops" {
+run "an_autoscaled_cluster_scales_every_group_to_zero_as_it_stops" {
   command = apply
 
   variables {
-    nightly_stop = { time = "00:02", timezone = "Europe/London" }
-    autoscaled_nodes = {
-      workers = { instance_type = "t3a.large", max_size = 2 }
-    }
+    nightly_stop       = { time = "00:02", timezone = "Europe/London" }
+    autoscaled_nodes   = { workers = { instance_types = ["t3a.large", "t3a.xlarge"] } }
+    autoscaling_limits = { cpu_cores = 8, memory_gib = 32 }
   }
 
   assert {
-    condition = (
-      aws_scheduler_schedule.nightly_scale_to_zero["workers"].schedule_expression == aws_scheduler_schedule.nightly_stop[0].schedule_expression &&
-      aws_scheduler_schedule.nightly_scale_to_zero["workers"].schedule_expression_timezone == "Europe/London"
-    )
+    condition     = keys(aws_scheduler_schedule.nightly_scale_to_zero) == ["workers-t3a-large", "workers-t3a-xlarge"]
+    error_message = "every instance type's group needs its own scale-to-zero schedule"
+  }
+  assert {
+    condition = alltrue([
+      for schedule in aws_scheduler_schedule.nightly_scale_to_zero :
+      schedule.schedule_expression == aws_scheduler_schedule.nightly_stop[0].schedule_expression &&
+      schedule.schedule_expression_timezone == "Europe/London" &&
+      schedule.group_name == "bharat-to-zero"
+    ])
     error_message = "a group must go to zero at the moment the nodes stop, when nothing is left to scale it back up"
   }
   assert {
-    condition = jsondecode(aws_scheduler_schedule.nightly_scale_to_zero["workers"].target[0].input) == {
-      AutoScalingGroupName = module.autoscaled_nodes["workers"].autoscaling_group_name
+    condition = jsondecode(aws_scheduler_schedule.nightly_scale_to_zero["workers-t3a-xlarge"].target[0].input) == {
+      AutoScalingGroupName = module.autoscaled_nodes["workers"].autoscaling_groups["t3a.xlarge"].name
       DesiredCapacity      = 0
     }
-    error_message = "the schedule must set the group's desired capacity to zero"
+    error_message = "the schedule must set its group's desired capacity to zero"
   }
   assert {
-    condition     = jsondecode(aws_iam_role_policy.nightly_stop[0].policy).Statement[1].Resource == [module.autoscaled_nodes["workers"].autoscaling_group_arn]
+    condition     = jsondecode(aws_iam_role_policy.nightly_stop[0].policy).Statement[1].Resource == local.autoscaling_group_arns
     error_message = "the schedule's role must be allowed to scale exactly this cluster's groups"
   }
 }

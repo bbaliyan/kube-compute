@@ -118,17 +118,24 @@ output "workload_node_iam_role_names" {
 }
 
 output "autoscaled_nodes" {
-  description = "Map of group name -> {autoscaling_group_name, availability_zone, node_arch, node_iam_role_name, node_labels, node_taints}."
+  description = "Map of role -> {autoscaling_groups, availability_zone, node_iam_role_name, node_labels, node_taints}, where autoscaling_groups maps each instance type to its group's {name, arn, max_size, node_arch}."
   value = {
-    for name, group in module.autoscaled_nodes : name => {
-      autoscaling_group_name = group.autoscaling_group_name
-      availability_zone      = group.availability_zone
-      node_arch              = group.node_arch
-      node_iam_role_name     = group.node_iam_role_name
-      node_labels            = group.node_labels
-      node_taints            = group.node_taints
+    for name, role in module.autoscaled_nodes : name => {
+      autoscaling_groups = role.autoscaling_groups
+      availability_zone  = role.availability_zone
+      node_iam_role_name = role.node_iam_role_name
+      node_labels        = role.node_labels
+      node_taints        = role.node_taints
     }
   }
+}
+
+output "cluster_autoscaler_limits" {
+  description = "The cluster-wide totals passed to cluster-autoscaler: autoscaling_limits plus the control plane and static nodes. Null without autoscaled_nodes."
+  value = local.autoscaling_enabled ? {
+    cores_total  = local.platform_extra_helm_parameters.clusterAutoscalerCoresTotal
+    memory_total = local.platform_extra_helm_parameters.clusterAutoscalerMemoryTotal
+  } : null
 }
 
 output "hosted_zone_id" {

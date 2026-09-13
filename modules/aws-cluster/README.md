@@ -24,9 +24,9 @@ module "cluster" {
   platform_node_group = "platform"
 
   autoscaled_nodes = {
-    workers-large  = { instance_type = "t3a.large", max_size = 2 }
-    workers-xlarge = { instance_type = "t3a.xlarge", max_size = 2 }
+    workers = { instance_types = ["m7a.large", "m7a.xlarge", "m7a.2xlarge"] }
   }
+  autoscaling_limits = { cpu_cores = 16, memory_gib = 64 }
 
   nightly_stop = { time = "20:00", timezone = "Australia/Sydney" }
 }
@@ -44,8 +44,9 @@ Static and autoscaled nodes launch into the control plane's subnet, so the
 cluster stays in one availability zone: an EBS volume cannot cross zones. A
 static group can take its own `subnet_id` as a deliberate exception.
 
-Each group gets the `kube-compute.io/node-group=<name>` label. `node_taints`
-keeps other pods off a group; pods that belong there need a matching toleration.
+Every node carries `kube-compute.io/node-group=<key>`: the static group's name, or
+the autoscaled role's, whatever the node's size. `node_taints` keeps other pods
+off; pods that belong there need a matching toleration.
 
 ## Platform node
 
@@ -60,11 +61,13 @@ Without it, all of that stays on the control plane.
 
 ## Autoscaling
 
-Each `autoscaled_nodes` entry is an EC2 Auto Scaling group, from zero to
-`max_size`, of one instance type. The platform Application then runs:
+Each `autoscaled_nodes` entry is a role listing the instance types it may
+launch. Every type is its own EC2 Auto Scaling group starting at zero, because
+cluster-autoscaler requires one shape per group. The platform Application then
+runs:
 
 - **cluster-autoscaler**, which adds a node for a pod that fits nowhere else,
-  from the group leaving the least capacity idle, and removes nodes no longer
+  of the size leaving the least capacity idle, and removes nodes no longer
   needed;
 - **the AWS cloud controller manager's node lifecycle controller**, which
   deletes the Node object of a terminated instance so its pods and volumes can
@@ -77,13 +80,22 @@ Both find a node's instance through its providerID, so every node of an
 autoscaled cluster registers `aws:///<zone>/<instance-id>`. **Adding the first
 group, or removing the last, replaces the control plane and static nodes.**
 
-The spend ceiling is each group's `max_size` times its instance price.
+### Limits
+
+`autoscaling_limits` caps the vCPUs and memory the autoscaler may add, whichever
+sizes it picks. Its own `--cores-total` and `--memory-total` count every node in
+the cluster, so this module passes the limits plus the control plane and static
+nodes, as read from AWS; `cluster_autoscaler_limits` shows the result. A pod
+that would need more stays Pending. Each Auto Scaling group's maximum is how many
+of its type fit the limits alone, and an instance type larger than the limits
+fails the plan.
 
 ## Nightly stop
 
 `nightly_stop` stops the control plane and static nodes at the given time, and at
 the same moment sets every autoscaled group to zero, because an instance in an
-Auto Scaling group cannot be stopped. Nothing is left running to scale the groups
+Auto Scaling group cannot be stopped. Those schedules sit in the
+`<cluster_name>-to-zero` schedule group, one per role and instance type. Nothing is left running to scale the groups
 back up. When the cluster is started again, the lifecycle controller removes the
 old nodes and the autoscaler adds new ones as pods need them.
 

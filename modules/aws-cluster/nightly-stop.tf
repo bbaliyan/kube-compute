@@ -3,6 +3,12 @@
 locals {
   nightly_stop_minute_of_day = try(tonumber(split(":", var.nightly_stop.time)[0]) * 60 + tonumber(split(":", var.nightly_stop.time)[1]), 0)
   nightly_stop_expression    = format("cron(%d %d * * ? *)", local.nightly_stop_minute_of_day % 60, floor(local.nightly_stop_minute_of_day / 60))
+
+  nightly_scale_to_zero_groups = var.nightly_stop == null ? {} : merge({}, [
+    for role, config in var.autoscaled_nodes : {
+      for type in config.instance_types : "${role}-${replace(type, ".", "-")}" => { role = role, type = type }
+    }
+  ]...)
 }
 
 resource "aws_iam_role" "nightly_stop" {
@@ -37,7 +43,7 @@ resource "aws_iam_role_policy" "nightly_stop" {
       local.autoscaling_enabled ? [{
         Effect   = "Allow"
         Action   = "autoscaling:SetDesiredCapacity"
-        Resource = [for group in module.autoscaled_nodes : group.autoscaling_group_arn]
+        Resource = local.autoscaling_group_arns
       }] : [],
     )
   })
@@ -64,11 +70,18 @@ resource "aws_scheduler_schedule" "nightly_stop" {
   }
 }
 
+resource "aws_scheduler_schedule_group" "nightly_scale_to_zero" {
+  count = length(local.nightly_scale_to_zero_groups) > 0 ? 1 : 0
+  name  = "${var.cluster_name}-to-zero"
+  tags  = merge(var.extra_tags, { ClusterName = var.cluster_name, ManagedBy = "kube-compute" })
+}
+
 # Autoscaled nodes cannot be stopped, only removed. With the control plane stopping at
 # the same moment, nothing is left running to scale them back up.
 resource "aws_scheduler_schedule" "nightly_scale_to_zero" {
-  for_each = var.nightly_stop == null ? {} : var.autoscaled_nodes
-  name     = "${var.cluster_name}-${each.key}-to-zero"
+  for_each   = local.nightly_scale_to_zero_groups
+  name       = each.key
+  group_name = aws_scheduler_schedule_group.nightly_scale_to_zero[0].name
 
   flexible_time_window {
     mode = "OFF"
@@ -82,7 +95,7 @@ resource "aws_scheduler_schedule" "nightly_scale_to_zero" {
     role_arn = aws_iam_role.nightly_stop[0].arn
 
     input = jsonencode({
-      AutoScalingGroupName = module.autoscaled_nodes[each.key].autoscaling_group_name
+      AutoScalingGroupName = module.autoscaled_nodes[each.value.role].autoscaling_groups[each.value.type].name
       DesiredCapacity      = 0
     })
   }

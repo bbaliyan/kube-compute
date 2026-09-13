@@ -5,12 +5,18 @@ locals {
   # An IAM name_prefix caps at 38 characters.
   iam_name_prefix = substr(format("kube-compute-%s-%s-", var.cluster_name, var.group_name), 0, 38)
 
-  ami_arch = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
-  effective_ami_id = coalesce(
-    var.os_image_ami_id,
-    try(one(data.aws_ami.by_name[*].id), null),
-    try(one(data.aws_ami.almalinux10[*].id), null),
-  )
+  ami_arch = {
+    for type, info in data.aws_ec2_instance_type.selected :
+    type => contains(info.supported_architectures, "arm64") ? "arm64" : "x86_64"
+  }
+
+  effective_ami_id = {
+    for type in keys(var.instance_type_max_sizes) : type => coalesce(
+      var.os_image_ami_id,
+      try(data.aws_ami.by_name[type].id, null),
+      try(data.aws_ami.almalinux10[type].id, null),
+    )
+  }
 
   availability_zone = data.aws_subnet.selected.availability_zone
 
@@ -21,21 +27,23 @@ locals {
 
   mime_boundary = "MIMEBOUNDARY"
 
-  combined_user_data = join("\n", [
-    "Content-Type: multipart/mixed; boundary=\"${local.mime_boundary}\"",
-    "MIME-Version: 1.0",
-    "",
-    "--${local.mime_boundary}",
-    "Content-Type: text/x-shellscript; charset=\"us-ascii\"",
-    "",
-    local.connectivity_user_data,
-    "--${local.mime_boundary}",
-    "Content-Type: text/cloud-config; charset=\"us-ascii\"",
-    "",
-    module.node_bootstrap.cloud_init_user_data,
-    "--${local.mime_boundary}--",
-    "",
-  ])
+  combined_user_data = {
+    for type, bootstrap in module.node_bootstrap : type => join("\n", [
+      "Content-Type: multipart/mixed; boundary=\"${local.mime_boundary}\"",
+      "MIME-Version: 1.0",
+      "",
+      "--${local.mime_boundary}",
+      "Content-Type: text/x-shellscript; charset=\"us-ascii\"",
+      "",
+      local.connectivity_user_data,
+      "--${local.mime_boundary}",
+      "Content-Type: text/cloud-config; charset=\"us-ascii\"",
+      "",
+      bootstrap.cloud_init_user_data,
+      "--${local.mime_boundary}--",
+      "",
+    ])
+  }
 
   agent_token_fetch_command = "aws ssm get-parameter --name '${var.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
 
@@ -47,22 +55,29 @@ locals {
     var.node_labels,
   )
 
+  node_labels_by_type = {
+    for type in keys(var.instance_type_max_sizes) :
+    type => merge(local.node_labels, { "node.kubernetes.io/instance-type" = type })
+  }
+
   common_tags = merge(var.extra_tags, {
     ClusterName = var.cluster_name
     NodeGroup   = var.group_name
     ManagedBy   = "kube-compute"
   })
 
-  # cluster-autoscaler discovers the group by the first two, and reads the labels
+  # cluster-autoscaler discovers a group by the first two, and reads the labels
   # and taints of a node it has not launched yet from the rest.
-  cluster_autoscaler_tags = merge(
-    {
-      "k8s.io/cluster-autoscaler/enabled"             = "true"
-      "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
-    },
-    { for k, v in local.node_labels : "k8s.io/cluster-autoscaler/node-template/label/${k}" => v },
-    { for t in var.node_taints : "k8s.io/cluster-autoscaler/node-template/taint/${split("=", t)[0]}" => split("=", t)[1] },
-  )
+  cluster_autoscaler_tags = {
+    for type, labels in local.node_labels_by_type : type => merge(
+      {
+        "k8s.io/cluster-autoscaler/enabled"             = "true"
+        "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+      },
+      { for k, v in labels : "k8s.io/cluster-autoscaler/node-template/label/${k}" => v },
+      { for t in var.node_taints : "k8s.io/cluster-autoscaler/node-template/taint/${split("=", t)[0]}" => split("=", t)[1] },
+    )
+  }
 }
 
 resource "aws_iam_role" "node" {
@@ -119,9 +134,10 @@ resource "aws_iam_instance_profile" "node" {
   tags        = local.common_tags
 }
 
-# Every instance boots the same render, so EC2 names the host rather than cloud-init.
+# Every instance of a type boots the same render, so EC2 names the host rather than cloud-init.
 module "node_bootstrap" {
-  source = "../node-bootstrap"
+  source   = "../node-bootstrap"
+  for_each = var.instance_type_max_sizes
 
   cluster_name              = var.cluster_name
   node_name                 = local.node_name
@@ -129,7 +145,7 @@ module "node_bootstrap" {
   node_role                 = "worker"
   registration_address      = var.registration_address
   agent_token_fetch_command = local.agent_token_fetch_command
-  node_labels               = local.node_labels
+  node_labels               = local.node_labels_by_type[each.key]
   node_taints               = var.node_taints
   trusted_ca_pem            = var.trusted_ca_pem
   trusted_ca_in_image       = var.trusted_ca_in_image
@@ -139,9 +155,11 @@ module "node_bootstrap" {
 }
 
 resource "aws_launch_template" "node" {
-  name_prefix   = "kube-compute-${local.node_name}-"
-  image_id      = local.effective_ami_id
-  instance_type = var.instance_type
+  for_each = var.instance_type_max_sizes
+
+  name_prefix   = "kube-compute-${local.node_name}-${replace(each.key, ".", "-")}-"
+  image_id      = local.effective_ami_id[each.key]
+  instance_type = each.key
 
   iam_instance_profile {
     name = aws_iam_instance_profile.node.name
@@ -166,7 +184,7 @@ resource "aws_launch_template" "node" {
     }
   }
 
-  user_data = base64gzip(local.combined_user_data)
+  user_data = base64gzip(local.combined_user_data[each.key])
 
   tag_specifications {
     resource_type = "volume"
@@ -178,14 +196,16 @@ resource "aws_launch_template" "node" {
 
 # cluster-autoscaler owns the desired capacity, so Terraform never sets it.
 resource "aws_autoscaling_group" "node" {
-  name                = "kube-compute-${local.node_name}"
+  for_each = var.instance_type_max_sizes
+
+  name                = "kube-compute-${local.node_name}-${replace(each.key, ".", "-")}"
   min_size            = 0
-  max_size            = var.max_size
+  max_size            = each.value
   vpc_zone_identifier = [var.subnet_id]
 
   launch_template {
-    id      = aws_launch_template.node.id
-    version = aws_launch_template.node.latest_version
+    id      = aws_launch_template.node[each.key].id
+    version = aws_launch_template.node[each.key].latest_version
   }
 
   dynamic "tag" {
@@ -198,7 +218,7 @@ resource "aws_autoscaling_group" "node" {
   }
 
   dynamic "tag" {
-    for_each = local.cluster_autoscaler_tags
+    for_each = local.cluster_autoscaler_tags[each.key]
     content {
       key                 = tag.key
       value               = tag.value

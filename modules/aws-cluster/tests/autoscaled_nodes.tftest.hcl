@@ -4,6 +4,13 @@ mock_provider "aws" {
   mock_resource "aws_launch_template" {
     defaults = { id = "lt-0123456789abcdef0" }
   }
+  mock_data "aws_ec2_instance_type" {
+    defaults = {
+      supported_architectures = ["x86_64"]
+      default_vcpus           = 2
+      memory_size             = 8192
+    }
+  }
 }
 
 variables {
@@ -14,7 +21,7 @@ variables {
   os_image_ami_id       = "ami-0123456789abcdef0"
 }
 
-run "no_groups_means_no_autoscaling" {
+run "no_roles_means_no_autoscaling" {
   command = plan
 
   assert {
@@ -27,7 +34,8 @@ run "no_groups_means_no_autoscaling" {
   }
 }
 
-run "groups_join_the_control_planes_zone_and_the_platform_can_scale_them" {
+# Every mocked instance type has 2 vCPUs and 8 GiB.
+run "a_role_scales_every_size_within_the_limits" {
   command = apply
 
   variables {
@@ -37,14 +45,24 @@ run "groups_join_the_control_planes_zone_and_the_platform_can_scale_them" {
       platform = { instance_type = "t3a.xlarge" }
     }
     autoscaled_nodes = {
-      reserved      = { instance_type = "r5a.large", max_size = 1, node_taints = ["workload=reserved:NoSchedule"] }
-      workers-large = { instance_type = "t3a.large", max_size = 2 }
+      workers = {
+        instance_types = ["t3a.large", "t3a.xlarge"]
+        node_taints    = ["workload=shared:PreferNoSchedule"]
+      }
     }
+    autoscaling_limits = { cpu_cores = 6, memory_gib = 20 }
   }
 
   assert {
-    condition     = alltrue([for g in module.autoscaled_nodes : g.subnet_id == module.control_plane.subnet_id])
-    error_message = "every group must launch into the control plane's subnet -- an EBS volume cannot cross availability zones"
+    condition     = alltrue([for group in module.autoscaled_nodes["workers"].autoscaling_groups : group.max_size == 2])
+    error_message = "each size's group may hold only as many instances as fit the limits: 20 GiB fits two 8 GiB nodes"
+  }
+  assert {
+    condition = (
+      local.platform_extra_helm_parameters.clusterAutoscalerCoresTotal == "0:10" &&
+      local.platform_extra_helm_parameters.clusterAutoscalerMemoryTotal == "0:36"
+    )
+    error_message = "the autoscaler's totals must be the limits plus the control plane and static nodes, which it counts too"
   }
   assert {
     condition = (
@@ -55,33 +73,46 @@ run "groups_join_the_control_planes_zone_and_the_platform_can_scale_them" {
     error_message = "the platform Application must run cluster-autoscaler against this region's Auto Scaling groups"
   }
   assert {
+    condition     = module.autoscaled_nodes["workers"].subnet_id == module.control_plane.subnet_id
+    error_message = "every group must launch into the control plane's subnet -- an EBS volume cannot cross availability zones"
+  }
+  assert {
     condition     = aws_iam_role_policy.autoscaling[0].role == module.static_nodes["platform"].node_iam_role_name
     error_message = "the autoscaler and cloud controller manager run on the platform node, so its role must carry their permissions"
   }
   assert {
-    condition     = jsondecode(aws_iam_role_policy.autoscaling[0].policy).Statement[1].Resource == [for g in module.autoscaled_nodes : g.autoscaling_group_arn]
+    condition     = jsondecode(aws_iam_role_policy.autoscaling[0].policy).Statement[1].Resource == [for group in values(module.autoscaled_nodes["workers"].autoscaling_groups) : group.arn]
     error_message = "scaling and terminating must be limited to this cluster's own groups"
   }
   assert {
-    condition     = alltrue([for g in module.autoscaled_nodes : contains(output.workload_node_iam_role_names, g.node_iam_role_name)])
-    error_message = "workloads run on autoscaled nodes, so their roles must be among the workload roles"
-  }
-  assert {
-    condition     = output.autoscaled_nodes["reserved"].node_taints == tolist(["workload=reserved:NoSchedule"])
-    error_message = "the output must surface each group's taints"
+    condition     = contains(output.workload_node_iam_role_names, module.autoscaled_nodes["workers"].node_iam_role_name)
+    error_message = "workloads run on autoscaled nodes, so their role must be among the workload roles"
   }
 }
 
-run "a_group_that_can_never_have_a_node_is_rejected" {
+run "an_instance_type_larger_than_the_limits_is_rejected" {
   command = plan
 
   variables {
     autoscaled_nodes = {
-      workers = { instance_type = "t3a.large", max_size = 0 }
+      workers = { instance_types = ["t3a.large"] }
+    }
+    autoscaling_limits = { cpu_cores = 1, memory_gib = 64 }
+  }
+
+  expect_failures = [terraform_data.autoscaling_limits]
+}
+
+run "autoscaling_without_limits_is_rejected" {
+  command = plan
+
+  variables {
+    autoscaled_nodes = {
+      workers = { instance_types = ["t3a.large"] }
     }
   }
 
-  expect_failures = [var.autoscaled_nodes]
+  expect_failures = [var.autoscaling_limits]
 }
 
 run "autoscaling_without_the_platform_is_rejected" {
@@ -90,8 +121,9 @@ run "autoscaling_without_the_platform_is_rejected" {
   variables {
     gitops_platform_enabled = false
     autoscaled_nodes = {
-      workers = { instance_type = "t3a.large", max_size = 2 }
+      workers = { instance_types = ["t3a.large"] }
     }
+    autoscaling_limits = { cpu_cores = 8, memory_gib = 32 }
   }
 
   expect_failures = [var.autoscaled_nodes]
