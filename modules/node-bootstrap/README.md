@@ -160,6 +160,23 @@ is not here (`disable-cloud-controller`) and kube-platform's AWS one does not ru
 Off by default, since turning it on changes the payload and so replaces existing
 nodes.
 
+## Resources reserved for the node
+
+Every node reserves CPU and memory for kubelet, containerd, RKE2 and the OS, so pods
+can never take all of it. Without a reservation a crowded node doesn't evict pods: it
+reclaims memory until containerd stops answering kubelet and the node goes NotReady.
+The node sizes the reservation from its own memory and cores, in the same tiers GKE
+uses, and writes it as an RKE2 `config.yaml.d` drop-in before RKE2 starts:
+
+| | Reserved |
+|---|---|
+| `kube-reserved` memory | 25% of the first 4 GiB, 20% of the next 4, 10% of the next 8, 6% up to 128 GiB, 2% above |
+| `kube-reserved` CPU | 6% of the first core, 1% of the second, 0.5% of the next two, 0.25% above |
+| `system-reserved` | 100m CPU, 256 MiB |
+| `eviction-hard` | `memory.available<200Mi`, plus kubelet's own disk and inode defaults, which the flag would otherwise drop |
+
+An 8 GiB node, for example, keeps about 5.4 GiB for pods.
+
 ## Interface notes
 
 - `ansible_playbook_path`, `invocation_mode`, `ansible_connection_vars`,

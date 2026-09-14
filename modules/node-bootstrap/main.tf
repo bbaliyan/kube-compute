@@ -508,6 +508,24 @@ locals {
     printf 'kubelet-arg+:\n  - "provider-id=aws:///%s/%s"\nnode-label+:\n  - "node.kubernetes.io/instance-type=%s"\n' "$ZONE" "$INSTANCE_ID" "$INSTANCE_TYPE" >/etc/rancher/rke2/config.yaml.d/50-aws-instance.yaml
   EOT
 
+  # Sized on the node from its own memory and cores, in GKE's tiers: 25% of the first
+  # 4 GiB, 20% of the next 4, 10% of the next 8, 6% up to 128 GiB and 2% above; 6% of the
+  # first core, 1% of the second, 0.5% of the next two and 0.25% above. Pods are capped at
+  # what is left, so a crowded node evicts or kills pods rather than starving kubelet,
+  # containerd and RKE2 until it drops out of the cluster.
+  kubelet_reserved_script = <<-EOT
+    set -eu
+    MEM_MIB=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo)
+    KUBE_MEM_MIB=$(awk -v m="$MEM_MIB" 'BEGIN {
+      split("4096 4096 8192 114688", size); split("0.25 0.20 0.10 0.06", share)
+      for (i = 1; i <= 4; i++) { t = m < size[i] ? m : size[i]; r += t * share[i]; m -= t }
+      print int(r + m * 0.02) }')
+    KUBE_CPU_M=$(awk -v c="$(nproc)" 'BEGIN {
+      print int(60 + (c > 1 ? 10 : 0) + (c > 2 ? (c > 4 ? 2 : c - 2) * 5 : 0) + (c > 4 ? (c - 4) * 2.5 : 0)) }')
+    install -d -m 0755 /etc/rancher/rke2/config.yaml.d
+    printf 'kubelet-arg+:\n  - "kube-reserved=cpu=%sm,memory=%sMi"\n  - "system-reserved=cpu=100m,memory=256Mi"\n  - "eviction-hard=memory.available<200Mi,nodefs.available<10%%,imagefs.available<15%%,nodefs.inodesFree<5%%,imagefs.inodesFree<5%%"\n' "$KUBE_CPU_M" "$KUBE_MEM_MIB" >/etc/rancher/rke2/config.yaml.d/40-kubelet-reserved.yaml
+  EOT
+
   # RKE2/kubelet default the registered Kubernetes node name to the OS
   # hostname, so every node in a cluster MUST get a distinct value here.
   # var.set_hostname = false omits both keys entirely (see that variable's
@@ -532,6 +550,7 @@ locals {
       runcmd = concat(
         var.aws_provider_id ? [["/bin/sh", "-c", local.aws_instance_script]] : [],
         [
+          ["/bin/sh", "-c", local.kubelet_reserved_script],
           # The program is baked into the image, not written above. An image
           # predating it would otherwise fail with cloud-init's own bare "No such
           # file or directory" against a path this module used to write itself.
