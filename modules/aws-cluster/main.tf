@@ -226,18 +226,29 @@ resource "aws_iam_role_policy" "autoscaling" {
         Action   = ["autoscaling:SetDesiredCapacity", "autoscaling:TerminateInstanceInAutoScalingGroup"]
         Resource = local.autoscaling_group_arns
       },
-      {
-        Sid    = "CloudControllerManagerNodeLifecycle"
-        Effect = "Allow"
-        Action = [
-          "ec2:DescribeInstances",
-          "ec2:DescribeAvailabilityZones",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeSubnets",
-        ]
-        Resource = "*"
-      },
     ]
+  })
+}
+
+# The cloud controller manager runs on the control plane.
+resource "aws_iam_role_policy" "cloud_controller_manager" {
+  count = local.autoscaling_enabled ? 1 : 0
+  name  = "kube-compute-${var.cluster_name}-cloud-controller-manager"
+  role  = module.control_plane.node_iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "NodeLifecycle"
+      Effect = "Allow"
+      Action = [
+        "ec2:DescribeInstances",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets",
+      ]
+      Resource = "*"
+    }]
   })
 }
 

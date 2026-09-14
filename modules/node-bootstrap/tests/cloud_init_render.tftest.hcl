@@ -239,6 +239,10 @@ run "aws_provider_id_is_set_before_rke2_starts" {
     )
     error_message = "the providerID drop-in must be written before the bootstrap program starts RKE2, or the node registers without one and cluster-autoscaler cannot match it to its instance"
   }
+  assert {
+    condition     = strcontains(yamldecode(output.cloud_init_user_data).runcmd[0][2], "node-label+:\\n  - \"node.kubernetes.io/instance-type=%s\"")
+    error_message = "the drop-in must label the node with its instance type, which no controller here sets"
+  }
 }
 
 run "no_aws_provider_id_by_default" {

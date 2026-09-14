@@ -145,7 +145,7 @@ module "node_bootstrap" {
   node_role                 = "worker"
   registration_address      = var.registration_address
   agent_token_fetch_command = local.agent_token_fetch_command
-  node_labels               = local.node_labels_by_type[each.key]
+  node_labels               = local.node_labels
   node_taints               = var.node_taints
   trusted_ca_pem            = var.trusted_ca_pem
   trusted_ca_in_image       = var.trusted_ca_in_image

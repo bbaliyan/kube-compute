@@ -151,11 +151,14 @@ real-cluster check for any `set_hostname = false` caller.
 
 ## `aws_provider_id`
 
-Registers the node with providerID `aws:///<zone>/<instance-id>`, written as an
-RKE2 `config.yaml.d` drop-in from instance metadata before the bootstrap program
-starts RKE2. cluster-autoscaler and the AWS cloud controller manager find a node's
-instance through it. Off by default, since turning it on changes the payload and
-so replaces existing nodes.
+Registers the node with providerID `aws:///<zone>/<instance-id>` and labels it
+`node.kubernetes.io/instance-type`, written as an RKE2 `config.yaml.d` drop-in from
+instance metadata before the bootstrap program starts RKE2. cluster-autoscaler and
+the AWS cloud controller manager find a node's instance through the providerID. The
+label is otherwise set by a cloud controller manager's node controller, which RKE2's
+is not here (`disable-cloud-controller`) and kube-platform's AWS one does not run.
+Off by default, since turning it on changes the payload and so replaces existing
+nodes.
 
 ## Interface notes
 

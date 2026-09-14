@@ -25,7 +25,7 @@ run "no_roles_means_no_autoscaling" {
   command = plan
 
   assert {
-    condition     = length(module.autoscaled_nodes) == 0 && length(aws_iam_role_policy.autoscaling) == 0
+    condition     = length(module.autoscaled_nodes) == 0 && length(aws_iam_role_policy.autoscaling) == 0 && length(aws_iam_role_policy.cloud_controller_manager) == 0
     error_message = "without autoscaled_nodes nothing may be created for autoscaling"
   }
   assert {
@@ -87,7 +87,11 @@ run "a_role_scales_every_size_within_the_limits" {
   }
   assert {
     condition     = aws_iam_role_policy.autoscaling[0].role == module.static_nodes["platform"].node_iam_role_name
-    error_message = "the autoscaler and cloud controller manager run on the platform node, so its role must carry their permissions"
+    error_message = "the autoscaler runs on the platform node, so its role must carry the autoscaler's permissions"
+  }
+  assert {
+    condition     = aws_iam_role_policy.cloud_controller_manager[0].role == module.control_plane.node_iam_role_name
+    error_message = "the cloud controller manager runs on the control plane, so its role must carry the controller's permissions"
   }
   assert {
     condition     = toset(jsondecode(aws_iam_role_policy.autoscaling[0].policy).Statement[1].Resource) == toset(flatten([for role in module.autoscaled_nodes : [for group in values(role.autoscaling_groups) : group.arn]]))

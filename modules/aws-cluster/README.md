@@ -76,8 +76,10 @@ runs:
   deletes the Node object of a terminated instance so its pods and volumes can
   move. The autoscaler never deletes Node objects itself.
 
-Both authenticate as the platform node, and this module gives its role their
-permissions: scaling is limited to this cluster's own groups.
+Each authenticates as the node it runs on: the autoscaler on the platform node,
+the cloud controller manager on the control plane, the first node back after a
+stop. This module gives each role its permissions, and scaling is limited to this
+cluster's own groups.
 
 Both find a node's instance through its providerID, so every node of an
 autoscaled cluster registers `aws:///<zone>/<instance-id>`. **Adding the first
