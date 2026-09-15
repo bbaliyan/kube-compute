@@ -73,7 +73,9 @@ resource "terraform_data" "this" {
     var.tsig_key_algorithm,
   ]
 
+  # bash, not local-exec's default /bin/sh: on Debian that is dash, which has no pipefail.
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     environment = {
       TSIG_KEY_SECRET = var.tsig_key_secret
     }
@@ -105,7 +107,8 @@ resource "terraform_data" "this" {
   }
 
   provisioner "local-exec" {
-    when = destroy
+    when        = destroy
+    interpreter = ["/bin/bash", "-c"]
 
     command = <<-EOT
       set -euo pipefail

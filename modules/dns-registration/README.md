@@ -74,16 +74,15 @@ does persist to state — fine, since none of it is secret, and it's what lets
 the destroy-time provisioner still know what to delete after the resources
 that originally supplied those values (e.g. a VM's IP) are already gone.
 
-`tsig_key_secret` is deliberately **not** part of `input`. It's passed to
-`nsupdate` only via each provisioner's own `environment` block (an
-env var Terraform evaluates at apply/destroy time, never written into any
-resource attribute), matching this project's hard rule that secrets never
-touch state in plaintext. Referencing it directly in the destroy-time
-provisioner is safe despite the usual "destroy-time provisioners can't
-reference other resources" restriction — that restriction is about values
-that transitively depend on another *resource* (which may already be gone by
-destroy time); `tsig_key_secret` is a leaf module input sourced straight from
-a root `TF_VAR_*`, with no such dependency.
+`tsig_key_secret` is deliberately **not** part of `input`, matching this
+project's hard rule that secrets never touch state in plaintext. The
+create-time provisioner gets it through its own `environment` block. A
+destroy-time provisioner may reference nothing but `self`, so the delete reads
+`TF_VAR_tsig_key_secret` from the environment `tofu destroy` runs in, and skips
+the cleanup with a warning when it isn't set.
+
+Both provisioners run under `/bin/bash`: `local-exec` defaults to `/bin/sh`,
+which on Debian is dash, and dash has no `pipefail`.
 
 Any change to the tracked inputs (`triggers_replace`) forces a full
 destroy+create instead of an in-place update, because `terraform_data`'s

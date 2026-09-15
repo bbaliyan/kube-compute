@@ -44,7 +44,7 @@ run "dns_registration_enabled_when_server_supplied" {
   }
   assert {
     condition     = module.dns_registration.record_created == true
-    error_message = "dns_server_address set must actually create the dns_a_record_set resource"
+    error_message = "dns_server_address set must publish the record"
   }
   assert {
     condition     = output.dns_registration_enabled == true
@@ -61,7 +61,7 @@ run "dns_registration_disabled_without_server" {
 
   assert {
     condition     = module.dns_registration.record_created == false
-    error_message = "no dns_server_address must skip creating the dns_a_record_set resource — DNS registration is optional"
+    error_message = "no dns_server_address must publish no record — DNS registration is optional"
   }
   assert {
     condition     = output.dns_registration_enabled == false

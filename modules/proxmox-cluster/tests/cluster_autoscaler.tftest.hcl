@@ -21,6 +21,18 @@ mock_provider "proxmox" {
   }
 }
 
+# An apply would otherwise run nsupdate against the test's DNS server. Overriding
+# the resource is not enough: its provisioners still run.
+override_module {
+  target  = module.control_plane.module.dns_registration
+  outputs = { fqdn = "api.bharat.example.test.", record_created = true }
+}
+
+override_module {
+  target  = module.control_plane.module.dns_registration_wildcard
+  outputs = { fqdn = "*.bharat.example.test.", record_created = true }
+}
+
 variables {
   cluster_name          = "bharat"
   proxmox_node          = "pve"
