@@ -165,17 +165,24 @@ nodes.
 Every node reserves CPU and memory for kubelet, containerd, RKE2 and the OS, so pods
 can never take all of it. Without a reservation a crowded node doesn't evict pods: it
 reclaims memory until containerd stops answering kubelet and the node goes NotReady.
-The node sizes the reservation from its own memory and cores, in the same tiers GKE
-uses, and writes it as an RKE2 `config.yaml.d` drop-in before RKE2 starts:
+The node sizes the reservation from its own memory and cores and writes it as an RKE2
+`config.yaml.d` drop-in before RKE2 starts. Memory follows EKS's per-pod formula, capped
+by GKE's older tiers as GKE and AKS now do, since kubelet and containerd grow with the
+number of pods rather than with the node's memory:
 
 | | Reserved |
 |---|---|
-| `kube-reserved` memory | 25% of the first 4 GiB, 20% of the next 4, 10% of the next 8, 6% up to 128 GiB, 2% above |
+| `kube-reserved` memory | 11 MiB per pod plus 255 MiB at RKE2's default of 110 pods (1465 MiB), or 25% of the first 4 GiB, 20% of the next 4, 10% of the next 8, 6% up to 128 GiB and 2% above, whichever is smaller |
 | `kube-reserved` CPU | 6% of the first core, 1% of the second, 0.5% of the next two, 0.25% above |
 | `system-reserved` | 100m CPU, 256 MiB |
-| `eviction-hard` | `memory.available<200Mi`, plus kubelet's own disk and inode defaults, which the flag would otherwise drop |
+| `eviction-hard` | `memory.available<100Mi`, plus kubelet's own disk and inode defaults, which the flag would otherwise drop |
 
-An 8 GiB node, for example, keeps about 5.4 GiB for pods.
+An 8 GiB node, for example, keeps about 5.8 GiB for pods and a 16 GiB node about 13.7 GiB.
+
+The control plane runs as static pods, so server nodes give them requests through
+`control-plane-resource-requests` (kube-apiserver 1024Mi, etcd 512Mi,
+kube-controller-manager 256Mi, kube-scheduler 128Mi) and the scheduler counts their
+memory instead of the reservation having to cover it.
 
 ## Interface notes
 

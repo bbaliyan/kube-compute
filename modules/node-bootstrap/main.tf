@@ -247,6 +247,9 @@ locals {
     # it only exposes a metrics endpoint, it doesn't change etcd's behavior, and
     # etcd only runs on server nodes anyway.
     "etcd-expose-metrics: true",
+    # The control plane runs as static pods on the node. With requests the scheduler
+    # counts its memory; the node reservation below covers only what runs outside pods.
+    "control-plane-resource-requests: \"kube-apiserver-cpu=250m,kube-apiserver-memory=1024Mi,etcd-cpu=200m,etcd-memory=512Mi,kube-controller-manager-cpu=200m,kube-controller-manager-memory=256Mi,kube-scheduler-cpu=100m,kube-scheduler-memory=128Mi\"",
     ], var.control_plane_taint ? [
     "node-taint:",
     "  - \"CriticalAddonsOnly=true:NoExecute\"",
@@ -508,22 +511,25 @@ locals {
     printf 'kubelet-arg+:\n  - "provider-id=aws:///%s/%s"\nnode-label+:\n  - "node.kubernetes.io/instance-type=%s"\n' "$ZONE" "$INSTANCE_ID" "$INSTANCE_TYPE" >/etc/rancher/rke2/config.yaml.d/50-aws-instance.yaml
   EOT
 
-  # Sized on the node from its own memory and cores, in GKE's tiers: 25% of the first
-  # 4 GiB, 20% of the next 4, 10% of the next 8, 6% up to 128 GiB and 2% above; 6% of the
-  # first core, 1% of the second, 0.5% of the next two and 0.25% above. Pods are capped at
-  # what is left, so a crowded node evicts or kills pods rather than starving kubelet,
-  # containerd and RKE2 until it drops out of the cluster.
+  # Sized on the node from its own memory and cores. Memory is the smaller of EKS's 11 MiB
+  # per pod plus 255 MiB, at RKE2's default of 110 pods, and GKE's older tiers of 25% of the
+  # first 4 GiB, 20% of the next 4, 10% of the next 8, 6% up to 128 GiB and 2% above, as
+  # GKE and AKS now size theirs: kubelet and containerd grow with pods, not with memory.
+  # CPU is 6% of the first core, 1% of the second, 0.5% of the next two and 0.25% above.
+  # Pods are capped at what is left, so a crowded node evicts or kills pods rather than
+  # starving kubelet, containerd and RKE2 until it drops out of the cluster.
   kubelet_reserved_script = <<-EOT
     set -eu
     MEM_MIB=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo)
     KUBE_MEM_MIB=$(awk -v m="$MEM_MIB" 'BEGIN {
       split("4096 4096 8192 114688", size); split("0.25 0.20 0.10 0.06", share)
       for (i = 1; i <= 4; i++) { t = m < size[i] ? m : size[i]; r += t * share[i]; m -= t }
-      print int(r + m * 0.02) }')
+      r += m * 0.02; p = 11 * 110 + 255
+      print int(r < p ? r : p) }')
     KUBE_CPU_M=$(awk -v c="$(nproc)" 'BEGIN {
       print int(60 + (c > 1 ? 10 : 0) + (c > 2 ? (c > 4 ? 2 : c - 2) * 5 : 0) + (c > 4 ? (c - 4) * 2.5 : 0)) }')
     install -d -m 0755 /etc/rancher/rke2/config.yaml.d
-    printf 'kubelet-arg+:\n  - "kube-reserved=cpu=%sm,memory=%sMi"\n  - "system-reserved=cpu=100m,memory=256Mi"\n  - "eviction-hard=memory.available<200Mi,nodefs.available<10%%,imagefs.available<15%%,nodefs.inodesFree<5%%,imagefs.inodesFree<5%%"\n' "$KUBE_CPU_M" "$KUBE_MEM_MIB" >/etc/rancher/rke2/config.yaml.d/40-kubelet-reserved.yaml
+    printf 'kubelet-arg+:\n  - "kube-reserved=cpu=%sm,memory=%sMi"\n  - "system-reserved=cpu=100m,memory=256Mi"\n  - "eviction-hard=memory.available<100Mi,nodefs.available<10%%,imagefs.available<15%%,nodefs.inodesFree<5%%,imagefs.inodesFree<5%%"\n' "$KUBE_CPU_M" "$KUBE_MEM_MIB" >/etc/rancher/rke2/config.yaml.d/40-kubelet-reserved.yaml
   EOT
 
   # RKE2/kubelet default the registered Kubernetes node name to the OS

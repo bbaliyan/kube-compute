@@ -115,6 +115,15 @@ run "server_init_payload_is_valid_cloud_config" {
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "kube-apiserver-memory=1024Mi") &&
+      strcontains(base64decode(f.content), "etcd-memory=512Mi")
+      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
+    ])
+    error_message = "the control plane's static pods need memory requests, or the scheduler places pods into the memory kube-apiserver and etcd use"
+  }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
       strcontains(base64decode(f.content), "CNI='cilium'") &&
       strcontains(base64decode(f.content), "NODE_ROLE='server-init'")
       if f.path == "/opt/kube-compute/node.env"
@@ -279,7 +288,11 @@ run "kubelet_reserves_resources_for_the_node_before_rke2_starts" {
     error_message = "kubelet must reserve CPU and memory for itself, containerd and the OS, or pods can take the whole node and it drops out of the cluster"
   }
   assert {
-    condition     = strcontains(yamldecode(output.cloud_init_user_data).runcmd[0][2], "eviction-hard=memory.available<200Mi,nodefs.available<10%%,imagefs.available<15%%,nodefs.inodesFree<5%%,imagefs.inodesFree<5%%")
+    condition     = strcontains(yamldecode(output.cloud_init_user_data).runcmd[0][2], "p = 11 * 110 + 255")
+    error_message = "kube-reserved memory must be capped by the per-pod formula, or large nodes reserve memory kubelet and containerd never use"
+  }
+  assert {
+    condition     = strcontains(yamldecode(output.cloud_init_user_data).runcmd[0][2], "eviction-hard=memory.available<100Mi,nodefs.available<10%%,imagefs.available<15%%,nodefs.inodesFree<5%%,imagefs.inodesFree<5%%")
     error_message = "eviction-hard replaces every default threshold, so the disk and inode ones must be restated alongside memory"
   }
 }
