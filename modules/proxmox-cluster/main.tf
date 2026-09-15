@@ -10,6 +10,19 @@ locals {
     { clusterAutoscalerEnabled = tostring(var.cluster_autoscaler_enabled) },
   )
 
+  platform_helm_values_object = merge(
+    var.platform_helm_values_object,
+    {
+      for pool in var.platform_node_group == null ? [] : [var.platform_node_group] :
+      "platformNodeSelector" => { "kube-compute.io/node-group" = pool }
+    },
+  )
+
+  # Ingress runs with the platform, so its pool alone answers on the ingress ports;
+  # the control plane keeps only the Kubernetes API.
+  control_plane_ingress_ports = var.platform_node_group == null ? var.ingress_ports : [for p in var.ingress_ports : p if p == 6443]
+  platform_ingress_ports      = [for p in var.ingress_ports : p if p != 6443]
+
   # ---- cluster-autoscaler-workers.yaml (Cluster + Secret + ProxmoxMachineTemplate + MachineDeployment) ----
   # See templates/cluster-autoscaler-workers.yaml.tftpl for field-source
   # commentary. vm_memory_mb -> memoryMiB: despite the "_mb" name, this
@@ -188,7 +201,7 @@ module "control_plane" {
   cni                               = var.cni
   cert_mode                         = var.cert_mode
   platform_extra_helm_parameters    = local.platform_extra_helm_parameters
-  platform_helm_values_object       = var.platform_helm_values_object
+  platform_helm_values_object       = local.platform_helm_values_object
   extra_tags                        = var.extra_tags
   proxmox_node                      = var.proxmox_node
   disk_datastore_id                 = var.disk_datastore_id
@@ -210,7 +223,8 @@ module "control_plane" {
   vm_gateway                        = var.vm_gateway
   cluster_network_cidr              = var.cluster_network_cidr
   allowed_ingress_cidrs             = var.allowed_ingress_cidrs
-  ingress_ports                     = var.ingress_ports
+  ingress_ports                     = local.control_plane_ingress_ports
+  manage_wildcard_dns_record        = var.platform_node_group == null
   cluster_domain                    = var.cluster_domain
   dns_server_address                = var.dns_server_address
   dns_server_port                   = var.dns_server_port
@@ -230,10 +244,28 @@ module "node_pools" {
   for_each = var.node_pools
 
   cluster_name        = var.cluster_name
+  pool_name           = each.key
   cluster_agent_token = module.control_plane.cluster_agent_token
 
-  trusted_ca_pem         = each.value.trusted_ca_pem
-  registry_mirror_url    = each.value.registry_mirror_url
+  node_taints                = each.value.node_taints
+  manage_wildcard_dns_record = var.platform_node_group == null || each.key == var.platform_node_group
+  allowed_ingress_cidrs      = each.key == var.platform_node_group ? var.allowed_ingress_cidrs : []
+  ingress_ports              = each.key == var.platform_node_group ? local.platform_ingress_ports : []
+
+  # Cluster-wide by default, overridable per pool. Ternaries rather than coalesce(): both
+  # sides are commonly null, and coalesce raises when every argument is null.
+  trusted_ca_pem         = each.value.trusted_ca_pem != null ? each.value.trusted_ca_pem : var.trusted_ca_pem
+  registry_mirror_url    = each.value.registry_mirror_url != null ? each.value.registry_mirror_url : var.registry_mirror_url
+  ssh_authorized_keys    = each.value.ssh_authorized_keys != null ? each.value.ssh_authorized_keys : var.ssh_authorized_keys
+  dns_servers            = each.value.dns_servers != null ? each.value.dns_servers : var.dns_servers
+  cluster_domain         = each.value.cluster_domain != null ? each.value.cluster_domain : var.cluster_domain
+  dns_server_address     = each.value.dns_server_address != null ? each.value.dns_server_address : var.dns_server_address
+  dns_server_port        = each.value.dns_server_port != null ? each.value.dns_server_port : var.dns_server_port
+  dns_transport          = each.value.dns_transport != null ? each.value.dns_transport : var.dns_transport
+  dns_record_ttl         = each.value.dns_record_ttl != null ? each.value.dns_record_ttl : var.dns_record_ttl
+  tsig_key_name          = each.value.tsig_key_name != null ? each.value.tsig_key_name : var.tsig_key_name
+  tsig_key_algorithm     = each.value.tsig_key_algorithm != null ? each.value.tsig_key_algorithm : var.tsig_key_algorithm
+  tsig_key_secret        = each.value.tsig_key_secret != null ? each.value.tsig_key_secret : var.tsig_key_secret
   proxmox_node           = each.value.proxmox_node
   disk_datastore_id      = each.value.disk_datastore_id
   iso_datastore_id       = each.value.iso_datastore_id
@@ -246,21 +278,11 @@ module "node_pools" {
   os_image_file_name     = each.value.os_image_file_name
   os_image_file_id       = each.value.os_image_file_id
   proxmox_template_vm_id = each.value.proxmox_template_vm_id
-  ssh_authorized_keys    = each.value.ssh_authorized_keys
-  dns_servers            = each.value.dns_servers
   worker_ip_addresses    = each.value.worker_ip_addresses
-  vm_gateway             = each.value.vm_gateway
+  vm_gateway             = each.value.vm_gateway != null ? each.value.vm_gateway : var.vm_gateway
   desired_count          = each.value.desired_count
   registration_address   = each.value.registration_address
   extra_node_labels      = each.value.extra_node_labels
-  cluster_domain         = each.value.cluster_domain
-  dns_server_address     = each.value.dns_server_address
-  dns_server_port        = each.value.dns_server_port
-  dns_transport          = each.value.dns_transport
-  dns_record_ttl         = each.value.dns_record_ttl
-  tsig_key_name          = each.value.tsig_key_name
-  tsig_key_algorithm     = each.value.tsig_key_algorithm
-  tsig_key_secret        = each.value.tsig_key_secret
 }
 
 module "os_patch" {

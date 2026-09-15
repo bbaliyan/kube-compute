@@ -2,6 +2,17 @@
 
 Provisions a pool of worker nodes for a single-cluster RKE2 deployment on Proxmox.
 
+## Pool name, labels and taints
+
+`pool_name` (default `worker`) names the pool's VMs `<cluster_name>-<pool_name>-<n>` and
+labels every node `kube-compute.io/node-group=<pool_name>`, which a nodeSelector can
+pin pods to. Pools of the same cluster need distinct names, or their VMs and snippets
+collide. `node_taints` keeps every pod without a matching toleration off the pool.
+
+The pool that runs ingress sets `allowed_ingress_cidrs` and `ingress_ports`, which open
+those ports on its workers, and keeps `manage_wildcard_dns_record` on so the wildcard
+record points at them. Every other pool of the cluster turns the record off.
+
 ## Join token and firewall ipset naming
 
 This pool takes `cluster_agent_token` as a plain input variable — pass it the value of

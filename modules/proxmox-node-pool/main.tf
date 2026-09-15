@@ -8,10 +8,8 @@ locals {
   static_ips = var.worker_ip_addresses != null
 
   # Wildcard DNS registration (RFC2136): publishes *.<cluster_name> -> every
-  # resolved worker IP. See the variable block's comment for why this pool
-  # (not proxmox-control-plane) owns the wildcard on a dedicated_control_plane
-  # cluster.
-  dns_registration_enabled = var.cluster_domain != null && var.dns_server_address != null
+  # resolved worker IP, for the pool that runs ingress (manage_wildcard_dns_record).
+  dns_registration_enabled = var.manage_wildcard_dns_record && var.cluster_domain != null && var.dns_server_address != null
   dns_zone                 = var.cluster_domain != null ? "${trimsuffix(var.cluster_domain, ".")}." : null
   dns_wildcard_record_name = "*.${var.cluster_name}"
 
@@ -107,7 +105,7 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
       ) : [],
       ["runcmd:", "  - systemctl enable --now qemu-guest-agent", "  - systemctl enable --now serial-getty@ttyS0.service", ""]
     ))
-    file_name = "${var.cluster_name}-worker-vendor-data.yaml"
+    file_name = "${var.cluster_name}-${var.pool_name}-vendor-data.yaml"
   }
 }
 
@@ -120,7 +118,7 @@ resource "proxmox_virtual_environment_file" "network_data" {
   overwrite    = true
 
   source_raw {
-    file_name = "${var.cluster_name}-worker-${each.key}-network-data.yaml"
+    file_name = "${var.cluster_name}-${var.pool_name}-${each.key}-network-data.yaml"
     data      = local.network_data_static[each.key]
   }
 }
@@ -133,9 +131,9 @@ resource "proxmox_virtual_environment_vm" "worker" {
   # function of desired_count.
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
-  name            = "${var.cluster_name}-worker-${each.key}"
+  name            = "${var.cluster_name}-${var.pool_name}-${each.key}"
   node_name       = var.proxmox_node
-  tags            = ["kube-compute", var.cluster_name, "worker"]
+  tags            = distinct(["kube-compute", var.cluster_name, "worker", var.pool_name])
   on_boot         = true
   started         = true
   stop_on_destroy = true
@@ -243,13 +241,14 @@ module "node_bootstrap" {
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
   cluster_name              = var.cluster_name
-  node_name                 = "${var.cluster_name}-worker-${each.key}"
-  node_fqdn_label           = "worker-${each.key}"
+  node_name                 = "${var.cluster_name}-${var.pool_name}-${each.key}"
+  node_fqdn_label           = "${var.pool_name}-${each.key}"
   cluster_fqdn_suffix       = local.fqdn_suffix
   node_role                 = "worker"
   registration_address      = local.effective_registration_address
   agent_token_fetch_command = local.agent_token_fetch_command
-  node_labels               = var.extra_node_labels
+  node_labels               = merge({ "kube-compute.io/node-group" = var.pool_name }, var.extra_node_labels)
+  node_taints               = var.node_taints
   trusted_ca_pem            = var.trusted_ca_pem
   registry_mirror_url       = var.registry_mirror_url
   # Same list this module's own VM network config uses — see node-bootstrap's
@@ -274,7 +273,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
 
   source_raw {
     data      = module.node_bootstrap[each.key].cloud_init_user_data
-    file_name = "${var.cluster_name}-worker-${each.key}-node-init.yaml"
+    file_name = "${var.cluster_name}-${var.pool_name}-${each.key}-node-init.yaml"
   }
 }
 
@@ -341,5 +340,17 @@ resource "proxmox_virtual_environment_firewall_rules" "worker" {
     action  = "ACCEPT"
     source  = "+${local.cluster_ipset_name}"
     comment = "all traffic among cluster members"
+  }
+
+  dynamic "rule" {
+    for_each = setproduct(var.allowed_ingress_cidrs, var.ingress_ports)
+    content {
+      type    = "in"
+      action  = "ACCEPT"
+      proto   = "tcp"
+      dport   = tostring(rule.value[1])
+      source  = rule.value[0]
+      comment = "cluster access port ${rule.value[1]}"
+    }
   }
 }

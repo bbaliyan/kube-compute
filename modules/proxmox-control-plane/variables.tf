@@ -267,6 +267,12 @@ variable "ingress_ports" {
   default     = [80, 443, 6443]
 }
 
+variable "manage_wildcard_dns_record" {
+  description = "Whether this module publishes *.<cluster_name> at the control plane on an all_in_one cluster. false leaves the record to the pool that runs ingress."
+  type        = bool
+  default     = true
+}
+
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
 variable "cluster_domain" {

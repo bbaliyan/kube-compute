@@ -9,6 +9,16 @@ variable "cluster_name" {
   }
 }
 
+variable "pool_name" {
+  description = "Names this pool's VMs <cluster_name>-<pool_name>-<n> and labels every node kube-compute.io/node-group=<pool_name>, which a nodeSelector can pin pods to. Distinct per pool, or two pools' VMs and snippets collide."
+  type        = string
+  default     = "worker"
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,30}$", var.pool_name))
+    error_message = "pool_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
+  }
+}
+
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) added to the worker's OS trust store. Null = none. Sensitive."
   type        = string
@@ -146,6 +156,30 @@ variable "extra_node_labels" {
   description = "Additional node-label: entries for every worker in this pool."
   type        = map(string)
   default     = {}
+}
+
+variable "node_taints" {
+  description = "Taints on every worker in this pool, each key=value:Effect. A label only lets pods be pinned here; a taint keeps every pod without a matching toleration off."
+  type        = list(string)
+  default     = []
+}
+
+variable "allowed_ingress_cidrs" {
+  description = "CIDR blocks allowed to reach ingress_ports on this pool's workers from outside the cluster. Set on the pool that runs ingress."
+  type        = list(string)
+  default     = []
+}
+
+variable "ingress_ports" {
+  description = "TCP ports opened from allowed_ingress_cidrs on this pool's workers, e.g. [80, 443] for Traefik. Never add 22 (SSH)."
+  type        = list(number)
+  default     = []
+}
+
+variable "manage_wildcard_dns_record" {
+  description = "Whether this pool publishes *.<cluster_name> at its workers when DNS is configured. Only one pool of a cluster should, the one running ingress."
+  type        = bool
+  default     = true
 }
 
 # ---- Wildcard DNS registration (optional): publishes *.<cluster_name> via RFC2136 ----

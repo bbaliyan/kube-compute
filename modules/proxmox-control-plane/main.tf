@@ -53,7 +53,7 @@ locals {
   # dedicated_control_plane cluster the control plane is tainted — proxmox-node-pool
   # publishes the wildcard itself, against its own worker IPs. Registering it here too
   # would point at the wrong nodes and race node-pool's write.
-  wildcard_registration_enabled = local.dns_registration_enabled && var.cluster_type == "all_in_one"
+  wildcard_registration_enabled = var.manage_wildcard_dns_record && local.dns_registration_enabled && var.cluster_type == "all_in_one"
   dns_wildcard_record_name      = "*.${var.cluster_name}"
 
   # One IP per control-plane node; index 0 is genesis. DHCP works at any
@@ -621,14 +621,14 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
   }
 
   dynamic "rule" {
-    for_each = var.ingress_ports
+    for_each = setproduct(var.allowed_ingress_cidrs, var.ingress_ports)
     content {
       type    = "in"
       action  = "ACCEPT"
       proto   = "tcp"
-      dport   = tostring(rule.value)
-      source  = var.allowed_ingress_cidrs[0]
-      comment = "cluster access port ${rule.value}"
+      dport   = tostring(rule.value[1])
+      source  = rule.value[0]
+      comment = "cluster access port ${rule.value[1]}"
     }
   }
 }

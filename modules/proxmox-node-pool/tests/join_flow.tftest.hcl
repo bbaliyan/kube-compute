@@ -103,3 +103,60 @@ run "worker_fqdn_set_when_cluster_domain_present" {
     error_message = "each worker must get an explicit fqdn (worker-<k>.cluster_name.cluster_domain) whenever cluster_domain is set, not just hostname -- the fqdn label is deliberately shorter than node_name/hostname (no cluster_name prefix), since cluster_fqdn_suffix already carries that identity"
   }
 }
+
+run "named_pool_labels_taints_and_ingress" {
+  command = plan
+  variables {
+    cluster_name               = "bharat"
+    pool_name                  = "gpu"
+    proxmox_node               = "pve"
+    vm_cores                   = 2
+    vm_memory_mb               = 4096
+    vm_disk_gb                 = 30
+    desired_count              = 2
+    registration_address       = "192.168.1.5"
+    cluster_agent_token        = "agent-secret-abc123"
+    os_image_url               = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+    os_image_file_name         = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+    node_taints                = ["dedicated=gpu:NoSchedule"]
+    allowed_ingress_cidrs      = ["192.168.1.0/24", "10.8.0.0/24"]
+    ingress_ports              = [80, 443]
+    cluster_domain             = "example.com"
+    dns_server_address         = "192.168.1.53"
+    tsig_key_name              = "kube-compute"
+    tsig_key_secret            = "ZmFrZXNlY3JldA=="
+    manage_wildcard_dns_record = false
+  }
+
+  assert {
+    condition     = alltrue([for k, vm in proxmox_virtual_environment_vm.worker : vm.name == "bharat-gpu-${k}"])
+    error_message = "workers must be named <cluster_name>-<pool_name>-<n>, or two pools of one cluster collide"
+  }
+  assert {
+    condition = alltrue([
+      for k, snippet in proxmox_virtual_environment_file.node_init :
+      yamldecode(snippet.source_raw[0].data).fqdn == "gpu-${k}.bharat.example.com"
+    ])
+    error_message = "the fqdn label must carry the pool name, or two pools of one cluster share fqdns"
+  }
+  assert {
+    condition = alltrue([
+      for k, snippet in proxmox_virtual_environment_file.node_init :
+      anytrue([
+        for f in yamldecode(snippet.source_raw[0].data).write_files :
+        strcontains(base64decode(f.content), "kube-compute.io/node-group=gpu") &&
+        strcontains(base64decode(f.content), "dedicated=gpu:NoSchedule")
+        if try(f.encoding, "") == "b64"
+      ])
+    ])
+    error_message = "every worker must carry kube-compute.io/node-group=<pool_name> and the pool's taints"
+  }
+  assert {
+    condition     = alltrue([for k, r in proxmox_virtual_environment_firewall_rules.worker : length(r.rule) == 5])
+    error_message = "the pool must open every ingress port to every allowed CIDR, on top of the cluster rule"
+  }
+  assert {
+    condition     = output.wildcard_dns_registration_enabled == false && module.dns_registration.record_created == false
+    error_message = "manage_wildcard_dns_record = false must publish no wildcard record, even with DNS configured"
+  }
+}

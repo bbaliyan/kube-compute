@@ -24,13 +24,29 @@ type, default, and validation — at this module's own top level. See
 `variables.tf` for the full list and field-by-field semantics; this module does not
 re-document them.
 
-One additional input, `node_pools`, is a map of worker pools keyed by pool name
-(e.g. `"pool-a"`). Each entry's fields mirror `proxmox-node-pool`'s own
-`variables.tf` exactly, minus `cluster_name` and `cluster_agent_token` — this module
-supplies both automatically from its own `cluster_name` input and from
-`module.control_plane`'s generated token, so don't (and can't) set them per pool. An
-empty `node_pools` map (the default) creates no worker pools — a control-plane-only
-cluster, identical in shape to applying `proxmox-control-plane` alone.
+`node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
+entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
+supplies: `cluster_name`, `cluster_agent_token`, and the key itself as `pool_name`. An
+empty map (the default) creates no worker pools, the same shape as applying
+`proxmox-control-plane` alone.
+
+Every worker of a pool is named `<cluster_name>-<pool>-<n>` and carries
+`kube-compute.io/node-group=<pool>`. `node_taints` keeps other pods off; pods that
+belong there need a matching toleration. A pool field left null takes the cluster's own
+value: `trusted_ca_pem`, `registry_mirror_url`, `ssh_authorized_keys`, `dns_servers`,
+`vm_gateway`, and the DNS registration settings.
+
+## Platform pool
+
+`platform_node_group` names the pool that runs the platform stack:
+
+- its components are pinned to that pool;
+- it alone opens `ingress_ports` to `allowed_ingress_cidrs`, since Traefik runs there,
+  and the control plane keeps only 6443;
+- the wildcard DNS record points at its workers.
+
+Without it, ingress and the wildcard record stay on the control plane of an
+`all_in_one` cluster, and on the pools of a `dedicated_control_plane` one.
 
 ### DNS registration
 
@@ -66,33 +82,43 @@ This is equivalent to today's `control-plane/` unit alone — `node_pools` defau
 module "cluster" {
   source = "path/to/kube-compute/modules/proxmox-cluster"
 
-  cluster_name          = "example"
-  cluster_type          = "dedicated_control_plane"
+  cluster_name           = "example"
+  cluster_type           = "dedicated_control_plane"
   proxmox_node           = "pve-01"
   vm_cores               = 4
-  vm_memory_mb            = 8192
-  vm_disk_gb              = 60
-  allowed_ingress_cidrs   = ["10.0.0.0/24"]
-  proxmox_template_vm_id  = 9000
-  cluster_network_cidr    = "10.0.0.0/24"
+  vm_memory_mb           = 8192
+  vm_disk_gb             = 60
+  allowed_ingress_cidrs  = ["10.0.0.0/24"]
+  proxmox_template_vm_id = 9000
+  cluster_network_cidr   = "10.0.0.0/24"
+  platform_node_group    = "platform"
 
   node_pools = {
-    pool-a = {
+    platform = {
       proxmox_node           = "pve-01"
       vm_cores               = 4
-      vm_memory_mb            = 16384
-      vm_disk_gb              = 100
-      proxmox_template_vm_id  = 9000
-      desired_count           = 2
-      registration_address    = "10.0.0.5"
+      vm_memory_mb           = 16384
+      vm_disk_gb             = 100
+      proxmox_template_vm_id = 9000
+      desired_count          = 1
+      registration_address   = "10.0.0.5"
+    }
+    batch = {
+      proxmox_node           = "pve-01"
+      vm_cores               = 8
+      vm_memory_mb           = 32768
+      vm_disk_gb             = 100
+      proxmox_template_vm_id = 9000
+      desired_count          = 2
+      registration_address   = "10.0.0.5"
+      node_taints            = ["dedicated=batch:NoSchedule"]
     }
   }
 }
 ```
 
 Each key in `node_pools` becomes one `proxmox-node-pool` instance, wired to this
-cluster's `cluster_name` and `cluster_agent_token` automatically. Add more entries
-for more pools (e.g. `pool-b` with a different sizing) — the map has no fixed size.
+cluster's `cluster_name` and `cluster_agent_token` automatically.
 
 ## Cluster autoscaler (optional)
 

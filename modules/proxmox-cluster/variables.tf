@@ -342,7 +342,17 @@ variable "tsig_key_secret" {
 
 # ---- Worker pools (optional, merged into this same directory/state) ----
 variable "node_pools" {
-  description = "Static worker pools joining this cluster, keyed by pool name (e.g. \"pool-a\"). Each pool is created via proxmox-node-pool, wired to this cluster's cluster_name and cluster_agent_token automatically — do not set either field inside a pool object, they are ignored. Empty map (the default) creates no worker pools. Field names, types, and defaults mirror proxmox-node-pool's own variables.tf exactly (minus cluster_name/cluster_agent_token, which this module supplies)."
+  description = <<-EOT
+    Static worker pools joining this cluster, keyed by pool name (e.g. "platform"), each created via
+    proxmox-node-pool with this cluster's identity and join token wired in. Empty map (the default)
+    creates none.
+
+    Every worker of a pool is named <cluster_name>-<pool>-<n> and carries
+    kube-compute.io/node-group=<pool>. node_taints keeps other pods off.
+
+    Fields left null take the cluster's own value: trusted_ca_pem, registry_mirror_url,
+    ssh_authorized_keys, dns_servers, vm_gateway, and the DNS registration settings.
+  EOT
   type = map(object({
     trusted_ca_pem         = optional(string)
     registry_mirror_url    = optional(string)
@@ -359,22 +369,34 @@ variable "node_pools" {
     os_image_file_id       = optional(string)
     proxmox_template_vm_id = optional(number)
     ssh_authorized_keys    = optional(list(string))
-    dns_servers            = optional(list(string), ["1.1.1.1", "8.8.8.8"])
+    dns_servers            = optional(list(string))
     worker_ip_addresses    = optional(list(string))
     vm_gateway             = optional(string)
     desired_count          = optional(number, 2)
     registration_address   = optional(string)
     extra_node_labels      = optional(map(string), {})
+    node_taints            = optional(list(string), [])
     cluster_domain         = optional(string)
     dns_server_address     = optional(string)
-    dns_server_port        = optional(number, 53)
-    dns_transport          = optional(string, "udp")
-    dns_record_ttl         = optional(number, 30)
+    dns_server_port        = optional(number)
+    dns_transport          = optional(string)
+    dns_record_ttl         = optional(number)
     tsig_key_name          = optional(string)
-    tsig_key_algorithm     = optional(string, "hmac-sha256")
+    tsig_key_algorithm     = optional(string)
     tsig_key_secret        = optional(string)
   }))
   default = {}
+}
+
+variable "platform_node_group" {
+  description = "node_pools key of the pool that runs the platform stack, ingress included. The platform Application pins its components to that pool's node-group label, the pool alone opens ingress_ports (the control plane keeps 6443), and the wildcard DNS record points at its workers. Null leaves all of that on the control plane, or on every pool of a dedicated_control_plane cluster."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.platform_node_group == null ? true : contains(keys(var.node_pools), var.platform_node_group)
+    error_message = "platform_node_group must name a node_pools entry."
+  }
 }
 
 # ---- Cluster autoscaler (optional, passed through to proxmox-control-plane/node-bootstrap) ----
