@@ -302,12 +302,13 @@ variable "platform_node_group" {
 }
 
 variable "nightly_stop" {
-  description = "At time (HH:MM, 24-hour) in timezone, stops the control plane and static nodes and scales every autoscaled group to zero. With start_time, starts the control plane and static nodes again at that time; without it nothing starts the cluster. days limits both to those days of the week, in EventBridge Scheduler's form (e.g. MON-FRI); unset, every day. Null never stops it."
+  description = "At time (HH:MM, 24-hour) in timezone, on days, stops the control plane and static nodes and scales every autoscaled group to zero. With start_time, starts the control plane and static nodes again at that time on start_days; without it nothing starts the cluster. start_days defaults to days, and differs when the hours the cluster runs cross midnight, e.g. starting SUN-THU at 21:40 and stopping MON-FRI at 17:10. Days of the week are in EventBridge Scheduler's form (e.g. MON-FRI); unset, every day. Null never stops it."
   type = object({
     time       = string
     timezone   = string
     start_time = optional(string)
     days       = optional(string)
+    start_days = optional(string)
   })
   default = null
 
@@ -324,6 +325,16 @@ variable "nightly_stop" {
   validation {
     condition     = try(var.nightly_stop.days, null) == null ? true : can(regex("^(SUN|MON|TUE|WED|THU|FRI|SAT)(-(SUN|MON|TUE|WED|THU|FRI|SAT))?(,(SUN|MON|TUE|WED|THU|FRI|SAT)(-(SUN|MON|TUE|WED|THU|FRI|SAT))?)*$", var.nightly_stop.days))
     error_message = "nightly_stop.days must be days of the week such as MON-FRI or MON,WED,FRI."
+  }
+
+  validation {
+    condition     = try(var.nightly_stop.start_days, null) == null ? true : can(regex("^(SUN|MON|TUE|WED|THU|FRI|SAT)(-(SUN|MON|TUE|WED|THU|FRI|SAT))?(,(SUN|MON|TUE|WED|THU|FRI|SAT)(-(SUN|MON|TUE|WED|THU|FRI|SAT))?)*$", var.nightly_stop.start_days))
+    error_message = "nightly_stop.start_days must be days of the week such as SUN-THU or MON,WED,FRI."
+  }
+
+  validation {
+    condition     = try(var.nightly_stop.start_days, null) == null || try(var.nightly_stop.start_time, null) != null
+    error_message = "nightly_stop.start_days needs start_time."
   }
 }
 

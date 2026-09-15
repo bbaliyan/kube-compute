@@ -6,11 +6,13 @@ locals {
   nightly_start_enabled = try(var.nightly_stop.start_time, null) != null
 
   # EventBridge Scheduler's cron takes a day of the month or a day of the week, with ? in the other.
-  nightly_days       = try(var.nightly_stop.days, null)
-  nightly_day_fields = local.nightly_days == null ? "* * ? *" : "? * ${local.nightly_days} *"
+  nightly_days             = try(var.nightly_stop.days, null)
+  nightly_start_days       = try(coalesce(var.nightly_stop.start_days, var.nightly_stop.days), null)
+  nightly_day_fields       = local.nightly_days == null ? "* * ? *" : "? * ${local.nightly_days} *"
+  nightly_start_day_fields = local.nightly_start_days == null ? "* * ? *" : "? * ${local.nightly_start_days} *"
 
   nightly_stop_expression  = format("cron(%d %d %s)", tonumber(local.nightly_stop_clock[1]), tonumber(local.nightly_stop_clock[0]), local.nightly_day_fields)
-  nightly_start_expression = format("cron(%d %d %s)", tonumber(local.nightly_start_clock[1]), tonumber(local.nightly_start_clock[0]), local.nightly_day_fields)
+  nightly_start_expression = format("cron(%d %d %s)", tonumber(local.nightly_start_clock[1]), tonumber(local.nightly_start_clock[0]), local.nightly_start_day_fields)
 
   nightly_instance_arns = [for id in local.all_instance_ids : "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:instance/${id}"]
 

@@ -128,6 +128,32 @@ run "a_working_week_schedule_starts_and_stops_on_its_days" {
   }
 }
 
+run "hours_across_midnight_start_on_their_own_days" {
+  command = apply
+
+  variables {
+    nightly_stop = { time = "16:10", days = "MON-FRI", start_time = "20:40", start_days = "SUN-THU", timezone = "UTC" }
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule.nightly_stop[0].schedule_expression == "cron(10 16 ? * MON-FRI *)" &&
+      aws_scheduler_schedule.nightly_start[0].schedule_expression == "cron(40 20 ? * SUN-THU *)"
+    )
+    error_message = "the start must fire on nightly_stop.start_days, and the stop on nightly_stop.days"
+  }
+}
+
+run "start_days_needs_a_start_time" {
+  command = plan
+
+  variables {
+    nightly_stop = { time = "16:10", start_days = "SUN-THU", timezone = "UTC" }
+  }
+
+  expect_failures = [var.nightly_stop]
+}
+
 run "the_stop_time_must_be_a_clock_time" {
   command = plan
 

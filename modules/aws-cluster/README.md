@@ -110,15 +110,17 @@ old nodes and the autoscaler adds new ones as pods need them.
 
 Nothing starts the cluster unless `start_time` is set, in which case the
 `<cluster_name>-node-start` schedule starts the control plane and static nodes at
-that time. `days` limits both schedules to days of the week, in EventBridge
-Scheduler's form:
+that time. `days` limits the stop to days of the week, in EventBridge Scheduler's
+form, and `start_days` the start, defaulting to `days`:
 
 ```hcl
-nightly_stop = { time = "20:10", start_time = "00:40", days = "MON-FRI", timezone = "Asia/Muscat" }
+nightly_stop = { time = "16:10", days = "MON-FRI", start_time = "20:40", start_days = "SUN-THU", timezone = "UTC" }
 ```
 
-Both are clock times on the listed days, so a stop after midnight belongs to the
-next day's name.
+Both are clock times on the listed days, so hours that cross midnight start on
+the day before they stop: here the cluster runs Sunday 20:40 to Monday 16:10, up
+to Thursday 20:40 to Friday 16:10. A time zone without daylight saving, such as
+UTC, keeps those hours the same all year in every location.
 
 `all_instance_ids` lists the instances Terraform owns individually, also as
 `local.all_instance_ids` for files a consumer generates into this directory.
