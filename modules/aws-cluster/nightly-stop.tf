@@ -60,17 +60,6 @@ resource "aws_iam_role_policy" "nightly_stop" {
         Action   = "ec2:StartInstances"
         Resource = local.nightly_instance_arns
       }] : [],
-      # Starting an instance whose volumes are encrypted with a customer managed key
-      # needs a grant on that key; without one, the instance goes back to stopped.
-      local.nightly_start_enabled ? [{
-        Effect   = "Allow"
-        Action   = "kms:CreateGrant"
-        Resource = "*"
-        Condition = {
-          StringEquals = { "kms:ViaService" = "ec2.${var.aws_region}.amazonaws.com" }
-          Bool         = { "kms:GrantIsForAWSResource" = "true" }
-        }
-      }] : [],
     )
   })
 }
