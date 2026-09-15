@@ -261,6 +261,7 @@ if [ "$NODE_ROLE" != "worker" ]; then
     echo "kube-compute: node did not report Ready within 300s" >&2
     exit 1
   fi
+  echo "kube-compute: node Ready $(date -Is)"
 else
   ACTIVE=0
   for attempt in $(seq 1 60); do
@@ -310,6 +311,8 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
   done
   if [ "$COREDNS_READY" -ne 1 ]; then
     echo "kube-compute: CoreDNS did not report Ready within ~150s, proceeding anyway" >&2
+  else
+    echo "kube-compute: CoreDNS Ready $(date -Is)"
   fi
   # --server-side is required: a client-side apply stores the previous config in
   # a last-applied-configuration annotation, and Argo CD's applicationsets CRD
@@ -327,20 +330,21 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
     # creates the built-in "default" AppProject on its own startup, and an
     # Application applied before that exists fails with a transient
     # InvalidSpecError ("referencing project default which does not exist"),
-    # confirmed on a real apply. Argo CD's own requeue/backoff clears it
-    # eventually, but that's wasted time the same way the CoreDNS wait above
-    # avoids it — wait for the controller itself instead of the CRD alone.
-    APP_CONTROLLER_READY=0
-    for attempt in $(seq 1 60); do
-      if $KUBECTL wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=5s >/dev/null 2>&1; then
-        APP_CONTROLLER_READY=1
-        break
+    # confirmed on a real apply.
+    #
+    # The controller alone is not enough either: an Application whose first
+    # comparison finds repo-server or redis not yet serving (redis waits on the
+    # argocd-redis-secret-init Job, and the pods that need its Secret restart
+    # once) reports sync status Unknown and is not compared again until the
+    # next reconciliation, which cost two idle minutes on a real apply. The
+    # workloads already exist at this point, so rollout status waits on their
+    # pods rather than erroring on a missing resource.
+    for workload in statefulset/argocd-application-controller deployment/argocd-repo-server deployment/argocd-redis; do
+      if ! $KUBECTL rollout status "$workload" -n argocd --timeout=150s >/dev/null; then
+        echo "kube-compute: $workload did not become ready within 150s, proceeding anyway" >&2
       fi
-      sleep 2
     done
-    if [ "$APP_CONTROLLER_READY" -ne 1 ]; then
-      echo "kube-compute: argocd-application-controller did not report Ready within ~150s, proceeding anyway" >&2
-    fi
+    echo "kube-compute: Argo CD ready $(date -Is)"
   fi
   if [ "$PLATFORM_APP_ENABLED" = "1" ]; then
     $KUBECTL apply -f "$KC/manifests/10-platform-app.yaml"
