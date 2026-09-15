@@ -108,6 +108,18 @@ Auto Scaling group cannot be stopped. Those schedules sit in the
 back up. When the cluster is started again, the lifecycle controller removes the
 old nodes and the autoscaler adds new ones as pods need them.
 
+Nothing starts the cluster unless `start_time` is set, in which case the
+`<cluster_name>-node-start` schedule starts the control plane and static nodes at
+that time. `days` limits both schedules to days of the week, in EventBridge
+Scheduler's form:
+
+```hcl
+nightly_stop = { time = "20:10", start_time = "00:40", days = "MON-FRI", timezone = "Asia/Muscat" }
+```
+
+Both are clock times on the listed days, so a stop after midnight belongs to the
+next day's name.
+
 `all_instance_ids` lists the instances Terraform owns individually, also as
 `local.all_instance_ids` for files a consumer generates into this directory.
 

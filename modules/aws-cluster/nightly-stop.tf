@@ -1,8 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 locals {
-  nightly_stop_minute_of_day = try(tonumber(split(":", var.nightly_stop.time)[0]) * 60 + tonumber(split(":", var.nightly_stop.time)[1]), 0)
-  nightly_stop_expression    = format("cron(%d %d * * ? *)", local.nightly_stop_minute_of_day % 60, floor(local.nightly_stop_minute_of_day / 60))
+  nightly_stop_clock    = try(split(":", var.nightly_stop.time), ["0", "0"])
+  nightly_start_clock   = try(split(":", var.nightly_stop.start_time), ["0", "0"])
+  nightly_start_enabled = try(var.nightly_stop.start_time, null) != null
+
+  # EventBridge Scheduler's cron takes a day of the month or a day of the week, with ? in the other.
+  nightly_days       = try(var.nightly_stop.days, null)
+  nightly_day_fields = local.nightly_days == null ? "* * ? *" : "? * ${local.nightly_days} *"
+
+  nightly_stop_expression  = format("cron(%d %d %s)", tonumber(local.nightly_stop_clock[1]), tonumber(local.nightly_stop_clock[0]), local.nightly_day_fields)
+  nightly_start_expression = format("cron(%d %d %s)", tonumber(local.nightly_start_clock[1]), tonumber(local.nightly_start_clock[0]), local.nightly_day_fields)
+
+  nightly_instance_arns = [for id in local.all_instance_ids : "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:instance/${id}"]
 
   nightly_scale_to_zero_groups = var.nightly_stop == null ? {} : merge({}, [
     for role, config in var.autoscaled_nodes : {
@@ -38,12 +48,28 @@ resource "aws_iam_role_policy" "nightly_stop" {
       [{
         Effect   = "Allow"
         Action   = "ec2:StopInstances"
-        Resource = [for id in local.all_instance_ids : "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:instance/${id}"]
+        Resource = local.nightly_instance_arns
       }],
       local.autoscaling_enabled ? [{
         Effect   = "Allow"
         Action   = "autoscaling:SetDesiredCapacity"
         Resource = local.autoscaling_group_arns
+      }] : [],
+      local.nightly_start_enabled ? [{
+        Effect   = "Allow"
+        Action   = "ec2:StartInstances"
+        Resource = local.nightly_instance_arns
+      }] : [],
+      # Starting an instance whose volumes are encrypted with a customer managed key
+      # needs a grant on that key; without one, the instance goes back to stopped.
+      local.nightly_start_enabled ? [{
+        Effect   = "Allow"
+        Action   = "kms:CreateGrant"
+        Resource = "*"
+        Condition = {
+          StringEquals = { "kms:ViaService" = "ec2.${var.aws_region}.amazonaws.com" }
+          Bool         = { "kms:GrantIsForAWSResource" = "true" }
+        }
       }] : [],
     )
   })
@@ -62,6 +88,29 @@ resource "aws_scheduler_schedule" "nightly_stop" {
 
   target {
     arn      = "arn:aws:scheduler:::aws-sdk:ec2:stopInstances"
+    role_arn = aws_iam_role.nightly_stop[0].arn
+
+    input = jsonencode({
+      InstanceIds = local.all_instance_ids
+    })
+  }
+}
+
+# Only the instances Terraform owns. The autoscaled groups stay at zero until pods need
+# nodes, and the autoscaler scales them up once the platform node is back.
+resource "aws_scheduler_schedule" "nightly_start" {
+  count = local.nightly_start_enabled ? 1 : 0
+  name  = "${var.cluster_name}-node-start"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = local.nightly_start_expression
+  schedule_expression_timezone = var.nightly_stop.timezone
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ec2:startInstances"
     role_arn = aws_iam_role.nightly_stop[0].arn
 
     input = jsonencode({

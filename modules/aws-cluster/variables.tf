@@ -302,16 +302,28 @@ variable "platform_node_group" {
 }
 
 variable "nightly_stop" {
-  description = "Each day at time (HH:MM, 24-hour) in timezone, stops the control plane and static nodes and scales every autoscaled group to zero. Nothing starts the cluster again. Null never stops it."
+  description = "At time (HH:MM, 24-hour) in timezone, stops the control plane and static nodes and scales every autoscaled group to zero. With start_time, starts the control plane and static nodes again at that time; without it nothing starts the cluster. days limits both to those days of the week, in EventBridge Scheduler's form (e.g. MON-FRI); unset, every day. Null never stops it."
   type = object({
-    time     = string
-    timezone = string
+    time       = string
+    timezone   = string
+    start_time = optional(string)
+    days       = optional(string)
   })
   default = null
 
   validation {
     condition     = var.nightly_stop == null ? true : can(regex("^([01][0-9]|2[0-3]):[0-5][0-9]$", var.nightly_stop.time))
     error_message = "nightly_stop.time must be HH:MM on a 24-hour clock."
+  }
+
+  validation {
+    condition     = try(var.nightly_stop.start_time, null) == null ? true : can(regex("^([01][0-9]|2[0-3]):[0-5][0-9]$", var.nightly_stop.start_time))
+    error_message = "nightly_stop.start_time must be HH:MM on a 24-hour clock."
+  }
+
+  validation {
+    condition     = try(var.nightly_stop.days, null) == null ? true : can(regex("^(SUN|MON|TUE|WED|THU|FRI|SAT)(-(SUN|MON|TUE|WED|THU|FRI|SAT))?(,(SUN|MON|TUE|WED|THU|FRI|SAT)(-(SUN|MON|TUE|WED|THU|FRI|SAT))?)*$", var.nightly_stop.days))
+    error_message = "nightly_stop.days must be days of the week such as MON-FRI or MON,WED,FRI."
   }
 }
 
