@@ -1,123 +1,205 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Builds a squashed release tree for one provider's split repo
-# (terraform-<provider>-kube-compute) from the current kube-compute checkout.
+# Builds the release tree for one provider's split repo
+# (terraform-<provider>-kube-compute), which the OpenTofu Registry publishes
+# as bbaliyan/kube-compute/<provider>.
 #
-# Usage: release-split.sh <provider> <target_dir> [source_dir]
+# Usage:
+#   release-split.sh <provider> <target_dir> [source_dir]
+#       Build the tree into target_dir, a git checkout of the split repo.
+#       Everything in it except .git/ and .github/ is replaced.
+#   release-split.sh --paths <provider> [source_dir]
+#       Print the kube-compute paths the tree is built from, one per line.
 #
-#   provider    e.g. proxmox, aws, azure
-#   target_dir  path to a checkout of the split repo (its .git/ is preserved;
-#               everything else is wiped except the exclude-list below)
-#   source_dir  path to the kube-compute checkout to copy from (default: repo
-#               root, derived from this script's own location)
+# The tree is modules/<provider>-cluster at the root, plus every module it
+# reaches through `source = "../<module>"`, followed transitively, under
+# modules/. The path set is derived, never listed, so a submodule added to or
+# retired from the cluster module is picked up by the next release as it is.
 #
-# Path-set copied in: component-versions, node-bootstrap, <provider>-control-plane
-# (becomes the split repo's root module, renamed to bare "control-plane" — the
-# split repo's own name already carries the provider), <provider>-node-pool
-# (nests under modules/, renamed to bare "node-pool" for the same reason).
-#
-# Only the root module's "../node-bootstrap" and "../component-versions" source
-# lines are rewritten (sibling -> parent-child, since it moves from being a
-# sibling of those two modules to being their parent in the split repo). No
-# other content differs between source and output.
+# A module keeps its name in the split repo, minus the "<provider>-" prefix
+# the repo's own name already carries: proxmox-node-pool becomes
+# modules/node-pool. Its "../<module>" source lines are the only content
+# rewritten, to the module's new relative path.
 
 set -euo pipefail
 
-if [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo "usage: $0 <provider> <target_dir> [source_dir]" >&2
+usage() {
+  sed -n '8,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  exit 1
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+paths_only=false
+if [[ "${1:-}" == "--paths" ]]; then
+  paths_only=true
+  shift
+  [[ $# -ge 1 && $# -le 2 ]] || usage
+  provider="$1"
+  source_dir="${2:-$(cd "$script_dir/.." && pwd)}"
+else
+  [[ $# -ge 2 && $# -le 3 ]] || usage
+  provider="$1"
+  target_dir="$2"
+  source_dir="${3:-$(cd "$script_dir/.." && pwd)}"
+fi
+
+root_mod="${provider}-cluster"
+if [[ ! -d "$source_dir/modules/$root_mod" ]]; then
+  echo "error: $source_dir/modules/$root_mod does not exist" >&2
   exit 1
 fi
 
-provider="$1"
-target_dir="$2"
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source_dir="${3:-$(cd "$script_dir/.." && pwd)}"
+# The module names a module's *.tf files reach with `source = "../<name>"`.
+local_deps() {
+  grep -hoE '^[[:space:]]*source[[:space:]]*=[[:space:]]*"\.\./[^"/]+"' "$source_dir/modules/$1"/*.tf 2>/dev/null \
+    | sed -E 's|.*"\.\./([^"]+)"|\1|' | sort -u || true
+}
 
-control_plane_mod="${provider}-control-plane"
-node_pool_mod="${provider}-node-pool"
+# Breadth-first from the root module; the root is always first.
+modules=("$root_mod")
+queue=("$root_mod")
+while [[ ${#queue[@]} -gt 0 ]]; do
+  mod="${queue[0]}"
+  queue=("${queue[@]:1}")
+  while read -r dep; do
+    [[ -z "$dep" ]] && continue
+    if [[ ! -d "$source_dir/modules/$dep" ]]; then
+      echo "error: modules/$mod references ../$dep, which does not exist" >&2
+      exit 1
+    fi
+    if [[ ! " ${modules[*]} " == *" $dep "* ]]; then
+      modules+=("$dep")
+      queue+=("$dep")
+    fi
+  done < <(local_deps "$mod")
+done
 
-for mod in "$control_plane_mod" "$node_pool_mod" component-versions node-bootstrap; do
-  if [[ ! -d "$source_dir/modules/$mod" ]]; then
-    echo "error: $source_dir/modules/$mod does not exist" >&2
-    exit 1
+if $paths_only; then
+  printf 'modules/%s\n' "${modules[@]}"
+  printf '%s\n' LICENSE NOTICE scripts/release-split.sh
+  exit 0
+fi
+
+# Where each module lands in the split repo, relative to its root.
+declare -A dest
+for mod in "${modules[@]}"; do
+  if [[ "$mod" == "$root_mod" ]]; then
+    dest[$mod]="."
+  else
+    dest[$mod]="modules/${mod#"${provider}"-}"
   fi
 done
+if [[ $(printf '%s\n' "${dest[@]}" | sort | uniq -d | wc -l) -ne 0 ]]; then
+  echo "error: two modules land on the same path once the ${provider}- prefix is dropped:" >&2
+  for mod in "${modules[@]}"; do echo "  modules/$mod -> ${dest[$mod]}" >&2; done
+  exit 1
+fi
 
 if [[ ! -d "$target_dir/.git" ]]; then
   echo "error: $target_dir is not a git checkout (.git/ missing)" >&2
   exit 1
 fi
 
-# Exclude-list: README.md (static, hand-written per split repo), .github/
-# (repo settings only, no CI of its own), and .gitignore (ignores .terraform/
-# etc. - without this, a later `tofu init` run in this checkout, e.g. this
-# same pipeline's own "Validate the built tree" step, would recreate
-# .terraform/ after this cleanup and it would get swept into the release
-# commit by `git add -A`). Never overwritten by a release.
-find "$target_dir" -mindepth 1 -maxdepth 1 \
-  ! -name ".git" ! -name "README.md" ! -name ".github" ! -name ".gitignore" \
-  -exec rm -rf {} +
+# .github/ is kept for repo settings the split repo may carry. Everything else
+# is this script's output, so a file removed from kube-compute is removed here.
+find "$target_dir" -mindepth 1 -maxdepth 1 ! -name ".git" ! -name ".github" -exec rm -rf {} +
 
-# cp -a (not rsync, to avoid an extra tool dependency in the CI image) copies
-# everything including local tofu-init artifacts (.terraform/); those are
-# stripped in a single cleanup pass below. .terraform.lock.hcl IS kept
-# (this project always commits lock files).
-mkdir -p "$target_dir"
-cp -a "$source_dir/modules/$control_plane_mod/." "$target_dir/"
+# cp -a rather than rsync, to need nothing the CI image lacks. Lock files are
+# kept: this project commits them.
+for mod in "${modules[@]}"; do
+  mkdir -p "$target_dir/${dest[$mod]}"
+  cp -a "$source_dir/modules/$mod/." "$target_dir/${dest[$mod]}/"
+done
+find "$target_dir" -type d -name ".terraform" -prune -exec rm -rf {} +
 
-# node-pool drops its provider prefix here (the split repo's own name already
-# carries the provider); node-bootstrap/component-versions are already
-# provider-neutral, so their destination name matches their source name.
-mkdir -p "$target_dir/modules/node-pool"
-cp -a "$source_dir/modules/$node_pool_mod/." "$target_dir/modules/node-pool/"
-for mod in node-bootstrap component-versions; do
-  mkdir -p "$target_dir/modules/$mod"
-  cp -a "$source_dir/modules/$mod/." "$target_dir/modules/$mod/"
+# Rewrite each "../<module>" source to where that module now is, relative to
+# the module doing the referencing: "./modules/x" from the root, "../x" from a
+# sibling under modules/.
+for mod in "${modules[@]}"; do
+  from="${dest[$mod]}"
+  while read -r dep; do
+    [[ -z "$dep" ]] && continue
+    to="${dest[$dep]}"
+    if [[ "$to" == "." ]]; then
+      echo "error: modules/$mod references the root module ../$dep" >&2
+      exit 1
+    fi
+    if [[ "$from" == "." ]]; then
+      new="./$to"
+    else
+      new="../${to#modules/}"
+    fi
+    OLD="../$dep" NEW="$new" perl -pi -e \
+      's{^(\s*source\s*=\s*)"\Q$ENV{OLD}\E"}{$1"$ENV{NEW}"}' \
+      "$target_dir/$from"/*.tf
+  done < <(local_deps "$mod")
 done
 
-find "$target_dir" -type d -name ".terraform" -exec rm -rf {} +
+# Every local source must now resolve inside the tree.
+unresolved=0
+for mod in "${modules[@]}"; do
+  from="$target_dir/${dest[$mod]}"
+  while read -r src; do
+    [[ -z "$src" ]] && continue
+    if [[ ! -d "$from/$src" ]]; then
+      echo "error: ${dest[$mod]} has source \"$src\", which does not exist in the tree" >&2
+      unresolved=1
+    fi
+  done < <(grep -hoE '^[[:space:]]*source[[:space:]]*=[[:space:]]*"\.{1,2}/[^"]+"' "$from"/*.tf 2>/dev/null \
+    | sed -E 's|.*"([^"]+)"|\1|' || true)
+done
+[[ "$unresolved" -eq 0 ]] || exit 1
 
-# Scoped find/replace only — not a general HCL rewrite. Only the module
-# "source" lines need rewriting (sibling -> parent-child); neither module is
-# otherwise referenced by a path.module-relative default in control-plane's
-# own main.tf.
-main_tf="$target_dir/main.tf"
-if [[ ! -f "$main_tf" ]]; then
-  echo "error: $main_tf missing after copy" >&2
-  exit 1
-fi
-perl -pi -e 's{source\s*=\s*"\.\./node-bootstrap"}{source = "./modules/node-bootstrap"}g;
-             s{source\s*=\s*"\.\./component-versions"}{source = "./modules/component-versions"}g;' \
-  "$main_tf"
+cp "$source_dir/LICENSE" "$source_dir/NOTICE" "$target_dir/"
 
-# ---- Copy LICENSE/NOTICE verbatim (not on the exclude-list) ----
-cp "$source_dir/LICENSE" "$target_dir/LICENSE"
-cp "$source_dir/NOTICE" "$target_dir/NOTICE"
+cat > "$target_dir/.gitignore" <<'EOF'
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+EOF
 
-# variables.tf/outputs.tf must be byte-identical between source and output
-# for every copied module — this is what lets a consumer swap a git/local
-# source for the registry source with zero change to their inputs block.
+# The root module's own README is the registry's documentation page; the
+# mirror notice goes above it.
+root_readme="$source_dir/modules/$root_mod/README.md"
+{
+  cat <<EOF
+> **Release mirror, generated -- do not edit here.** Built from
+> [kube-compute](https://github.com/bbaliyan/kube-compute)'s \`modules/${root_mod}\` and the
+> modules it uses, on every kube-compute release that changes them. Issues and pull requests
+> go to kube-compute. Published on the OpenTofu Registry as \`bbaliyan/kube-compute/${provider}\`.
+>
+> | Module | Built from |
+> |---|---|
+EOF
+  for mod in "${modules[@]}"; do
+    echo "> | \`${dest[$mod]}\` | \`modules/$mod\` |"
+  done
+  echo
+  if [[ -f "$root_readme" ]]; then
+    cat "$root_readme"
+  fi
+} > "$target_dir/README.md"
+
+# variables.tf and outputs.tf must be byte-identical to kube-compute's for
+# every module: that is what lets a consumer swap a kube-compute source for
+# the split repo's or the registry's without touching its inputs.
 parity_fail=0
-check_parity() {
-  local name="$1" src="$2" dst="$3"
+for mod in "${modules[@]}"; do
   for f in variables.tf outputs.tf; do
-    if [[ -f "$src/$f" || -f "$dst/$f" ]]; then
-      if ! diff -q "$src/$f" "$dst/$f" >/dev/null 2>&1; then
-        echo "interface-parity FAILED: $name/$f differs between source and split-repo output" >&2
-        parity_fail=1
-      fi
+    src="$source_dir/modules/$mod/$f"
+    dst="$target_dir/${dest[$mod]}/$f"
+    if [[ -f "$src" || -f "$dst" ]] && ! cmp -s "$src" "$dst"; then
+      echo "interface-parity FAILED: modules/$mod/$f differs in the split tree" >&2
+      parity_fail=1
     fi
   done
-}
-check_parity "$control_plane_mod" "$source_dir/modules/$control_plane_mod" "$target_dir"
-check_parity "$node_pool_mod" "$source_dir/modules/$node_pool_mod" "$target_dir/modules/node-pool"
-check_parity "node-bootstrap" "$source_dir/modules/node-bootstrap" "$target_dir/modules/node-bootstrap"
-check_parity "component-versions" "$source_dir/modules/component-versions" "$target_dir/modules/component-versions"
-
-if [[ "$parity_fail" -ne 0 ]]; then
-  echo "error: interface-parity check failed — see above" >&2
-  exit 1
-fi
+done
+[[ "$parity_fail" -eq 0 ]] || exit 1
 
 echo "release-split: built $target_dir for provider=$provider from $source_dir"
+for mod in "${modules[@]}"; do
+  echo "  modules/$mod -> ${dest[$mod]}"
+done

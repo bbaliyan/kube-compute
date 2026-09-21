@@ -40,3 +40,28 @@ jobs:
             --exit-code 1 \
             --ignorefile .trivyignore \
             modules/
+
+  # Builds each provider's registry mirror the way a release would, so a change
+  # that breaks a release fails here rather than on the tag.
+  split:
+    runs-on: ubuntu-latest
+    container: ghcr.io/bbaliyan/kube-devenv:0.8.11
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [proxmox, aws]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and validate the ${{ matrix.provider }} mirror
+        run: |
+          git init -q /tmp/split
+          ./scripts/release-split.sh "${{ matrix.provider }}" /tmp/split "${GITHUB_WORKSPACE}"
+          cd /tmp/split
+          tofu fmt -check -recursive
+          tofu init -backend=false -input=false
+          tofu validate
+          tofu test
