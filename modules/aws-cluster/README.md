@@ -47,6 +47,17 @@ Static and autoscaled nodes launch into the control plane's subnet, so the
 cluster stays in one availability zone: an EBS volume cannot cross zones. A
 static group can take its own `subnet_id` as a deliberate exception.
 
+`subnet_names` is a list of candidates for that one subnet, not a set to spread
+across, so the candidates may sit in different zones. A new cluster goes into the
+first candidate with a free address for the control plane and every static node
+that shares its subnet. A candidate with some free addresses but too few is
+skipped, rather than chosen and failing the apply partway. Once the control plane
+exists, running or stopped, the cluster stays in its subnet: the choice is never
+made again, however full that subnet becomes or however the list changes. Moving
+a cluster means destroying it and applying again. Autoscaled workers are not
+counted, since they launch later; one that finds the subnet full fails to join
+until addresses free up.
+
 Every node carries `kube-compute.io/node-group=<key>`: the static group's name, or
 the autoscaled role's, whatever the node's size. `node_taints` keeps other pods
 off; pods that belong there need a matching toleration.
