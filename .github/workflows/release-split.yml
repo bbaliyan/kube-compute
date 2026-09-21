@@ -1,94 +1,69 @@
 # SPDX-License-Identifier: Apache-2.0
-name: Release split (Proxmox)
+name: Release split
 
-# Publishes the Proxmox provider slice of this repo (component-versions,
-# node-bootstrap, proxmox-control-plane, proxmox-node-pool, LICENSE, NOTICE) to
-# the read-only mirror repo terraform-proxmox-kube-compute, but only when
-# that path set actually changed since the last version published there.
-# LICENSE/NOTICE are in the diff-gate's path set (not just copied
-# unconditionally) so a license-only fix is enough on its own to warrant a
-# new version, the same as any other tracked change.
+# Publishes each provider's slice of this repo to its read-only mirror,
+# terraform-<provider>-kube-compute, which the OpenTofu Registry serves as
+# bbaliyan/kube-compute/<provider>. scripts/release-split.sh builds the tree;
+# a provider gets a release only when that tree differs from what its mirror
+# already has, so a tag that touches only AWS modules releases only AWS.
+#
+# A mirror's tags are kube-compute's tags. Re-run a tag, or try one without
+# pushing anything, from the Actions tab (workflow_dispatch).
+#
+# SPLIT_REPO_PAT is a fine-grained token with contents: write on every mirror
+# in the matrix below.
 
 on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: kube-compute tag to release, e.g. v0.2.0
+        required: true
+      dry_run:
+        description: Build and validate only; push nothing
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
-env:
-  SPLIT_REPO: bbaliyan/terraform-proxmox-kube-compute
-  PATH_SET: "modules/component-versions modules/node-bootstrap modules/proxmox-control-plane modules/proxmox-node-pool LICENSE NOTICE"
-
 jobs:
-  release-split-proxmox:
+  release:
     runs-on: ubuntu-latest
     container: ghcr.io/bbaliyan/kube-devenv:0.8.11
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [proxmox, aws]
+    env:
+      PROVIDER: ${{ matrix.provider }}
+      SPLIT_REPO: bbaliyan/terraform-${{ matrix.provider }}-kube-compute
+      TAG: ${{ inputs.tag || github.ref_name }}
+      DRY_RUN: ${{ inputs.dry_run || false }}
     defaults:
       run:
         shell: bash
     steps:
-      - name: Configure git safe.directory
-        run: git config --global --add safe.directory '*'
+      - name: Configure git
+        run: |
+          git config --global --add safe.directory '*'
+          git config --global user.name "Bharat Baliyan"
+          git config --global user.email "bharat.baliyan19@gmail.com"
 
-      - name: Checkout kube-compute (full history + tags)
+      - name: Check the tag
+        run: |
+          [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'${TAG}' is not vX.Y.Z"; exit 1; }
+
+      - name: Checkout kube-compute at the tag
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.TAG }}
           fetch-depth: 0
 
-      - name: Determine baseline tag from the split repo
-        id: baseline
-        env:
-          SPLIT_REPO_PAT: ${{ secrets.SPLIT_REPO_PAT }}
-        run: |
-          set -euo pipefail
-          new_tag="${GITHUB_REF_NAME}"
-          echo "new_tag=${new_tag}" >> "$GITHUB_OUTPUT"
-
-          if ! tags_json="$(curl -sf \
-            -H "Authorization: Bearer ${SPLIT_REPO_PAT}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${SPLIT_REPO}/tags")"; then
-            echo "error: failed to query tags for ${SPLIT_REPO}" >&2
-            exit 1
-          fi
-
-          baseline="$(echo "$tags_json" | jq -r '.[].name' \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -V | tail -1 || true)"
-
-          if [[ -z "$baseline" ]]; then
-            echo "no existing tag in ${SPLIT_REPO} — first-ever release, always publish"
-            echo "baseline=" >> "$GITHUB_OUTPUT"
-            echo "has_baseline=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "baseline tag: ${baseline}"
-            echo "baseline=${baseline}" >> "$GITHUB_OUTPUT"
-            echo "has_baseline=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Diff-gate against the path set
-        id: diffgate
-        run: |
-          set -euo pipefail
-          if [[ "${{ steps.baseline.outputs.has_baseline }}" != "true" ]]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          baseline="${{ steps.baseline.outputs.baseline }}"
-          new_tag="${{ steps.baseline.outputs.new_tag }}"
-
-          if git diff --quiet "${baseline}..${new_tag}" -- ${PATH_SET}; then
-            echo "no change in ${PATH_SET} between ${baseline} and ${new_tag} — skipping"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Checkout split repo
-        if: steps.diffgate.outputs.publish == 'true'
+      - name: Checkout the mirror
         uses: actions/checkout@v7
         with:
           repository: ${{ env.SPLIT_REPO }}
@@ -96,72 +71,62 @@ jobs:
           path: split-repo
           fetch-depth: 0
 
-      - name: Build release tree
-        if: steps.diffgate.outputs.publish == 'true'
-        run: |
-          set -euo pipefail
-          ./scripts/release-split.sh proxmox "${GITHUB_WORKSPACE}/split-repo" "${GITHUB_WORKSPACE}"
+      - name: Build the release tree
+        run: ./scripts/release-split.sh "${PROVIDER}" "${GITHUB_WORKSPACE}/split-repo" "${GITHUB_WORKSPACE}"
 
-      - name: Validate the built tree
-        if: steps.diffgate.outputs.publish == 'true'
+      # On a copy, so tofu init can't add anything (a lock file hash for this
+      # platform, say) to what gets committed.
+      - name: Validate the release tree
         run: |
-          set -euo pipefail
-          cd split-repo
+          rm -rf /tmp/validate && cp -r split-repo /tmp/validate && cd /tmp/validate
           tofu fmt -check -recursive
-          tofu init -backend=false
+          tofu init -backend=false -input=false
           tofu validate
+          tofu test
 
-      - name: Commit, tag, and push
-        if: steps.diffgate.outputs.publish == 'true'
-        env:
-          NEW_TAG: ${{ steps.baseline.outputs.new_tag }}
+      - name: Compare with the mirror
+        id: compare
+        working-directory: split-repo
         run: |
-          set -euo pipefail
-          cd split-repo
-          git config user.name "Bharat Baliyan"
-          git config user.email "bharat.baliyan19@gmail.com"
           git add -A
-          git commit -s -m "release: ${NEW_TAG}"
-          git tag "${NEW_TAG}"
-          git push origin HEAD:refs/heads/main
-          git push origin "${NEW_TAG}"
-
-      - name: Generate release notes
-        if: steps.diffgate.outputs.publish == 'true'
-        id: notes
-        env:
-          HAS_BASELINE: ${{ steps.baseline.outputs.has_baseline }}
-          BASELINE: ${{ steps.baseline.outputs.baseline }}
-          NEW_TAG: ${{ steps.baseline.outputs.new_tag }}
-        run: |
-          set -euo pipefail
-          notes_file="$(mktemp)"
-          if [[ "${HAS_BASELINE}" == "true" ]]; then
-            {
-              echo "Changes to ${PATH_SET} between ${BASELINE} and ${NEW_TAG}:"
-              echo
-              git log "${BASELINE}..${NEW_TAG}" --oneline -- ${PATH_SET}
-            } > "${notes_file}"
-          else
-            echo "First release of the Proxmox split repo (${NEW_TAG})." > "${notes_file}"
+          if git diff --cached --quiet; then
+            echo "${SPLIT_REPO} already has this tree -- nothing to release for ${PROVIDER}"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          {
-            echo "notes_file=${notes_file}"
-          } >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::${SPLIT_REPO} already has ${TAG}, with a different tree. Release a new tag."
+            exit 1
+          fi
+          git diff --cached --stat
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          # The mirror's newest release before this one, for the notes.
+          echo "baseline=$(git tag -l 'v*.*.*' | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release on the split repo
-        if: steps.diffgate.outputs.publish == 'true'
+      - name: Commit, tag and push
+        if: steps.compare.outputs.publish == 'true' && env.DRY_RUN != 'true'
+        working-directory: split-repo
+        run: |
+          git commit -q -s -m "release: ${TAG}"
+          git tag "${TAG}"
+          git push origin HEAD:refs/heads/main
+          git push origin "${TAG}"
+
+      - name: Create the GitHub release
+        if: steps.compare.outputs.publish == 'true' && env.DRY_RUN != 'true'
         env:
           SPLIT_REPO_PAT: ${{ secrets.SPLIT_REPO_PAT }}
-          NEW_TAG: ${{ steps.baseline.outputs.new_tag }}
+          BASELINE: ${{ steps.compare.outputs.baseline }}
         run: |
-          set -euo pipefail
-          release_body="$(jq -n \
-            --arg tag "${NEW_TAG}" \
-            --arg body "$(cat "${{ steps.notes.outputs.notes_file }}")" \
-            '{tag_name: $tag, name: $tag, body: $body}')"
-          curl -sf -X POST \
-            -H "Authorization: Bearer ${SPLIT_REPO_PAT}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${SPLIT_REPO}/releases" \
-            -d "${release_body}" >/dev/null
+          mapfile -t paths < <(./scripts/release-split.sh --paths "${PROVIDER}")
+          if [[ -n "${BASELINE}" ]] && git rev-parse -q --verify "refs/tags/${BASELINE}" >/dev/null; then
+            notes="$(printf 'Changes since %s:\n\n' "${BASELINE}"; git log --oneline "${BASELINE}..${TAG}" -- "${paths[@]}")"
+          else
+            notes="First release of ${SPLIT_REPO} (${TAG})."
+          fi
+          jq -n --arg tag "${TAG}" --arg body "${notes}" '{tag_name: $tag, name: $tag, body: $body}' \
+          | curl -sf -X POST \
+              -H "Authorization: Bearer ${SPLIT_REPO_PAT}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${SPLIT_REPO}/releases" \
+              -d @- >/dev/null

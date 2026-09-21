@@ -11,8 +11,10 @@ single-node cluster.
 This is the compute half of the stack — what runs *on top* (GitOps, platform services)
 is [`kube-platform`](https://github.com/bbaliyan/kube-platform).
 
-This repo contains **no environment-specific values**. Consumers pin it by immutable
-git SHA and supply their own inputs (VPC names, CA certs, registry mirrors, domains).
+This repo contains **no environment-specific values**. Consumers supply their own inputs
+(VPC names, CA certs, registry mirrors, domains) and take each provider's cluster module
+from the OpenTofu Registry, from its mirror repo, or from here by git SHA -- see
+[Releases](#releases).
 
 ## Modules
 
@@ -69,6 +71,41 @@ control-plane node is a safe rejoin, not a split-brain risk.
 `endpoint_mode` picks how joining nodes reach the registration endpoint: `loadbalancer`
 (the NLB above, default), `dns` (cheaper Route53 multivalue-answer records with
 CloudWatch-alarm-backed health checks), or `static` (bring your own address).
+
+## Releases
+
+Each provider's cluster module is published on its own, from a read-only mirror repo:
+
+| Provider | Registry address | Mirror repo | Built from |
+|---|---|---|---|
+| AWS | `bbaliyan/kube-compute/aws` | [terraform-aws-kube-compute](https://github.com/bbaliyan/terraform-aws-kube-compute) | `modules/aws-cluster` |
+| Proxmox | `bbaliyan/kube-compute/proxmox` | [terraform-proxmox-kube-compute](https://github.com/bbaliyan/terraform-proxmox-kube-compute) | `modules/proxmox-cluster` |
+
+A mirror's root module is the provider's `<provider>-cluster` module. Under `modules/` it
+carries every module that one uses, found by following its `source = "../..."` lines, with
+the provider prefix dropped (`aws-node-pool` becomes `modules/node-pool`).
+`scripts/release-split.sh` builds the tree; `release-split.sh --paths <provider>` lists
+what it is built from. Every module's `variables.tf` and `outputs.tf` are byte-identical
+to the ones here, so a consumer can switch between the three sources without changing its
+inputs.
+
+**To release, push a `vX.Y.Z` tag.** The `Release split` workflow builds each provider's
+tree, validates and tests it, and compares it with what the mirror already has. Where it
+differs, the workflow commits it to the mirror under the same tag and creates a GitHub
+release. The registry picks up the new tag by itself. A tag that changes only AWS modules
+releases only AWS, so a mirror's versions can skip numbers. To re-run a tag, or build one
+without pushing anything, run the workflow by hand from the Actions tab (`dry_run` is on
+by default).
+
+CI builds and tests both mirrors on every pull request, so a change that would break a
+release fails there.
+
+**To add a provider**, create `terraform-<provider>-kube-compute` as an empty public repo,
+add it to the `SPLIT_REPO_PAT` token's repositories, and add the provider to the matrix in
+both `release-split.yml` and `ci.yml`. Once the first release has been tagged there, submit
+it to the OpenTofu Registry by opening a "Submit new Module" issue on
+[opentofu/registry](https://github.com/opentofu/registry/issues/new/choose) that names the
+repo.
 
 ## License
 
