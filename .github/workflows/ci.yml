@@ -8,7 +8,7 @@ on:
 jobs:
   tofu:
     runs-on: ubuntu-latest
-    container: ghcr.io/bbaliyan/kube-devenv:0.8.11
+    container: ghcr.io/bbaliyan/kube-devenv:0.8.15
     steps:
       - uses: actions/checkout@v7
 
@@ -45,7 +45,7 @@ jobs:
   # that breaks a release fails here rather than on the tag.
   split:
     runs-on: ubuntu-latest
-    container: ghcr.io/bbaliyan/kube-devenv:0.8.11
+    container: ghcr.io/bbaliyan/kube-devenv:0.8.15
     strategy:
       fail-fast: false
       matrix:
