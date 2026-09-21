@@ -72,7 +72,7 @@ run "groups_inherit_the_control_planes_subnet" {
 
   assert {
     condition     = length(output.all_instance_ids) == 4
-    error_message = "all_instance_ids must cover the control plane plus every static node (1 + 1 + 2), or a nightly stop schedule fed from it leaves the workers running around the clock"
+    error_message = "all_instance_ids must cover the control plane plus every static node (1 + 1 + 2), or a power schedule fed from it leaves the workers running around the clock"
   }
 
   assert {
