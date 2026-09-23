@@ -34,7 +34,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    container: ghcr.io/bbaliyan/kube-devenv:0.8.15
+    container: ghcr.io/bbaliyan/kube-devenv:0.8.16
     strategy:
       fail-fast: false
       matrix:
