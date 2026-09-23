@@ -8,7 +8,8 @@ name: Release split
 # already has, so a tag that touches only AWS modules releases only AWS.
 #
 # A mirror's tags are kube-compute's tags. Re-run a tag, or try one without
-# pushing anything, from the Actions tab (workflow_dispatch).
+# pushing anything, from the Actions tab (workflow_dispatch). A re-run finishes
+# whatever an interrupted release left undone, rather than starting a second one.
 #
 # SPLIT_REPO_PAT is a fine-grained token with contents: write on every mirror
 # in the matrix below.
@@ -89,44 +90,72 @@ jobs:
         working-directory: split-repo
         run: |
           git add -A
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then tagged=true; else tagged=false; fi
+          # The mirror's newest release before this one, for the notes. Its own tag doesn't count,
+          # which it carries already on a re-run.
+          echo "baseline=$(git tag -l 'v*.*.*' | grep -vFx "${TAG}" | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
           if git diff --cached --quiet; then
-            echo "${SPLIT_REPO} already has this tree -- nothing to release for ${PROVIDER}"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            if "${tagged}"; then
+              # The push went through on an earlier run; see that its release did too.
+              echo "${SPLIT_REPO} already has ${TAG}; checking its release"
+            else
+              echo "${SPLIT_REPO} already has this tree -- nothing to release for ${PROVIDER}"
+            fi
+            echo "push=false" >> "$GITHUB_OUTPUT"
+            echo "release=${tagged}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+          if "${tagged}"; then
             echo "::error::${SPLIT_REPO} already has ${TAG}, with a different tree. Release a new tag."
             exit 1
           fi
           git diff --cached --stat
-          echo "publish=true" >> "$GITHUB_OUTPUT"
-          # The mirror's newest release before this one, for the notes.
-          echo "baseline=$(git tag -l 'v*.*.*' | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
+          echo "push=true" >> "$GITHUB_OUTPUT"
+          echo "release=true" >> "$GITHUB_OUTPUT"
 
       - name: Commit, tag and push
-        if: steps.compare.outputs.publish == 'true' && env.DRY_RUN != 'true'
+        if: steps.compare.outputs.push == 'true' && env.DRY_RUN != 'true'
         working-directory: split-repo
         run: |
           git commit -q -s -m "release: ${TAG}"
           git tag "${TAG}"
-          git push origin HEAD:refs/heads/main
-          git push origin "${TAG}"
+          # One push, so a failure never leaves the branch moved without its tag.
+          git push --atomic origin HEAD:refs/heads/main "refs/tags/${TAG}"
 
       - name: Create the GitHub release
-        if: steps.compare.outputs.publish == 'true' && env.DRY_RUN != 'true'
+        if: steps.compare.outputs.release == 'true' && env.DRY_RUN != 'true'
         env:
           SPLIT_REPO_PAT: ${{ secrets.SPLIT_REPO_PAT }}
           BASELINE: ${{ steps.compare.outputs.baseline }}
         run: |
+          api() {
+            curl -sS -o /tmp/response.json -w '%{http_code}' \
+              --retry 5 --retry-all-errors --retry-delay 5 \
+              -H "Authorization: Bearer ${SPLIT_REPO_PAT}" \
+              -H "Accept: application/vnd.github+json" "$@"
+          }
+
+          if [[ "$(api "https://api.github.com/repos/${SPLIT_REPO}/releases/tags/${TAG}")" == "200" ]]; then
+            echo "${SPLIT_REPO} already has a release for ${TAG}"
+            exit 0
+          fi
+
           mapfile -t paths < <(./scripts/release-split.sh --paths "${PROVIDER}")
           if [[ -n "${BASELINE}" ]] && git rev-parse -q --verify "refs/tags/${BASELINE}" >/dev/null; then
             notes="$(printf 'Changes since %s:\n\n' "${BASELINE}"; git log --oneline "${BASELINE}..${TAG}" -- "${paths[@]}")"
           else
             notes="First release of ${SPLIT_REPO} (${TAG})."
           fi
-          jq -n --arg tag "${TAG}" --arg body "${notes}" '{tag_name: $tag, name: $tag, body: $body}' \
-          | curl -sf -X POST \
-              -H "Authorization: Bearer ${SPLIT_REPO_PAT}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${SPLIT_REPO}/releases" \
-              -d @- >/dev/null
+
+          jq -n --arg tag "${TAG}" --arg body "${notes}" '{tag_name: $tag, name: $tag, body: $body}' >/tmp/release.json
+          code=$(api -X POST "https://api.github.com/repos/${SPLIT_REPO}/releases" -d @/tmp/release.json)
+          # 422 is a retry that arrived after the release was made.
+          if [[ "${code}" == "422" ]]; then
+            code=$(api "https://api.github.com/repos/${SPLIT_REPO}/releases/tags/${TAG}")
+            [[ "${code}" == "200" ]] && code=201
+          fi
+          if [[ "${code}" != "201" ]]; then
+            echo "::error::the release for ${TAG} was not created (HTTP ${code})"
+            cat /tmp/response.json
+            exit 1
+          fi
