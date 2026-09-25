@@ -161,6 +161,7 @@ module "control_plane" {
   root_volume_size_gb               = var.root_volume_size_gb
   root_volume_type                  = var.root_volume_type
   aws_provider_id                   = local.autoscaling_enabled
+  graceful_shutdown                 = var.graceful_shutdown
 }
 
 # See modules/aws-static-node/README.md for why named instances suit fixed roles.
@@ -176,6 +177,7 @@ module "static_nodes" {
   agent_token_ssm_parameter = module.control_plane.agent_token_ssm_parameter
   cluster_fqdn_suffix       = var.cluster_domain != null ? "${coalesce(var.cluster_dns_name, var.cluster_name)}.${var.cluster_domain}" : null
   aws_provider_id           = local.autoscaling_enabled
+  graceful_shutdown         = var.graceful_shutdown
 
   # Ingress runs with the platform, so only the platform group answers on the external ports.
   security_group_ids = concat(
@@ -233,6 +235,7 @@ module "autoscaled_nodes" {
   trusted_ca_in_image = var.trusted_ca_in_image
   registry_mirror_url = var.registry_mirror_url
   dns_servers         = var.dns_servers
+  graceful_shutdown   = var.graceful_shutdown
   extra_tags          = var.extra_tags
 }
 

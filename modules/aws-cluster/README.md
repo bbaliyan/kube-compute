@@ -166,6 +166,34 @@ new addresses in state.
 `all_instance_ids` lists the instances Terraform owns individually, also as
 `local.all_instance_ids` for files a consumer generates into this directory.
 
+## Graceful shutdown
+
+`graceful_shutdown` is how long kubelet holds up an OS shutdown while it evicts
+pods, so a node stopped by `power_schedule`, scaled in by the autoscaler or simply
+terminated stops its workloads instead of having them killed with it.
+`critical_seconds` is the part of that window reserved for critical pods.
+
+Three settings have to agree, and every node gets all three: a kubelet drop-in
+carrying the grace period, a `config.yaml.d` fragment pointing kubelet at that
+drop-in, and a logind override raising `InhibitDelayMaxSec`. The fragment is needed
+because `shutdownGracePeriod` has no command-line flag, so `kubelet-arg` cannot
+reach it. The logind override matters just as much: left at its five-second
+default, logind caps kubelet's window to five seconds and the eviction never
+finishes.
+
+Keep the total well under the two minutes a cloud allows an instance before it
+pulls the power, and leave room inside it for the longest
+`terminationGracePeriodSeconds` among the pods that run here. Null disables the
+feature.
+
+It is on by default and adds files to every node's user data, so an existing
+cluster that upgrades to it replaces its control plane and static nodes, as any
+user data change does. Set `graceful_shutdown = null` to leave them as they are.
+
+A spot interruption is only partly covered. The OS shutdown arrives at the end of
+the two-minute warning rather than at its start, so this is a backstop; draining on
+the warning itself needs a node termination handler running in the cluster.
+
 ## Volumes on destroy
 
 `orphan_volume_cleanup` deletes the cluster's dynamically provisioned EBS volumes

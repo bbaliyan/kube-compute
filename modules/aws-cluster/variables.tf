@@ -411,3 +411,12 @@ variable "orphan_volume_cleanup" {
   type        = bool
   default     = true
 }
+
+variable "graceful_shutdown" {
+  description = "How long kubelet holds up an OS shutdown to evict pods, so a node stopped by power_schedule -- or terminated by the autoscaler -- stops its workloads instead of having them killed with it. critical_seconds is the part of that reserved for critical pods, and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables the feature. Keep the total well under the two minutes a cloud gives an instance before it pulls the power."
+  type = object({
+    seconds          = optional(number, 90)
+    critical_seconds = optional(number, 30)
+  })
+  default = {}
+}
