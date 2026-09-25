@@ -73,8 +73,51 @@ locals {
   )
 }
 
+# A destroy never deletes a PVC, so the CSI driver never releases its volume and it is left
+# detached and billed. The node modules depend on this resource to have it destroyed last:
+# Terraform destroys a dependent before its dependency.
+resource "terraform_data" "volume_sweep" {
+  input = {
+    enabled      = var.orphan_volume_cleanup
+    cluster_name = var.cluster_name
+    region       = var.aws_region
+  }
+
+  # The switch is in `input`, not `count`: a count of 0 would destroy this resource, running the
+  # sweep against a live cluster. An `input` change is an in-place update.
+  provisioner "local-exec" {
+    when       = destroy
+    on_failure = continue
+    command    = <<-EOT
+      set -u
+      [ "${self.input.enabled}" = "true" ] || exit 0
+      REGION="${self.input.region}"
+      OWNED="Name=tag:ClusterName,Values=${self.input.cluster_name}"
+
+      volumes() {
+        aws ec2 describe-volumes --region "$REGION" --filters "$OWNED" "Name=status,Values=$1" --query "$2" --output text
+      }
+
+      # An autoscaling group terminates its instances after Terraform stops waiting on it.
+      ATTEMPT=0
+      while [ "$ATTEMPT" -lt 30 ]; do
+        BUSY=$(volumes in-use,detaching 'length(Volumes)') || break
+        [ "$BUSY" = "0" ] && break
+        sleep 10
+        ATTEMPT=$((ATTEMPT + 1))
+      done
+
+      for ID in $(volumes available 'Volumes[].VolumeId'); do
+        echo "kube-compute: deleting orphaned volume $ID"
+        aws ec2 delete-volume --region "$REGION" --volume-id "$ID" || echo "kube-compute: $ID could not be deleted and is still billed -- delete it by hand" >&2
+      done
+    EOT
+  }
+}
+
 module "control_plane" {
-  source = "../aws-control-plane"
+  source     = "../aws-control-plane"
+  depends_on = [terraform_data.volume_sweep]
 
   cluster_name                      = var.cluster_name
   trusted_ca_pem                    = var.trusted_ca_pem
@@ -122,8 +165,9 @@ module "control_plane" {
 
 # See modules/aws-static-node/README.md for why named instances suit fixed roles.
 module "static_nodes" {
-  source   = "../aws-static-node"
-  for_each = var.static_nodes
+  source     = "../aws-static-node"
+  for_each   = var.static_nodes
+  depends_on = [terraform_data.volume_sweep]
 
   cluster_name              = var.cluster_name
   group_name                = each.key
@@ -162,8 +206,9 @@ module "static_nodes" {
 }
 
 module "autoscaled_nodes" {
-  source   = "../aws-node-pool"
-  for_each = var.autoscaled_nodes
+  source     = "../aws-node-pool"
+  for_each   = var.autoscaled_nodes
+  depends_on = [terraform_data.volume_sweep]
 
   cluster_name              = var.cluster_name
   group_name                = each.key

@@ -166,6 +166,22 @@ new addresses in state.
 `all_instance_ids` lists the instances Terraform owns individually, also as
 `local.all_instance_ids` for files a consumer generates into this directory.
 
+## Volumes on destroy
+
+`orphan_volume_cleanup` deletes the cluster's dynamically provisioned EBS volumes
+once its nodes are gone. A destroy never deletes a PVC, so the CSI driver is never
+asked to release the volume behind it, and it is left detached and billed. Nothing
+picks it up later, so each destroy adds another set.
+
+The sweep matches volumes tagged `ClusterName` with this cluster's name, which the
+platform chart is expected to apply. It deletes only volumes that are `available`,
+and waits first for any still detaching, since an Auto Scaling group terminates its
+instances after Terraform has stopped waiting on it. Whoever runs the destroy needs
+`ec2:DescribeVolumes` and `ec2:DeleteVolume`.
+
+Turn it off where a volume is meant to outlive its cluster: a PersistentVolume kept
+with `reclaimPolicy: Retain` carries the same tag and would be swept with the rest.
+
 ## Testing
 
     cd modules/aws-cluster

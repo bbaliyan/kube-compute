@@ -395,3 +395,19 @@ variable "autoscaled_nodes" {
     error_message = "autoscaled_nodes requires gitops_platform_enabled: cluster-autoscaler is installed by the platform Application."
   }
 }
+
+variable "orphan_volume_cleanup" {
+  description = <<-EOT
+    Delete the cluster's dynamically provisioned EBS volumes when the cluster is destroyed.
+
+    The CSI driver only releases a volume when its PVC is deleted through the API server, which
+    a destroy never does -- the nodes go first and the volume is left detached and billed. This
+    sweeps whatever still carries the cluster's ClusterName tag once the nodes are gone, so the
+    platform chart must tag volumes with it (kube-platform's aws-ebs provisioner does).
+
+    Turn it off where a volume is meant to outlive its cluster: a PersistentVolume kept with
+    reclaimPolicy Retain is tagged the same as any other and would be swept.
+  EOT
+  type        = bool
+  default     = true
+}
