@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ---- Day-2 guest-access credentials (node-bootstrap itself never connects to the
-# node — these exist for node-os-patch and any other operator tooling that does) ----
+# node — these exist for operator tooling that does) ----
 variable "ssh_private_key_file" {
   description = "Path to the SSH private key for guest access (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
   type        = string
@@ -467,4 +467,10 @@ variable "cluster_autoscaler_capmox_credentials_secret_name" {
     condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_capmox_credentials_secret_name != null
     error_message = "cluster_autoscaler_capmox_credentials_secret_name is required when cluster_autoscaler_enabled is true — without it this ProxmoxCluster would fall back to CAPMOX's manager-wide credentials Secret, which is deliberately non-functional (kube-image bakes it with placeholder values to avoid leaking real credentials into every VM image)."
   }
+}
+
+variable "os_auto_updates" {
+  description = "Installs OS updates with dnf-automatic on every node, daily and 15 minutes after each boot, without rebooting; a node whose updates need a reboot reports it through needs-restarting (yum-utils). RKE2's own packages are excluded from dnf, since system-upgrade-controller upgrades them. False leaves nodes' packages as baked."
+  type        = bool
+  default     = true
 }

@@ -245,3 +245,9 @@ variable "tsig_key_secret" {
   default     = null
   sensitive   = true
 }
+
+variable "os_auto_updates" {
+  description = "Installs OS updates daily with dnf-automatic, without rebooting. See node-bootstrap's own variable."
+  type        = bool
+  default     = true
+}

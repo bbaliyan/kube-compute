@@ -26,7 +26,8 @@ re-document them.
 
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
 entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
-supplies: `cluster_name`, `cluster_agent_token`, and the key itself as `pool_name`. An
+supplies: `cluster_name`, `cluster_agent_token`, `os_auto_updates` (cluster-wide), and the
+key itself as `pool_name`. An
 empty map (the default) creates no worker pools, the same shape as applying
 `proxmox-control-plane` alone.
 
@@ -163,6 +164,16 @@ When enabled, this module:
 `cluster_autoscaler_worker_template` must be set; both are enforced by `plan`-time
 validation so an incomplete configuration fails with a clear error rather than
 producing a `MachineDeployment` that can never scale.
+
+## OS updates
+
+`os_auto_updates`, on by default, has every node, autoscaled workers included, install
+OS updates with `dnf-automatic` daily at 06:00 and 15 minutes after each boot. It never
+reboots: kube-platform's Node OS Updates dashboard shows which nodes need one. See
+[`node-bootstrap`'s README](../node-bootstrap/README.md#os-updates).
+
+It is part of each node's first-boot cloud-init, so changing it reaches a node only
+when that node is rebuilt.
 
 ## Existing standalone modules remain fully supported
 
