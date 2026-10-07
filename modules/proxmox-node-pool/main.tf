@@ -257,6 +257,7 @@ module "node_bootstrap" {
   dns_servers = var.dns_servers
 
   iscsi_initiator_enabled = true
+  os_auto_updates         = var.os_auto_updates
 }
 
 # Subsumes the old hostname-only snippet — hostname is now one key inside

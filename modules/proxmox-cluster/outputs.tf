@@ -92,8 +92,3 @@ output "node_pools" {
     }
   }
 }
-
-output "orchestrator_script" {
-  description = "Rendered OS-patch orchestrator (node-os-patch): a self-contained bash script (plain SSH, no Ansible) covering this cluster's control-plane and worker node refs (across every node_pools entry). Run with `bash <(tofu output -raw orchestrator_script)`. Resource-less — applying this module creates nothing; OS patching is an operator-triggered action run on whatever schedule the operator chooses, never implied by a plain apply."
-  value       = module.os_patch.orchestrator_script
-}

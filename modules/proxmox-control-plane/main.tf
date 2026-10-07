@@ -231,6 +231,7 @@ module "node_bootstrap" {
   tsig_key_name      = var.tsig_key_name
   tsig_key_algorithm = var.tsig_key_algorithm
   tsig_key_secret    = var.tsig_key_secret
+  os_auto_updates    = var.os_auto_updates
 }
 
 # node-bootstrap no longer executes anything, so there's no run to order against —
@@ -264,6 +265,7 @@ module "node_bootstrap_additional" {
   cert_mode               = var.cert_mode
   extra_tags              = var.extra_tags
   iscsi_initiator_enabled = true
+  os_auto_updates         = var.os_auto_updates
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
 }
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ---- Day-2 guest-access credentials (node-bootstrap never connects to the node —
-# these exist for node-os-patch and other operator tooling) ----
+# these exist for operator tooling) ----
 variable "ssh_private_key_file" {
   description = "Path to the SSH private key for guest access (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
   type        = string
@@ -359,4 +359,10 @@ variable "extra_server_manifests" {
   description = "Forwarded verbatim to node-bootstrap's own identically-named variable, on the genesis (server-init) node only — matching genesis_apply_manifests' own scope, since RKE2's manifest auto-deploy only needs to apply once per cluster. Empty by default."
   type        = map(string)
   default     = {}
+}
+
+variable "os_auto_updates" {
+  description = "Installs OS updates daily with dnf-automatic, without rebooting. See node-bootstrap's own variable."
+  type        = bool
+  default     = true
 }

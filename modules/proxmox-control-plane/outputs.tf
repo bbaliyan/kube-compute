@@ -56,7 +56,7 @@ output "proxmox_node" {
 }
 
 output "ssh_user" {
-  description = "SSH user for guest access (os-patch and any other ops tooling connecting to the node directly) — node-bootstrap itself never connects to the node at all; this account exists for day-2 tooling only."
+  description = "SSH user for guest access (ops tooling connecting to the node directly) — node-bootstrap itself never connects to the node at all; this account exists for day-2 tooling only."
   value       = var.ssh_user
 }
 
