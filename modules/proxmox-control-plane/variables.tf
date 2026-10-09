@@ -275,8 +275,18 @@ variable "manage_wildcard_dns_record" {
 
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
+variable "cluster_dns_name" {
+  description = "Name to use in DNS in place of cluster_name. See proxmox-cluster's own variable."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.cluster_dns_name == null || can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_dns_name))
+    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
+  }
+}
+
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the HA registration/access endpoint — without it there is no single address that names every control-plane node."
+  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the HA registration/access endpoint — without it there is no single address that names every control-plane node."
   type        = string
   default     = null
 
@@ -359,6 +369,15 @@ variable "extra_server_manifests" {
   description = "Forwarded verbatim to node-bootstrap's own identically-named variable, on the genesis (server-init) node only — matching genesis_apply_manifests' own scope, since RKE2's manifest auto-deploy only needs to apply once per cluster. Empty by default."
   type        = map(string)
   default     = {}
+}
+
+variable "graceful_shutdown" {
+  description = "How long kubelet holds up an OS shutdown to evict pods. See node-bootstrap's own variable; null disables it."
+  type = object({
+    seconds          = optional(number, 90)
+    critical_seconds = optional(number, 30)
+  })
+  default = {}
 }
 
 variable "os_auto_updates" {

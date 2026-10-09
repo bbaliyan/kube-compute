@@ -8,7 +8,8 @@ locals {
   etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
 
   has_domain    = var.cluster_domain != null
-  fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
+  dns_name      = coalesce(var.cluster_dns_name, var.cluster_name)
+  fqdn_suffix   = local.has_domain ? "${local.dns_name}.${var.cluster_domain}" : null
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
 
@@ -18,7 +19,7 @@ locals {
   # soon as it knows its own IP, so it's a zero-dependency string when DNS is
   # configured; falls back to genesis's raw IP (a real resource dependency) when
   # dns_server_address is null.
-  genesis_dns_name = local.has_domain ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+  genesis_dns_name = local.has_domain ? "genesis.${local.dns_name}.${trimsuffix(var.cluster_domain, ".")}" : null
   # Deliberately NOT local.cp_ips["0"]: cp_ips is a merged map built from BOTH
   # control_plane and control_plane_additional resources, so referencing it — even
   # just the "0" key — makes OpenTofu's (resource-grained) dependency graph depend on
@@ -46,7 +47,7 @@ locals {
   # this module's "DNS is optional and name-only" rule.
   dns_registration_enabled = local.has_domain && var.dns_server_address != null
   dns_zone                 = local.has_domain ? "${trimsuffix(var.cluster_domain, ".")}." : null
-  dns_record_name          = "api.${var.cluster_name}"
+  dns_record_name          = "api.${local.dns_name}"
 
   # Wildcard ingress record: only this module's job on an all_in_one cluster, where
   # the control-plane node is the only place ingress can run. On a
@@ -54,7 +55,7 @@ locals {
   # publishes the wildcard itself, against its own worker IPs. Registering it here too
   # would point at the wrong nodes and race node-pool's write.
   wildcard_registration_enabled = var.manage_wildcard_dns_record && local.dns_registration_enabled && var.cluster_type == "all_in_one"
-  dns_wildcard_record_name      = "*.${var.cluster_name}"
+  dns_wildcard_record_name      = "*.${local.dns_name}"
 
   # One IP per control-plane node; index 0 is genesis. DHCP works at any
   # control_plane_count — every additional control-plane VM shares the same
@@ -218,7 +219,7 @@ module "node_bootstrap" {
   extra_server_manifests              = var.extra_server_manifests
 
   dns_self_register_zone        = var.dns_server_address != null ? local.dns_zone : null
-  dns_self_register_record_name = "genesis.${var.cluster_name}"
+  dns_self_register_record_name = "genesis.${local.dns_name}"
   dns_self_register_ttl         = var.dns_record_ttl
   dns_server_address            = var.dns_server_address
   dns_server_port               = var.dns_server_port
@@ -231,6 +232,7 @@ module "node_bootstrap" {
   tsig_key_name      = var.tsig_key_name
   tsig_key_algorithm = var.tsig_key_algorithm
   tsig_key_secret    = var.tsig_key_secret
+  graceful_shutdown  = var.graceful_shutdown
   os_auto_updates    = var.os_auto_updates
 }
 
@@ -265,6 +267,7 @@ module "node_bootstrap_additional" {
   cert_mode               = var.cert_mode
   extra_tags              = var.extra_tags
   iscsi_initiator_enabled = true
+  graceful_shutdown       = var.graceful_shutdown
   os_auto_updates         = var.os_auto_updates
   # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
 }
