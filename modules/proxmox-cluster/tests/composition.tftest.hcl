@@ -136,3 +136,21 @@ run "platform_node_group_must_name_a_pool" {
 
   expect_failures = [var.platform_node_group]
 }
+
+run "cluster_dns_name_reaches_the_control_plane" {
+  command = plan
+
+  variables {
+    cluster_domain   = "example.test"
+    cluster_dns_name = "app"
+  }
+
+  assert {
+    condition     = output.cluster_fqdn == "api.app.example.test"
+    error_message = "cluster_dns_name must name the cluster in DNS: got ${output.cluster_fqdn}"
+  }
+  assert {
+    condition     = output.cluster_name == "bharat"
+    error_message = "the cluster keeps its own identity whatever it is called in DNS"
+  }
+}

@@ -26,9 +26,8 @@ re-document them.
 
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
 entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
-supplies: `cluster_name`, `cluster_agent_token`, `os_auto_updates` (cluster-wide), and the
-key itself as `pool_name`. An
-empty map (the default) creates no worker pools, the same shape as applying
+supplies: `cluster_name`, `cluster_agent_token`, the cluster-wide `cluster_dns_name`,
+`graceful_shutdown` and `os_auto_updates`, and the key itself as `pool_name`. An empty map (the default) creates no worker pools, the same shape as applying
 `proxmox-control-plane` alone.
 
 Every worker of a pool is named `<cluster_name>-<pool>-<n>` and carries
@@ -48,6 +47,14 @@ value: `trusted_ca_pem`, `registry_mirror_url`, `ssh_authorized_keys`, `dns_serv
 
 Without it, ingress and the wildcard record stay on the control plane of an
 `all_in_one` cluster, and on the pools of a `dedicated_control_plane` one.
+
+### Names in DNS
+
+`cluster_name` is the cluster's identity: VM names, node names and firewall ipsets. Where
+the domain already says what tells clusters apart, `cluster_dns_name` stops the name
+repeating it: with `cluster_name = "app-red"` and `cluster_domain = "red.example.internal"`,
+`cluster_dns_name = "app"` serves the cluster at `api.app.red.example.internal` while every
+VM stays `app-red-*`. Unset, DNS uses `cluster_name`.
 
 ### DNS registration
 
@@ -174,6 +181,16 @@ reboots: kube-platform's Node OS Updates dashboard shows which nodes need one. S
 
 It is part of each node's first-boot cloud-init, so changing it reaches a node only
 when that node is rebuilt.
+
+## Graceful shutdown
+
+`graceful_shutdown`, on by default at 90 seconds with the last 30 for critical pods, has
+kubelet evict pods when a node's OS shuts down, so a VM shut down from Proxmox or by a host
+reboot stops its workloads instead of having them killed. Raise it for workloads with a
+long `terminationGracePeriodSeconds`, but keep it under what Proxmox gives a guest before
+stopping it: 180 seconds by default when the host shuts down. Null turns it off. See
+[`node-bootstrap`'s README](../node-bootstrap/README.md#graceful-shutdown). Like
+`os_auto_updates`, it reaches a node only when that node is rebuilt.
 
 ## Existing standalone modules remain fully supported
 
