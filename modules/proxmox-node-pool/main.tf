@@ -6,12 +6,13 @@ locals {
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
 
   static_ips = var.worker_ip_addresses != null
+  dns_name   = coalesce(var.cluster_dns_name, var.cluster_name)
 
   # Wildcard DNS registration (RFC2136): publishes *.<cluster_name> -> every
   # resolved worker IP, for the pool that runs ingress (manage_wildcard_dns_record).
   dns_registration_enabled = var.manage_wildcard_dns_record && var.cluster_domain != null && var.dns_server_address != null
   dns_zone                 = var.cluster_domain != null ? "${trimsuffix(var.cluster_domain, ".")}." : null
-  dns_wildcard_record_name = "*.${var.cluster_name}"
+  dns_wildcard_record_name = "*.${local.dns_name}"
 
   # Same formula as proxmox-control-plane's identical local, passed to node-bootstrap
   # so a worker's cloud-init sets a real fqdn, not just hostname. Without it,
@@ -22,7 +23,7 @@ locals {
   # node_name. RKE2 registers by hostname, so all workers collided on one hostname;
   # only one could hold the registration, the rest looped forever on "Node password
   # rejected, duplicate hostname" — confirmed on a real 3-worker Proxmox apply.
-  fqdn_suffix = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
+  fqdn_suffix = var.cluster_domain != null ? "${local.dns_name}.${var.cluster_domain}" : null
 
   # Proxmox-native delivery: the token is embedded verbatim into this pool's own
   # cloud-init snippet (no secret store to fetch from), unlike AWS's SSM fetch command.
@@ -32,7 +33,7 @@ locals {
   # reasoning. effective_registration_address below falls back to this when the caller
   # didn't pass var.registration_address explicitly (the no-DNS case). Guards
   # cluster_domain == null so this resolves to null instead of crashing trimsuffix().
-  genesis_dns_name = var.cluster_domain != null ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+  genesis_dns_name = var.cluster_domain != null ? "genesis.${local.dns_name}.${trimsuffix(var.cluster_domain, ".")}" : null
 
   effective_registration_address = var.registration_address != null ? var.registration_address : (
     var.dns_server_address != null ? local.genesis_dns_name : null
@@ -257,6 +258,7 @@ module "node_bootstrap" {
   dns_servers = var.dns_servers
 
   iscsi_initiator_enabled = true
+  graceful_shutdown       = var.graceful_shutdown
   os_auto_updates         = var.os_auto_updates
 }
 

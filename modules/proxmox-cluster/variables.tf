@@ -275,8 +275,18 @@ variable "ingress_ports" {
 
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
+variable "cluster_dns_name" {
+  description = "Name to use in DNS in place of cluster_name, so that the FQDN is api.<cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name. Set this where cluster_name carries something the domain already says: with cluster_name = \"app-red\" and cluster_domain = \"red.example.internal\", cluster_dns_name = \"app\" keeps the name api.app.red.example.internal while VM names, node names and firewall ipsets stay unique to that cluster."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.cluster_dns_name == null || can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_dns_name))
+    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
+  }
+}
+
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the only address that names every control-plane node."
+  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the only address that names every control-plane node."
   type        = string
   default     = null
 
@@ -467,6 +477,15 @@ variable "cluster_autoscaler_capmox_credentials_secret_name" {
     condition     = !var.cluster_autoscaler_enabled || var.cluster_autoscaler_capmox_credentials_secret_name != null
     error_message = "cluster_autoscaler_capmox_credentials_secret_name is required when cluster_autoscaler_enabled is true — without it this ProxmoxCluster would fall back to CAPMOX's manager-wide credentials Secret, which is deliberately non-functional (kube-image bakes it with placeholder values to avoid leaking real credentials into every VM image)."
   }
+}
+
+variable "graceful_shutdown" {
+  description = "How long kubelet holds up an OS shutdown to evict pods, so a VM shut down from Proxmox -- or by a host reboot -- stops its workloads instead of having them killed with it. critical_seconds is the part of that reserved for critical pods, and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. See node-bootstrap's own variable."
+  type = object({
+    seconds          = optional(number, 90)
+    critical_seconds = optional(number, 30)
+  })
+  default = {}
 }
 
 variable "os_auto_updates" {
