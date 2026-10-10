@@ -51,4 +51,11 @@ run "cluster_and_etcd_ipsets_created_and_referenced" {
     condition     = alltrue([for r in proxmox_virtual_environment_firewall_rules.control_plane["0"].rule : true if strcontains(coalesce(r.source, ""), "kube-compute-bharat-cluster") || strcontains(coalesce(r.source, ""), "kube-compute-bharat-etcd") || contains(var.allowed_ingress_cidrs, coalesce(r.source, ""))])
     error_message = "every control-plane firewall rule's source must be the cluster ipset, the etcd ipset, or an allowed ingress CIDR"
   }
+  assert {
+    condition = alltrue(concat(
+      [proxmox_virtual_environment_vm.control_plane.network_device[0].firewall],
+      [for vm in proxmox_virtual_environment_vm.control_plane_additional : vm.network_device[0].firewall],
+    ))
+    error_message = "every control-plane NIC must enable the firewall, or Proxmox never enforces the rules above"
+  }
 }

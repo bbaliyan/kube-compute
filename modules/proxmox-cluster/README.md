@@ -65,6 +65,29 @@ rather than using a Terraform provider (see its README for why). It just needs
 `nsupdate` (`bind-utils`/`dnsutils`) installed on whatever machine runs
 `tofu apply`/`tofu destroy`.
 
+## Firewall
+
+Each VM gets a Proxmox firewall that drops inbound traffic except:
+- everything from `cluster_network_cidr`;
+- etcd between control-plane nodes;
+- `ingress_ports` from `allowed_ingress_cidrs`.
+
+Proxmox enforces it only when **the datacenter firewall is enabled**
+(Datacenter → Firewall → Options). kube-compute doesn't manage that setting,
+because it also filters traffic to the Proxmox hosts themselves: allow the
+web UI (8006) and SSH from your admin network before turning it on. With it
+off, every port on every VM is reachable from any network that routes to it.
+
+- `cluster_network_cidr` is the whole subnet, so on a flat home LAN every
+  device on it is allowed in. The firewall keeps out other networks: other
+  VLANs, VPNs, routed subnets. Put the cluster on its own VLAN to get more out
+  of it.
+- Traefik ports beyond 80/443 (kube-platform's `traefikExtraConfig`, e.g.
+  5432) are only reachable from outside `cluster_network_cidr` once added to
+  `ingress_ports`.
+- Workers the cluster autoscaler creates through Cluster API get no Proxmox
+  firewall rules.
+
 ## Usage: control-plane only, no worker pools
 
 ```hcl

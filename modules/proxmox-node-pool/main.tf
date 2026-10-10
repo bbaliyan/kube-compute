@@ -185,6 +185,9 @@ resource "proxmox_virtual_environment_vm" "worker" {
     bridge = var.network_bridge
     model  = "virtio"
     queues = var.vm_cores
+    # Proxmox only enforces this VM's firewall rules (below) on a NIC that
+    # opts in, and only with the datacenter firewall on (see the README).
+    firewall = true
   }
 
   operating_system {
