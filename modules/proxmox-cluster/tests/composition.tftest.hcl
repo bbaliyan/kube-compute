@@ -42,6 +42,7 @@ run "one_pool_creates_its_workers_and_shares_the_agent_token" {
   command = apply
 
   variables {
+    cluster_network_cidr = "192.168.1.0/24"
     node_pools = {
       pool-a = {
         proxmox_node         = "pve"
@@ -125,6 +126,68 @@ run "platform_pool_takes_the_platform_ingress_and_the_wildcard_record" {
     condition     = toset(keys(module.node_pools["workers"].worker_node_refs)) == toset(["bharat-workers-0", "bharat-workers-1"])
     error_message = "each pool's workers must be named after the pool, or two pools collide on VM names and snippets"
   }
+}
+
+run "without_a_platform_pool_every_pool_takes_the_ingress" {
+  command = plan
+
+  variables {
+    cluster_type         = "dedicated_control_plane"
+    cluster_network_cidr = "192.168.1.0/24"
+    cluster_domain       = "lan"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
+    node_pools = {
+      a = {
+        proxmox_node       = "pve"
+        vm_cores           = 4
+        vm_memory_mb       = 8192
+        vm_disk_gb         = 40
+        os_image_url       = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+        os_image_file_name = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+        desired_count      = 1
+      }
+      b = {
+        proxmox_node       = "pve"
+        vm_cores           = 4
+        vm_memory_mb       = 8192
+        vm_disk_gb         = 40
+        os_image_url       = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+        os_image_file_name = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+        desired_count      = 1
+      }
+    }
+  }
+
+  assert {
+    condition     = toset(local.ingress_pools) == toset(["a", "b"])
+    error_message = "with no platform_node_group, Traefik and the wildcard record run on every pool, so every pool must open the ingress ports or its firewall drops ingress from outside cluster_network_cidr"
+  }
+}
+
+run "pools_need_cluster_network_cidr" {
+  command = plan
+
+  variables {
+    cluster_domain     = "lan"
+    dns_server_address = "192.168.1.53"
+    tsig_key_name      = "kube-compute"
+    tsig_key_secret    = "ZmFrZXNlY3JldA=="
+    node_pools = {
+      a = {
+        proxmox_node       = "pve"
+        vm_cores           = 4
+        vm_memory_mb       = 8192
+        vm_disk_gb         = 40
+        os_image_url       = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+        os_image_file_name = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+        desired_count      = 1
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.cluster_network_cidr_set_for_multi_node]
 }
 
 run "platform_node_group_must_name_a_pool" {

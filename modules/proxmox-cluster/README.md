@@ -69,24 +69,43 @@ rather than using a Terraform provider (see its README for why). It just needs
 
 Each VM gets a Proxmox firewall that drops inbound traffic except:
 - everything from `cluster_network_cidr`;
-- etcd between control-plane nodes;
-- `ingress_ports` from `allowed_ingress_cidrs`.
+- `ingress_ports` (TCP) from `allowed_ingress_cidrs`, on the platform pool,
+  or on every pool when there is none.
+
+There's also an etcd rule (2379-2380) for control-plane nodes, but the first
+rule already admits the whole subnet, so etcd, its plain-HTTP metrics (2381),
+SSH and every other port stay open to `cluster_network_cidr`.
 
 Proxmox enforces it only when **the datacenter firewall is enabled**
-(Datacenter → Firewall → Options). kube-compute doesn't manage that setting,
-because it also filters traffic to the Proxmox hosts themselves: allow the
-web UI (8006) and SSH from your admin network before turning it on. With it
-off, every port on every VM is reachable from any network that routes to it.
+(Datacenter → Firewall → Options). kube-compute doesn't manage that setting.
+Before turning it on:
+- **Host access:** it also switches on every host's own firewall. Proxmox
+  automatically allows the web UI (8006) and SSH from the hosts' own subnet;
+  allow them from anywhere else you administer from.
+- **Proxmox API from the cluster:** if `cluster_network_cidr` isn't the hosts'
+  own subnet (the cluster has its own VLAN, say), allow 8006 to the hosts from
+  it too. Otherwise the cluster autoscaler can't create VMs through Cluster
+  API.
+- **Other VMs:** any other VM that already has a firewall-enabled NIC starts
+  being filtered too.
 
-- `cluster_network_cidr` is the whole subnet, so on a flat home LAN every
-  device on it is allowed in. The firewall keeps out other networks: other
-  VLANs, VPNs, routed subnets. Put the cluster on its own VLAN to get more out
-  of it.
-- Traefik ports beyond 80/443 (kube-platform's `traefikExtraConfig`, e.g.
-  5432) are only reachable from outside `cluster_network_cidr` once added to
-  `ingress_ports`.
-- Workers the cluster autoscaler creates through Cluster API get no Proxmox
-  firewall rules.
+With it off, every port on every VM is reachable from any network that routes
+to it.
+
+**What to expect once it's on:**
+- **Flat LAN:** `cluster_network_cidr` is the whole subnet, so on a flat home
+  LAN every device on it is allowed in. The firewall keeps out other networks:
+  other VLANs, VPNs, routed subnets. Put the cluster on its own VLAN to get
+  more out of it.
+- **Extra ports:** anything else exposed through a LoadBalancer Service is
+  reachable from outside `cluster_network_cidr` only once its port is in
+  `ingress_ports`. That covers extra Traefik ports (kube-platform's
+  `traefikExtraConfig`, e.g. 5432) and other node-IPAM Services. Only TCP can
+  be opened this way, and only on the pool running the Service's pods.
+- **SSH:** nodes are reachable only from inside `cluster_network_cidr`. Never
+  add 22 to `ingress_ports`.
+- **Autoscaled workers:** those the cluster autoscaler creates through Cluster
+  API get no Proxmox firewall rules.
 
 ## Usage: control-plane only, no worker pools
 
