@@ -183,6 +183,26 @@ resource "terraform_data" "cluster_autoscaler_requires_platform_gitops" {
   }
 }
 
+# The pools that run ingress (Traefik, the wildcard record) and so open the
+# ingress ports: the platform pool, or every pool when there is none.
+locals {
+  ingress_pools = [for k in keys(var.node_pools) : k if var.platform_node_group == null || k == var.platform_node_group]
+}
+
+# Every VM's firewall admits cluster traffic only from cluster_network_cidr;
+# without it the ipset falls back to the genesis node alone, and once the
+# firewall is enforced, joining nodes can't reach it.
+resource "terraform_data" "cluster_network_cidr_set_for_multi_node" {
+  count = var.control_plane_count > 1 || length(var.node_pools) > 0 ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = var.cluster_network_cidr != null
+      error_message = "cluster_network_cidr is required when control_plane_count > 1 or any node pool is set: it is the firewall ipset every node admits cluster traffic from."
+    }
+  }
+}
+
 module "control_plane" {
   source = "../proxmox-control-plane"
 
@@ -253,9 +273,9 @@ module "node_pools" {
   cluster_agent_token = module.control_plane.cluster_agent_token
 
   node_taints                = each.value.node_taints
-  manage_wildcard_dns_record = var.platform_node_group == null || each.key == var.platform_node_group
-  allowed_ingress_cidrs      = each.key == var.platform_node_group ? var.allowed_ingress_cidrs : []
-  ingress_ports              = each.key == var.platform_node_group ? local.platform_ingress_ports : []
+  manage_wildcard_dns_record = contains(local.ingress_pools, each.key)
+  allowed_ingress_cidrs      = contains(local.ingress_pools, each.key) ? var.allowed_ingress_cidrs : []
+  ingress_ports              = contains(local.ingress_pools, each.key) ? local.platform_ingress_ports : []
 
   # Cluster-wide by default, overridable per pool. Ternaries rather than coalesce(): both
   # sides are commonly null, and coalesce raises when every argument is null.
