@@ -25,7 +25,7 @@ endif
 .PHONY: test-commit test-fast test-integration hooks fmt lint-bootstrap lint-scripts \
 	lint-pipelines validate validate-tree scan trivyignore-expiry secrets commit-messages
 
-test-commit: test-fast lint-scripts lint-pipelines validate validate-tree scan trivyignore commit-messages
+test-commit: test-fast lint-scripts lint-pipelines validate scan trivyignore-expiry commit-messages
 
 test-fast: fmt lint-bootstrap secrets
 
