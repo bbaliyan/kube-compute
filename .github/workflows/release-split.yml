@@ -59,13 +59,13 @@ jobs:
           [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'${TAG}' is not vX.Y.Z"; exit 1; }
 
       - name: Checkout kube-compute at the tag
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.TAG }}
           fetch-depth: 0
 
       - name: Checkout the mirror
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.SPLIT_REPO }}
           token: ${{ secrets.SPLIT_REPO_PAT }}
