@@ -1,9 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
 # Every check lives here. The CI workflow only sets up the environment and
 # calls a target, so a run on a laptop matches a run on GitHub.
 #
 # Run inside the kube-devenv image. Platform values arrive as Make variables:
 #   BASE_REF             commit the branch started from; empty skips commit-messages
-#   PROVIDER             proxmox or aws, for test-integration
+#   PROVIDERS            providers whose release mirror test-integration builds
 #   TF_PLUGIN_CACHE_DIR  where the platform keeps downloaded providers
 
 SHELL := bash
@@ -13,16 +14,16 @@ CHECKS    ?= /usr/share/kube-devenv/checks
 MODULES   := $(wildcard modules/*/)
 BOOTSTRAP := modules/node-bootstrap/files/bootstrap.sh
 BASE_REF  ?= $(shell git rev-parse --verify --quiet origin/main)
-PROVIDER  ?= proxmox
-SPLIT_DIR ?= /tmp/split-$(PROVIDER)
+PROVIDERS ?= proxmox aws
 
+# tofu does not create the cache directory itself, so make it at parse time.
 ifneq ($(TF_PLUGIN_CACHE_DIR),)
 $(shell mkdir -p $(TF_PLUGIN_CACHE_DIR))
 export TF_PLUGIN_CACHE_DIR
 endif
 
 .PHONY: test-commit test-fast test-integration hooks fmt lint-bootstrap lint-scripts \
-	lint-pipelines validate validate-tree scan trivyignore secrets commit-messages
+	lint-pipelines validate validate-tree scan trivyignore-expiry secrets commit-messages
 
 test-commit: test-fast lint-scripts lint-pipelines validate validate-tree scan trivyignore commit-messages
 
@@ -55,7 +56,7 @@ validate:
 scan:
 	trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile .trivyignore modules/
 
-trivyignore:
+trivyignore-expiry:
 	scripts/check-trivyignore.sh .trivyignore
 
 secrets:
@@ -64,12 +65,16 @@ secrets:
 commit-messages:
 	$(CHECKS)/commit-messages.sh "$(BASE_REF)"
 
+# Validates a copy, so tofu init cannot add anything (a lock file hash for this
+# platform, say) to a tree that is about to be committed.
 validate-tree:
 	rm -rf /tmp/validate && cp -r $(TREE) /tmp/validate
 	cd /tmp/validate && tofu fmt -check -recursive && tofu init -backend=false -input=false && tofu validate && tofu test
 
-test-integration:
-	rm -rf $(SPLIT_DIR)
-	git init -q $(SPLIT_DIR)
-	scripts/release-split.sh $(PROVIDER) $(SPLIT_DIR) $(CURDIR)
-	$(MAKE) validate-tree TREE=$(SPLIT_DIR)
+test-integration: $(addprefix mirror-,$(PROVIDERS))
+
+mirror-%:
+	rm -rf /tmp/split-$*
+	git init -q /tmp/split-$*
+	scripts/release-split.sh $* /tmp/split-$* $(CURDIR)
+	$(MAKE) validate-tree TREE=/tmp/split-$*
