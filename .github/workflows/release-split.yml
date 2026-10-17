@@ -78,12 +78,7 @@ jobs:
       # On a copy, so tofu init can't add anything (a lock file hash for this
       # platform, say) to what gets committed.
       - name: Validate the release tree
-        run: |
-          rm -rf /tmp/validate && cp -r split-repo /tmp/validate && cd /tmp/validate
-          tofu fmt -check -recursive
-          tofu init -backend=false -input=false
-          tofu validate
-          tofu test
+        run: make validate-tree TREE=split-repo
 
       - name: Compare with the mirror
         id: compare
