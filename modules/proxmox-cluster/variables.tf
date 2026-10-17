@@ -394,8 +394,14 @@ variable "node_pools" {
     tsig_key_name          = optional(string)
     tsig_key_algorithm     = optional(string)
     tsig_key_secret        = optional(string)
+    node_name_template     = optional(string)
   }))
   default = {}
+
+  validation {
+    condition     = length(compact([for pool in values(var.node_pools) : pool.node_name_template])) == length(distinct(compact([for pool in values(var.node_pools) : pool.node_name_template])))
+    error_message = "Two node_pools have the same node_name_template, so their workers would share names."
+  }
 }
 
 variable "platform_node_group" {
@@ -492,4 +498,16 @@ variable "os_auto_updates" {
   description = "Installs OS updates with dnf-automatic on every node, daily and 15 minutes after each boot, without rebooting; a node whose updates need a reboot reports it through needs-restarting (yum-utils). RKE2's own packages are excluded from dnf, since system-upgrade-controller upgrades them. False leaves nodes' packages as baked."
   type        = bool
   default     = true
+}
+
+variable "control_plane_node_name_template" {
+  description = "Name for each control-plane node: its VM name, hostname and Kubernetes node name. {number} becomes the node's number as two digits (01, 02, ...) and is required. Null keeps <cluster_name>-cp-<n>, counting from 0. Each node_pools entry has its own node_name_template."
+  type        = string
+  default     = null
+}
+
+variable "boot_scripts" {
+  description = "Bash scripts run on every control-plane node and every node_pools worker at its first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (control-plane or worker) and NODE_NAME in its environment. Nodes created by the cluster autoscaler do not run them. Empty (the default) runs none."
+  type        = list(string)
+  default     = []
 }

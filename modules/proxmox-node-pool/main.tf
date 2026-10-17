@@ -132,7 +132,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
   # function of desired_count.
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
-  name            = "${var.cluster_name}-${var.pool_name}-${each.key}"
+  name            = local.worker_names[each.key]
   node_name       = var.proxmox_node
   tags            = distinct(["kube-compute", var.cluster_name, "worker", var.pool_name])
   on_boot         = true
@@ -245,7 +245,7 @@ module "node_bootstrap" {
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
   cluster_name              = var.cluster_name
-  node_name                 = "${var.cluster_name}-${var.pool_name}-${each.key}"
+  node_name                 = local.worker_names[each.key]
   node_fqdn_label           = "${var.pool_name}-${each.key}"
   cluster_fqdn_suffix       = local.fqdn_suffix
   node_role                 = "worker"
@@ -278,7 +278,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
   overwrite    = true
 
   source_raw {
-    data      = module.node_bootstrap[each.key].cloud_init_user_data
+    data      = local.node_init_data[each.key]
     file_name = "${var.cluster_name}-${var.pool_name}-${each.key}-node-init.yaml"
   }
 }

@@ -188,7 +188,7 @@ module "node_bootstrap" {
   source = "../node-bootstrap"
 
   cluster_name                    = var.cluster_name
-  node_name                       = "${var.cluster_name}-cp-0"
+  node_name                       = local.control_plane_names["0"]
   node_fqdn_label                 = "cp-0"
   cluster_fqdn                    = local.cluster_fqdn
   cluster_fqdn_suffix             = local.fqdn_suffix
@@ -247,7 +247,7 @@ module "node_bootstrap_additional" {
   source = "../node-bootstrap"
 
   cluster_name        = var.cluster_name
-  node_name           = "${var.cluster_name}-cp-${each.key}"
+  node_name           = local.control_plane_names[each.key]
   node_fqdn_label     = "cp-${each.key}"
   cluster_fqdn        = local.cluster_fqdn
   cluster_fqdn_suffix = local.fqdn_suffix
@@ -283,7 +283,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
   overwrite    = true
 
   source_raw {
-    data      = module.node_bootstrap.cloud_init_user_data
+    data      = local.node_init_data_genesis
     file_name = "${var.cluster_name}-cp-0-node-init.yaml"
   }
 }
@@ -297,7 +297,7 @@ resource "proxmox_virtual_environment_file" "node_init_additional" {
   overwrite    = true
 
   source_raw {
-    data      = module.node_bootstrap_additional[each.key].cloud_init_user_data
+    data      = local.node_init_data_additional[each.key]
     file_name = "${var.cluster_name}-cp-${each.key}-node-init.yaml"
   }
 }
@@ -374,7 +374,7 @@ resource "proxmox_virtual_environment_file" "network_data_dhcp" {
 }
 
 resource "proxmox_virtual_environment_vm" "control_plane" {
-  name            = "${var.cluster_name}-cp-0"
+  name            = local.control_plane_names["0"]
   node_name       = var.proxmox_node
   tags            = ["kube-compute", var.cluster_name, "control-plane"]
   on_boot         = true
@@ -470,7 +470,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
   # resource's index set is already a pure function of control_plane_count.
   for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
 
-  name            = "${var.cluster_name}-cp-${each.key}"
+  name            = local.control_plane_names[each.key]
   node_name       = var.proxmox_node
   tags            = ["kube-compute", var.cluster_name, "control-plane"]
   on_boot         = true
