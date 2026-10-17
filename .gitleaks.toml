@@ -1,0 +1,6 @@
+[extend]
+path = "/usr/share/kube-devenv/checks/gitleaks.toml"
+
+# Add false positives here, for example:
+# [[allowlists]]
+# paths = ['''docs/example\.md''']

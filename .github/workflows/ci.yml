@@ -1,3 +1,5 @@
+# Setup only. Every check lives in the Makefile; scripts/pipeline-lint.sh in
+# make test-commit fails this file if it ever runs one.
 name: CI
 
 on:
@@ -5,63 +7,40 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  TF_PLUGIN_CACHE_DIR: /tmp/tofu-plugins
+
 jobs:
-  tofu:
+  commit:
     runs-on: ubuntu-latest
     container: ghcr.io/bbaliyan/kube-devenv:0.9.1
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /tmp/tofu-plugins
+          key: tofu-plugins-${{ hashFiles('**/.terraform.lock.hcl') }}
+      - run: make test-commit BASE_REF=${{ github.event.pull_request.base.sha || github.event.before }}
 
-      - name: Format check
-        run: tofu fmt -check -recursive
-
-      - name: Lint the baked node bootstrap program
-        run: |
-          # Baked into the node image and run by cloud-init, so a syntax error
-          # here is a cluster that does not boot rather than a failed plan.
-          bash -n modules/node-bootstrap/files/bootstrap.sh
-          if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck -S warning modules/node-bootstrap/files/bootstrap.sh
-          else
-            echo "shellcheck not in this image; syntax check only"
-          fi
-
-      - name: Validate and test each module
-        run: |
-          for d in modules/*/; do
-            echo "== $d =="
-            ( cd "$d" && tofu init -backend=false && tofu validate && tofu test )
-          done
-
-      - name: Trivy IaC scan
-        run: |
-          trivy config \
-            --severity HIGH,CRITICAL \
-            --exit-code 1 \
-            --ignorefile .trivyignore \
-            modules/
-
-  # Builds each provider's registry mirror the way a release would, so a change
-  # that breaks a release fails here rather than on the tag.
-  split:
+  integration:
+    needs: commit
     runs-on: ubuntu-latest
     container: ghcr.io/bbaliyan/kube-devenv:0.9.1
     strategy:
       fail-fast: false
       matrix:
         provider: [proxmox, aws]
-    defaults:
-      run:
-        shell: bash
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Build and validate the ${{ matrix.provider }} mirror
-        run: |
-          git init -q /tmp/split
-          ./scripts/release-split.sh "${{ matrix.provider }}" /tmp/split "${GITHUB_WORKSPACE}"
-          cd /tmp/split
-          tofu fmt -check -recursive
-          tofu init -backend=false -input=false
-          tofu validate
-          tofu test
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: make test-integration PROVIDER=${{ matrix.provider }}
