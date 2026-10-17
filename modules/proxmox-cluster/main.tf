@@ -262,6 +262,8 @@ module "control_plane" {
   extra_server_manifests              = var.extra_server_manifests
   graceful_shutdown                   = var.graceful_shutdown
   os_auto_updates                     = var.os_auto_updates
+  node_name_template                  = var.control_plane_node_name_template
+  boot_scripts                        = var.boot_scripts
 }
 
 module "node_pools" {
@@ -311,4 +313,6 @@ module "node_pools" {
   extra_node_labels      = each.value.extra_node_labels
   graceful_shutdown      = var.graceful_shutdown
   os_auto_updates        = var.os_auto_updates
+  node_name_template     = each.value.node_name_template
+  boot_scripts           = var.boot_scripts
 }

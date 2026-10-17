@@ -9,7 +9,7 @@ output "worker_node_refs" {
   description = "Map of worker VM name -> {instance_id, ip, provider}."
   value = {
     for k, vm in proxmox_virtual_environment_vm.worker :
-    "${var.cluster_name}-${var.pool_name}-${k}" => {
+    local.worker_names[k] => {
       instance_id = tostring(vm.vm_id)
       ip          = local.worker_ips[k]
       provider    = "proxmox"

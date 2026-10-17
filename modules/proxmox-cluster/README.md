@@ -234,6 +234,28 @@ stopping it: 180 seconds by default when the host shuts down. Null turns it off.
 [`node-bootstrap`'s README](../node-bootstrap/README.md#graceful-shutdown). Like
 `os_auto_updates`, it reaches a node only when that node is rebuilt.
 
+## Node names
+
+`control_plane_node_name_template` names the control-plane VMs, and each `node_pools`
+entry's `node_name_template` names its workers. `{number}` is required and becomes the
+node's number as two digits, from `01`: `cp-{number}` gives `cp-01`, `cp-02`. The name is
+the VM name, hostname, Kubernetes node name and the key in `control_plane_node_refs` and
+`node_pools[*].worker_node_refs`. Unset, names stay `<cluster_name>-cp-<n>` and
+`<cluster_name>-<pool>-<n>`, counting from 0. Two pools may not share a template.
+
+Setting a template on an existing cluster changes the VM names and the keys of those
+outputs. It has not been tried on a running cluster, so plan it before applying.
+
+## Boot scripts
+
+`boot_scripts` is a list of bash scripts that every control-plane node and every
+`node_pools` worker runs once, at first boot, before RKE2 is installed, for example to join
+a directory. Each sees `CLUSTER_NAME`, `NODE_ROLE` (`control-plane` or `worker`) and
+`NODE_NAME`. A script that fails is logged by cloud-init and does not stop the node.
+Nodes the cluster autoscaler creates do not run them. Unset, a node's cloud-init is
+unchanged. The scripts are part of the node's first-boot cloud-init, and have not been
+tried on a real Proxmox host.
+
 ## Existing standalone modules remain fully supported
 
 `proxmox-control-plane` and `proxmox-node-pool` are unchanged and continue to work
