@@ -21,3 +21,13 @@ output "wildcard_dns_registration_enabled" {
   description = "Whether this pool published *.<cluster_name> at its workers: manage_wildcard_dns_record with both cluster_domain and dns_server_address set."
   value       = local.dns_registration_enabled
 }
+
+output "pool_id" {
+  description = "Proxmox resource pool the workers join, or null when they join none."
+  value       = var.pool_id
+}
+
+output "cpu_units" {
+  description = "Proxmox CPU weight set on each worker, or null for the Proxmox default."
+  value       = var.cpu_units
+}

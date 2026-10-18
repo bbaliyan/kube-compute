@@ -18,6 +18,13 @@ Similarly, the cluster-wide and etcd-peer firewall ipset names
 convention computed locally from `cluster_name`, not a shared output. `proxmox-node-pool`
 computes the same formula independently to reference the cluster ipset by name.
 
+## Proxmox pool and CPU weight
+
+Both inputs are optional. Unset, the VMs join no pool and keep the Proxmox default CPU weight.
+
+- `pool_id`: the Proxmox resource pool every control-plane VM joins. Set it when the API token is scoped to one pool.
+- `cpu_units`: the CPU weight of each VM, from 1 to 262144. A lower weight gives CPU to other VMs when the host is busy.
+
 ## Operational note: SSH connection bursts on apply
 
 The `proxmox_virtual_environment_file` resources here (`vendor_data`, `node_init`,

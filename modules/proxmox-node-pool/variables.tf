@@ -77,6 +77,23 @@ variable "vm_cpu_type" {
   default     = "x86-64-v2-AES"
 }
 
+variable "pool_id" {
+  description = "Proxmox resource pool the worker VMs join. Null (default) puts them in no pool. A token scoped to one pool can only create VMs there."
+  type        = string
+  default     = null
+}
+
+variable "cpu_units" {
+  description = "Proxmox CPU weight (cpuunits) of each worker VM: its share of CPU time when the host is busy, relative to other VMs. A lower value yields CPU to other VMs. Null (default) keeps the Proxmox default."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.cpu_units == null ? true : var.cpu_units >= 1 && var.cpu_units <= 262144
+    error_message = "cpu_units must be between 1 and 262144, the range Proxmox accepts."
+  }
+}
+
 variable "os_image_url" {
   description = "URL of the OS cloud image to download. Set exactly one of os_image_url or os_image_file_id."
   type        = string
