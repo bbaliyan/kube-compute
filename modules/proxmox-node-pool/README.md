@@ -25,6 +25,13 @@ is a plain deterministic-string convention computed locally from `cluster_name`,
 identical to the formula `proxmox-control-plane` computes to name the ipset it actually
 creates. This pool never creates the ipset itself, only references it by name.
 
+## Proxmox pool and CPU weight
+
+Both inputs are optional. Unset, the VMs join no pool and keep the Proxmox default CPU weight.
+
+- `pool_id`: the Proxmox resource pool every worker joins. Set it when the API token is scoped to one pool. It is not `pool_name`, which names the node group.
+- `cpu_units`: the CPU weight of each worker, from 1 to 262144. A lower weight gives CPU to other VMs when the host is busy.
+
 ## Operational note: SSH connection bursts on apply
 
 See [proxmox-control-plane's README](../proxmox-control-plane/README.md#operational-note-ssh-connection-bursts-on-apply)

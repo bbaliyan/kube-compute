@@ -177,6 +177,23 @@ variable "vm_cpu_type" {
   default     = "x86-64-v2-AES"
 }
 
+variable "pool_id" {
+  description = "Proxmox resource pool the control-plane VMs join. Null (default) puts them in no pool. A token scoped to one pool can only create VMs there."
+  type        = string
+  default     = null
+}
+
+variable "cpu_units" {
+  description = "Proxmox CPU weight (cpuunits) of each control-plane VM: its share of CPU time when the host is busy, relative to other VMs. A lower value yields CPU to other VMs. Null (default) keeps the Proxmox default."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.cpu_units == null ? true : var.cpu_units >= 1 && var.cpu_units <= 262144
+    error_message = "cpu_units must be between 1 and 262144, the range Proxmox accepts."
+  }
+}
+
 variable "node_arch" {
   description = "CPU architecture of the control-plane VMs ('x86_64' or 'arm64'). Declared explicitly — Proxmox has no API equivalent of AWS's instance-type architecture lookup."
   type        = string

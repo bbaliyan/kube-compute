@@ -380,6 +380,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   on_boot         = true
   started         = true
   stop_on_destroy = true
+  pool_id         = var.pool_id
   tablet_device   = false
   scsi_hardware   = "virtio-scsi-single"
 
@@ -392,6 +393,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   cpu {
     cores = var.vm_cores
     type  = var.vm_cpu_type
+    units = var.cpu_units
   }
 
   memory {
@@ -476,6 +478,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
   on_boot         = true
   started         = true
   stop_on_destroy = true
+  pool_id         = var.pool_id
   tablet_device   = false
   scsi_hardware   = "virtio-scsi-single"
 
@@ -488,6 +491,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
   cpu {
     cores = var.vm_cores
     type  = var.vm_cpu_type
+    units = var.cpu_units
   }
 
   memory {

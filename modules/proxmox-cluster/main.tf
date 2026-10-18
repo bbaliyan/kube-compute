@@ -233,6 +233,8 @@ module "control_plane" {
   vm_memory_mb                      = var.vm_memory_mb
   vm_disk_gb                        = var.vm_disk_gb
   vm_cpu_type                       = var.vm_cpu_type
+  pool_id                           = var.pool_id
+  cpu_units                         = var.cpu_units
   node_arch                         = var.node_arch
   os_image_url                      = var.os_image_url
   os_image_file_name                = var.os_image_file_name
@@ -302,6 +304,8 @@ module "node_pools" {
   vm_memory_mb           = each.value.vm_memory_mb
   vm_disk_gb             = each.value.vm_disk_gb
   vm_cpu_type            = each.value.vm_cpu_type
+  pool_id                = each.value.pool_id != null ? each.value.pool_id : var.pool_id
+  cpu_units              = each.value.cpu_units != null ? each.value.cpu_units : var.cpu_units
   os_image_url           = each.value.os_image_url
   os_image_file_name     = each.value.os_image_file_name
   os_image_file_id       = each.value.os_image_file_id

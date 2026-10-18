@@ -97,3 +97,13 @@ output "control_plane_node_refs" {
     }
   )
 }
+
+output "pool_id" {
+  description = "Proxmox resource pool the control-plane VMs join, or null when they join none."
+  value       = var.pool_id
+}
+
+output "cpu_units" {
+  description = "Proxmox CPU weight set on each control-plane VM, or null for the Proxmox default."
+  value       = var.cpu_units
+}
