@@ -250,7 +250,7 @@ fi
 #      rather than "service started" alone ----
 if [ "$NODE_ROLE" != "worker" ]; then
   READY=0
-  for attempt in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     if $KUBECTL get node "$(hostname)" --no-headers 2>/dev/null | awk '{print $2}' | grep -qE '^Ready'; then
       READY=1
       break
@@ -264,7 +264,7 @@ if [ "$NODE_ROLE" != "worker" ]; then
   echo "kube-compute: node Ready $(date -Is)"
 else
   ACTIVE=0
-  for attempt in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     if systemctl is-active --quiet rke2-agent; then
       ACTIVE=1
       break
@@ -302,7 +302,7 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
   # k8s-app=kube-dns, not a name guess: RKE2's CoreDNS chart labels its pod
   # with the standard upstream convention, not chart/release-name-derived.
   COREDNS_READY=0
-  for attempt in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     if $KUBECTL wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=5s >/dev/null 2>&1; then
       COREDNS_READY=1
       break
@@ -394,7 +394,7 @@ if [ "$CAPI_CRD_WAIT_ENABLED" = "1" ]; then
     # references them — same "CRD-established vs controller-running" race this
     # project already hit and fixed for Argo CD's own bootstrap (see the
     # CoreDNS-wait / argocd-application-controller-wait loops above).
-    for attempt in $(seq 1 60); do
+    for _ in $(seq 1 60); do
       if $KUBECTL get crd machinedeployments.cluster.x-k8s.io >/dev/null 2>&1; then
         break
       fi

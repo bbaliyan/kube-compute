@@ -1,6 +1,19 @@
 [extend]
 path = "/usr/share/kube-devenv/checks/gitleaks.toml"
 
-# Add false positives here, for example:
-# [[allowlists]]
-# paths = ['''docs/example\.md''']
+# Fixture values in module tests and examples. Matched by value, so a real
+# value in the same files is still caught.
+[[allowlists]]
+description = "AWS documentation example account ID"
+regexTarget = "match"
+regexes = ['''arn:aws[a-z-]*:[a-z0-9-]+:[a-z0-9-]*:123456789012:''']
+
+[[allowlists]]
+description = "example.internal placeholder hosts"
+regexTarget = "match"
+regexes = ['''https?://[a-z0-9-]+\.example\.internal''']
+
+[[allowlists]]
+description = "base64 of the fixture strings fakesecret and test-secret"
+regexTarget = "match"
+regexes = ['''tsig_key_secret\s*=\s*"(ZmFrZXNlY3JldA==|dGVzdC1zZWNyZXQ=)"''']
