@@ -199,7 +199,7 @@ When enabled, this module:
   CAPI's core CRDs before applying it. `proxmox-control-plane`/`node-bootstrap`
   have no cluster-autoscaler-specific code left in them.
   `proxmox_template_vm_id` for `cluster_autoscaler_worker_template` points at
-  the **same** kube-image template used everywhere else in this module — only
+  the **same** kube-images template used everywhere else in this module — only
   one image variant exists.
 - Merges a `clusterAutoscalerEnabled` Helm parameter into
   `platform_extra_helm_parameters`, which is what gates kube-platform's own

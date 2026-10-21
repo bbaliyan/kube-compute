@@ -82,7 +82,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules flannel and Felix's iptables dataplane both require. Kept as an escape hatch for a consumer-supplied image/template shipping a different CNI. Sets config.yaml's cni:/disable-kube-proxy: flags, and when 'cilium' on a genesis node, disables RKE2's own built-in HelmChart install of Cilium (disable: [rke2-cilium]) so bootstrap.sh's own apply of the kube-image-baked manifest never races it."
+  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules flannel and Felix's iptables dataplane both require. Kept as an escape hatch for a consumer-supplied image/template shipping a different CNI. Sets config.yaml's cni:/disable-kube-proxy: flags, and when 'cilium' on a genesis node, disables RKE2's own built-in HelmChart install of Cilium (disable: [rke2-cilium]) so bootstrap.sh's own apply of the kube-images-baked manifest never races it."
   type        = string
   default     = "cilium"
   validation {
@@ -314,7 +314,7 @@ variable "genesis_apply_manifests" {
 }
 
 variable "iscsi_initiator_enabled" {
-  description = "Write a deterministic iSCSI InitiatorName (iqn.2026.lan.<cluster_name>:<node_fqdn_label, or node_name if unset>) to /etc/iscsi/initiatorname.iscsi and restart iscsid, replacing the OS-generated random one. Only meaningful where the image already has iscsi-initiator-utils baked in (kube-image's Proxmox template does; AWS uses EBS CSI and has no iSCSI initiator at all). Exists so an iSCSI target's initiator allow-list can be registered once, ahead of time, instead of re-discovered and re-registered by hand after every VM rebuild. False (the default) leaves the OS-generated random name untouched."
+  description = "Write a deterministic iSCSI InitiatorName (iqn.2026.lan.<cluster_name>:<node_fqdn_label, or node_name if unset>) to /etc/iscsi/initiatorname.iscsi and restart iscsid, replacing the OS-generated random one. Only meaningful where the image already has iscsi-initiator-utils baked in (kube-images' Proxmox template does; AWS uses EBS CSI and has no iSCSI initiator at all). Exists so an iSCSI target's initiator allow-list can be registered once, ahead of time, instead of re-discovered and re-registered by hand after every VM rebuild. False (the default) leaves the OS-generated random name untouched."
   type        = bool
   default     = false
 }

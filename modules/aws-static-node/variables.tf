@@ -103,7 +103,7 @@ variable "os_image_ami_id" {
 }
 
 variable "os_image_name" {
-  description = "AMI name, e.g. kube-image's build name. Resolved against this account's own AMIs and the derived architecture. Accepts EC2 Name-filter wildcards, so one pattern with a wildcard architecture segment serves both architectures. Ignored when os_image_ami_id is set."
+  description = "AMI name, e.g. kube-images' build name. Resolved against this account's own AMIs and the derived architecture. Accepts EC2 Name-filter wildcards, so one pattern with a wildcard architecture segment serves both architectures. Ignored when os_image_ami_id is set."
   type        = string
   default     = null
 }

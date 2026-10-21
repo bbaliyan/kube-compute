@@ -19,7 +19,7 @@ has no resource to `depends_on`.
 The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
 modules, the guest agent, **and the genesis Cilium/Argo CD manifests** — is
 expected to already be baked into the image the caller boots the VM from (a
-"kube-image" template; see its `packer/proxmox/build.sh` and `helm-values/`
+template built by kube-images; see its `kube-node/packer/proxmox/build.sh` and `helm-values/`
 for where that render happens). This module only renders the per-cluster
 identity, secrets, and join logic that can't be baked into a shared image.
 `modules/proxmox-control-plane` and `modules/proxmox-node-pool` are the only
@@ -34,13 +34,13 @@ time (via a `data.external` source) and embedded the rendered manifest whole
 in the cloud-init payload. That stopped working for real: Argo CD's chart
 alone renders to ~1.9 MB, and Proxmox's `cicustom` snippet upload has a hard
 1 MiB cap — a real `tofu apply` against `cluster-1` failed with
-`file '...' too long - aborting`. The render moved to kube-image's Packer
+`file '...' too long - aborting`. The render moved to kube-images' Packer
 build instead (once, at bake time). This module's `render_cilium`/
 `render_argocd` locals now only decide whether `bootstrap.sh` applies the
-files kube-image already put at
+files kube-images already put at
 `/opt/kube-compute/manifests/{cilium.yaml,00-argocd.yaml}` on the template —
 a per-cluster runtime decision (CNI choice, GitOps enablement), independent
-of whether the files exist (they always do, on a kube-image-baked template).
+of whether the files exist (they always do, on a kube-images-baked template).
 
 ## Watching progress during a real apply
 
@@ -99,7 +99,7 @@ CAPMOX specifically. It exposes two generic inputs instead:
   interpret `content` at all.
 - `cluster_autoscaler_crd_wait_enabled` — gates a `bootstrap.sh` block that
   waits for cert-manager's CRDs (installed by the platform Argo CD
-  Application, applied just before this block), applies the kube-image-baked
+  Application, applied just before this block), applies the kube-images-baked
   `capi-install.yaml` (CAPI core + CAPMOX manifests — their webhook TLS is
   provisioned via cert-manager `Issuer`/`Certificate` objects, a hard
   dependency), and waits for CAPI's own core CRDs to be `Established`
@@ -219,7 +219,7 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
   `cilium_version`, `argocd_version`, and `cilium_operator_replicas` are all
   gone. There is no playbook, no `null_resource`, no on-node bundle, no
   provider branching, and no Helm render in this module — the two version
-  variables had no effect once kube-image took over the render (both are
+  variables had no effect once kube-images took over the render (both are
   baked into the template, resolved from kube-platform's
   `platform-versions.yaml` at build time), and `cilium_operator_replicas` had
   nowhere left to reach once the render was no longer per-cluster
@@ -228,7 +228,7 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 - `cni` defaults to `"cilium"` (eBPF dataplane, no iptables/ipset/xtables
   dependency — the only variant verified against AlmaLinux 10). When
   `cni = "cilium"` on a genesis node, the module has `bootstrap.sh` apply the
-  Cilium manifest kube-image already baked onto the template, and sets
+  Cilium manifest kube-images already baked onto the template, and sets
   `disable: [rke2-cilium]` in `config.yaml` so RKE2's own built-in HelmChart
   install of Cilium never runs alongside it. `"default"` remains selectable
   only as an escape hatch for a consumer-supplied image/template that ships a

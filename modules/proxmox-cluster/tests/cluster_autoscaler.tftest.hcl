@@ -206,7 +206,7 @@ run "cluster_autoscaler_enabled_renders_capi_core_bundle_no_caprke2" {
       strcontains(m.content, "credentialsRef:") &&
       strcontains(m.content, "name: bharat-capmox-credentials")
     ])
-    error_message = "ProxmoxCluster.spec.credentialsRef must be set from cluster_autoscaler_capmox_credentials_secret_name — without it CAPMOX falls back to its manager-wide credentials Secret, which kube-image deliberately bakes with non-functional placeholder values (real credentials must never be baked into a VM image)"
+    error_message = "ProxmoxCluster.spec.credentialsRef must be set from cluster_autoscaler_capmox_credentials_secret_name — without it CAPMOX falls back to its manager-wide credentials Secret, which kube-images deliberately bakes with non-functional placeholder values (real credentials must never be baked into a VM image)"
   }
 }
 

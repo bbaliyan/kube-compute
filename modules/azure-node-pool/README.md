@@ -23,7 +23,7 @@ When Azure support is revisited, the plan is to follow the same pattern
 `aws-node-pool`/`proxmox-node-pool` now use rather than reintroduce live
 Ansible:
 
-- Boot from a pre-baked `kube-image` template (RKE2 binaries, prerequisites,
+- Boot from a pre-baked `kube-images` template (RKE2 binaries, prerequisites,
   and the Cilium manifest already on disk) instead of installing at boot.
 - Attach a lean `#cloud-config` payload rendered by `modules/node-bootstrap`
   (its current, post-cutover interface) to configure and join RKE2 —
@@ -36,7 +36,7 @@ This module also depended on `modules/azure-cluster-facts` (now deleted, since
 its only consumers were `azure-control-plane`/`azure-node-pool`) for the
 cluster's Key Vault, Application Security Group, and join tokens. Any future
 Azure implementation should re-evaluate whether that split is still the right
-shape once the kube-image/lean-cloud-init pattern is in use.
+shape once the kube-images/lean-cloud-init pattern is in use.
 
 This work should not start until AWS and Proxmox are fully proven (validated
 against real infrastructure, not just `tofu test` mocks).

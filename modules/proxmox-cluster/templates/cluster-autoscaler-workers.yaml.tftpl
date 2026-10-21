@@ -13,7 +13,7 @@
 #
 # Cluster.spec.controlPlaneRef is omitted — confirmed safe (cluster-adoption.md
 # §1, §5.4). Cluster.spec.infrastructureRef, however, points at a real
-# ProxmoxCluster object below: a kube-image Task 1 spike read CAPMOX's actual
+# ProxmoxCluster object below: a kube-images Task 1 spike read CAPMOX's actual
 # source (ProxmoxMachineReconciler.getInfraCluster, ionos-cloud/
 # cluster-api-provider-proxmox) and confirmed a hard client.Get() for
 # ProxmoxCluster keyed on Cluster.spec.infrastructureRef.Name, with NO
@@ -59,7 +59,7 @@
 #    module.control_plane.cluster_ip/cluster_fqdn (would cycle).
 # 4. spec.credentialsRef: without this, CAPMOX would fall back to its
 #    manager-wide capmox-manager-credentials Secret (capmox-system
-#    namespace) — which kube-image's packer/proxmox/build.sh deliberately
+#    namespace) — which kube-images' kube-node/packer/proxmox/build.sh deliberately
 #    bakes with non-functional placeholder values, never real Proxmox
 #    credentials (baking a real API token into every VM image is a standing
 #    credential leak). credentialsRef makes THIS object authenticate via

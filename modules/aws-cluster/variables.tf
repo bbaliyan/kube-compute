@@ -238,13 +238,13 @@ variable "instance_type" {
 }
 
 variable "os_image_ami_id" {
-  description = "AMI ID for the control-plane node(s) — typically the output of kube-image's AWS Packer build. Tested with AlmaLinux 10 (RHEL-family — node-bootstrap uses dnf and update-ca-trust). Null = latest AlmaLinux 10 for the derived architecture via data lookup (a stock image with no RKE2 pre-baked — much slower first boot than a kube-image AMI, same tradeoff as Proxmox's proxmox_template_vm_id)."
+  description = "AMI ID for the control-plane node(s) — typically the output of kube-images' AWS Packer build. Tested with AlmaLinux 10 (RHEL-family — node-bootstrap uses dnf and update-ca-trust). Null = latest AlmaLinux 10 for the derived architecture via data lookup (a stock image with no RKE2 pre-baked — much slower first boot than a kube-images AMI, same tradeoff as Proxmox's proxmox_template_vm_id)."
   type        = string
   default     = null
 }
 
 variable "os_image_name" {
-  description = "AMI name for the control-plane node(s), e.g. kube-image's self-descriptive build name. Alternative to os_image_ami_id — resolved to an ID via a data lookup scoped to this account and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
+  description = "AMI name for the control-plane node(s), e.g. kube-images' self-descriptive build name. Alternative to os_image_ami_id — resolved to an ID via a data lookup scoped to this account and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
   type        = string
   default     = null
 }

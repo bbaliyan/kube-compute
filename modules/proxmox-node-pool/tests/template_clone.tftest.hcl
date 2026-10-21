@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the kube-image template-clone path for worker pools: always a FULL
+# Guards the kube-images template-clone path for worker pools: always a FULL
 # clone, no stock-image import alongside it, exactly one image source.
 mock_provider "proxmox" {
   mock_resource "proxmox_download_file" {
@@ -45,7 +45,7 @@ run "template_clone_is_always_a_full_clone" {
     condition = alltrue([
       for k, vm in proxmox_virtual_environment_vm.worker : vm.clone[0].full == true
     ])
-    error_message = "full must be true on every clone — a linked clone makes every worker permanently depend on the kube-image template, which breaks the moment prune-images.sh deletes it"
+    error_message = "full must be true on every clone — a linked clone makes every worker permanently depend on the kube-images template, which breaks the moment prune-images.sh deletes it"
   }
   assert {
     condition = alltrue([
@@ -73,7 +73,7 @@ run "stock_image_path_still_creates_no_clone_block" {
     condition = alltrue([
       for k, vm in proxmox_virtual_environment_vm.worker : length(vm.clone) == 0
     ])
-    error_message = "the stock-image path must create no clone block — kube-image stays opt-in"
+    error_message = "the stock-image path must create no clone block — kube-images stays opt-in"
   }
 }
 
@@ -112,7 +112,7 @@ run "file_id_stock_image_path_creates_no_clone_block" {
     condition = alltrue([
       for k, vm in proxmox_virtual_environment_vm.worker : length(vm.clone) == 0
     ])
-    error_message = "the os_image_file_id path must create no clone block — kube-image stays opt-in"
+    error_message = "the os_image_file_id path must create no clone block — kube-images stays opt-in"
   }
   assert {
     condition = alltrue([
