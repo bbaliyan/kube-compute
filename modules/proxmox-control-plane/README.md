@@ -25,6 +25,16 @@ Both inputs are optional. Unset, the VMs join no pool and keep the Proxmox defau
 - `pool_id`: the Proxmox resource pool every control-plane VM joins. Set it when the API token is scoped to one pool.
 - `cpu_units`: the CPU weight of each VM, from 1 to 262144. A lower weight gives CPU to other VMs when the host is busy.
 
+## Cloud-init snippet upload
+
+`cloud_init_upload_mode` is optional. It sets how the provider copies the cloud-init snippet files to the Proxmox host over SSH.
+
+- Unset, the provider default (`stream`) applies. It opens a shell on the host and tries `sudo`.
+- `sftp` uses the SFTP subsystem only. It does not use `sudo`, so the SSH user must have write permission on the snippets directory. Use it when the SSH user has no shell.
+- Any other value is rejected.
+
+The setting has no effect on image downloads, which use the API.
+
 ## Operational note: SSH connection bursts on apply
 
 The `proxmox_virtual_environment_file` resources here (`vendor_data`, `node_init`,

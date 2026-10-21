@@ -228,6 +228,7 @@ module "control_plane" {
   proxmox_node                      = var.proxmox_node
   disk_datastore_id                 = var.disk_datastore_id
   iso_datastore_id                  = var.iso_datastore_id
+  cloud_init_upload_mode            = var.cloud_init_upload_mode
   network_bridge                    = var.network_bridge
   vm_cores                          = var.vm_cores
   vm_memory_mb                      = var.vm_memory_mb
@@ -299,6 +300,7 @@ module "node_pools" {
   proxmox_node           = each.value.proxmox_node
   disk_datastore_id      = each.value.disk_datastore_id
   iso_datastore_id       = each.value.iso_datastore_id
+  cloud_init_upload_mode = var.cloud_init_upload_mode
   network_bridge         = each.value.network_bridge
   vm_cores               = each.value.vm_cores
   vm_memory_mb           = each.value.vm_memory_mb

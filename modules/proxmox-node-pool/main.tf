@@ -96,6 +96,7 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
+  upload_mode  = var.cloud_init_upload_mode
 
   source_raw {
     data = join("\n", concat(
@@ -116,6 +117,7 @@ resource "proxmox_virtual_environment_file" "network_data" {
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
+  upload_mode  = var.cloud_init_upload_mode
   overwrite    = true
 
   source_raw {
@@ -277,6 +279,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
+  upload_mode  = var.cloud_init_upload_mode
   overwrite    = true
 
   source_raw {

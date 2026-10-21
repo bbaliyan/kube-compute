@@ -31,3 +31,8 @@ output "cpu_units" {
   description = "Proxmox CPU weight set on each worker, or null for the Proxmox default."
   value       = var.cpu_units
 }
+
+output "cloud_init_upload_mode" {
+  description = "How cloud-init snippets are copied to the Proxmox host for the workers, or null for the provider default (stream)."
+  value       = var.cloud_init_upload_mode
+}
