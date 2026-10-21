@@ -16,7 +16,7 @@ Nothing in this module connects to the node, waits on it, or observes it converg
 returns as soon as the instance and its user-data exist.
 
 The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules, genesis Cilium/Argo
-CD manifests) is expected to already be baked into the AMI, via `kube-images`'s `kube-node/packer/aws/`
+CD manifests) is expected to already be baked into the AMI, via `kube-images`' `kube-node/packer/aws/`
 template. **`os_image_ami_id` is opt-in**: pass a kube-image-baked AMI id to get a fully working
 cluster. `os_image_name` is an alternative to `os_image_ami_id` — pass the AMI's name (e.g.
 kube-images' self-descriptive build name) instead of its ID, and the module resolves the ID

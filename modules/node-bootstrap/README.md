@@ -19,7 +19,7 @@ has no resource to `depends_on`.
 The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
 modules, the guest agent, **and the genesis Cilium/Argo CD manifests** — is
 expected to already be baked into the image the caller boots the VM from (a
-"kube-images" template; see its `kube-node/packer/proxmox/build.sh` and `helm-values/`
+"kube-image" template; see its `kube-node/packer/proxmox/build.sh` and `helm-values/`
 for where that render happens). This module only renders the per-cluster
 identity, secrets, and join logic that can't be baked into a shared image.
 `modules/proxmox-control-plane` and `modules/proxmox-node-pool` are the only
