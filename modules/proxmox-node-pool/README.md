@@ -45,7 +45,7 @@ overlaps with `proxmox-control-plane`'s for the same cluster.
 **A `proxmox_template_vm_id` template is now effectively required for a working
 worker.** `node-bootstrap`'s cloud-init payload no longer installs RKE2 — it only
 configures and starts it, assuming the binaries are already on disk from a
-kube-image-baked template. `os_image_url`/`os_image_file_id` (the stock-cloud-image
+kube-images-baked template. `os_image_url`/`os_image_file_id` (the stock-cloud-image
 path) still create a VM that validates/applies cleanly, but the worker fails at
 `systemctl enable --now rke2-agent.service` during first-boot cloud-init — `tofu apply`
 succeeds while the worker never actually joins. Same cause as

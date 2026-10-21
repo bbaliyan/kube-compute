@@ -19,7 +19,7 @@ has no resource to `depends_on`.
 The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
 modules, the guest agent, **and the genesis Cilium/Argo CD manifests** — is
 expected to already be baked into the image the caller boots the VM from (a
-"kube-image" template; see its `kube-node/packer/proxmox/build.sh` and `helm-values/`
+template built by kube-images; see its `kube-node/packer/proxmox/build.sh` and `helm-values/`
 for where that render happens). This module only renders the per-cluster
 identity, secrets, and join logic that can't be baked into a shared image.
 `modules/proxmox-control-plane` and `modules/proxmox-node-pool` are the only
@@ -40,7 +40,7 @@ build instead (once, at bake time). This module's `render_cilium`/
 files kube-images already put at
 `/opt/kube-compute/manifests/{cilium.yaml,00-argocd.yaml}` on the template —
 a per-cluster runtime decision (CNI choice, GitOps enablement), independent
-of whether the files exist (they always do, on a kube-image-baked template).
+of whether the files exist (they always do, on a kube-images-baked template).
 
 ## Watching progress during a real apply
 
@@ -99,7 +99,7 @@ CAPMOX specifically. It exposes two generic inputs instead:
   interpret `content` at all.
 - `cluster_autoscaler_crd_wait_enabled` — gates a `bootstrap.sh` block that
   waits for cert-manager's CRDs (installed by the platform Argo CD
-  Application, applied just before this block), applies the kube-image-baked
+  Application, applied just before this block), applies the kube-images-baked
   `capi-install.yaml` (CAPI core + CAPMOX manifests — their webhook TLS is
   provisioned via cert-manager `Issuer`/`Certificate` objects, a hard
   dependency), and waits for CAPI's own core CRDs to be `Established`

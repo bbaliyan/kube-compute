@@ -60,7 +60,7 @@ orchestrator) should expect to need the host-side change.
 **A `proxmox_template_vm_id` template is now effectively required for a working
 cluster.** `node-bootstrap`'s cloud-init payload no longer installs RKE2 — it only
 configures and starts it, assuming the binaries are already on disk. That assumption
-only holds for a kube-image-baked template. Setting `os_image_url`/`os_image_file_id`
+only holds for a kube-images-baked template. Setting `os_image_url`/`os_image_file_id`
 alone (the plain stock-cloud-image path) still creates a VM and still
 validates/applies cleanly, but the node fails at
 `systemctl enable --now rke2-server.service` during first-boot cloud-init —

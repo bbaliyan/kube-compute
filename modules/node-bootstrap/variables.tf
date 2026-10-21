@@ -82,7 +82,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules flannel and Felix's iptables dataplane both require. Kept as an escape hatch for a consumer-supplied image/template shipping a different CNI. Sets config.yaml's cni:/disable-kube-proxy: flags, and when 'cilium' on a genesis node, disables RKE2's own built-in HelmChart install of Cilium (disable: [rke2-cilium]) so bootstrap.sh's own apply of the kube-image-baked manifest never races it."
+  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules flannel and Felix's iptables dataplane both require. Kept as an escape hatch for a consumer-supplied image/template shipping a different CNI. Sets config.yaml's cni:/disable-kube-proxy: flags, and when 'cilium' on a genesis node, disables RKE2's own built-in HelmChart install of Cilium (disable: [rke2-cilium]) so bootstrap.sh's own apply of the kube-images-baked manifest never races it."
   type        = string
   default     = "cilium"
   validation {
