@@ -36,7 +36,7 @@ locals {
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")
-  # Cilium operator replica count isn't a per-cluster knob here: kube-image bakes the
+  # Cilium operator replica count isn't a per-cluster knob here: kube-images bakes the
   # genesis manifest with a fixed replicas: 1, matching kube-platform's own
   # cilium-app.yaml default (which Argo CD's selfHeal would overwrite anyway) — already
   # the effective end state on every topology.
@@ -401,7 +401,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   }
 
   # full = true is not optional: a linked clone stays dependent on the template
-  # surviving, which breaks when kube-image's prune-images.sh deletes an old build.
+  # surviving, which breaks when kube-images' prune-images.sh deletes an old build.
   dynamic "clone" {
     for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
     content {
@@ -452,7 +452,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
         var.os_image_file_id != null ? "file" : "",
         var.proxmox_template_vm_id != null ? "template" : "",
       ])) == 1
-      error_message = "Set exactly one of os_image_url (download a stock cloud image), os_image_file_id (a stock image already on Proxmox storage), or proxmox_template_vm_id (full-clone a pre-baked kube-image VM template)."
+      error_message = "Set exactly one of os_image_url (download a stock cloud image), os_image_file_id (a stock image already on Proxmox storage), or proxmox_template_vm_id (full-clone a pre-baked kube-images VM template)."
     }
 
     precondition {
@@ -499,7 +499,7 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
   }
 
   # full = true is not optional: a linked clone stays dependent on the template
-  # surviving, which breaks when kube-image's prune-images.sh deletes an old build.
+  # surviving, which breaks when kube-images' prune-images.sh deletes an old build.
   dynamic "clone" {
     for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
     content {

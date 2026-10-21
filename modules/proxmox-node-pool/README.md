@@ -40,7 +40,7 @@ SSH mechanism, and is equally subject to the SSH connection burst / `MaxStartups
 interaction described there. It's most likely to surface when this module's apply
 overlaps with `proxmox-control-plane`'s for the same cluster.
 
-### Booting from a kube-image template
+### Booting from a kube-images template
 
 **A `proxmox_template_vm_id` template is now effectively required for a working
 worker.** `node-bootstrap`'s cloud-init payload no longer installs RKE2 — it only
@@ -54,7 +54,7 @@ Ansible install step anywhere in `node-bootstrap`, on any provider.
 `os_image_url`/`os_image_file_id` remain valid Terraform-level inputs for a plain,
 non-RKE2 VM; only "boot a working RKE2 worker from a stock image" is gone.
 
-Set `proxmox_template_vm_id` to a pre-baked kube-image VM template's ID instead of
+Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID instead of
 `os_image_url`/`os_image_file_id`. Workers are **full**-cloned from it, so they never
 depend on the template surviving. The template installs both RKE2 units; this pool's
 cloud-init payload enables only `rke2-agent`. Bootstrap runs asynchronously on each

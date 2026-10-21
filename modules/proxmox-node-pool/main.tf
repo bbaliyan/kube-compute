@@ -149,7 +149,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
   }
 
   # full = true is not optional: a linked clone stays dependent on the template
-  # surviving, which breaks when kube-image's prune-images.sh deletes an old build.
+  # surviving, which breaks when kube-images' prune-images.sh deletes an old build.
   dynamic "clone" {
     for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
     content {
@@ -210,7 +210,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
         var.os_image_file_id != null ? "file" : "",
         var.proxmox_template_vm_id != null ? "template" : "",
       ])) == 1
-      error_message = "Set exactly one of os_image_url (download a stock cloud image), os_image_file_id (a stock image already on Proxmox storage), or proxmox_template_vm_id (full-clone a pre-baked kube-image VM template)."
+      error_message = "Set exactly one of os_image_url (download a stock cloud image), os_image_file_id (a stock image already on Proxmox storage), or proxmox_template_vm_id (full-clone a pre-baked kube-images VM template)."
     }
     precondition {
       condition     = local.effective_registration_address != null

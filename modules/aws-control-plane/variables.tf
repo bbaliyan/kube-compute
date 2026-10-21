@@ -249,7 +249,7 @@ variable "os_image_ami_id" {
 
 variable "os_image_name" {
   description = <<-EOT
-    AMI name for the node, e.g. kube-image's self-descriptive build name. Alternative to
+    AMI name for the node, e.g. kube-images' self-descriptive build name. Alternative to
     os_image_ami_id — the module resolves the ID via a data lookup scoped to this account's
     own AMIs and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a
     pattern with the build date/suffix omitted resolves to the most recent matching build.

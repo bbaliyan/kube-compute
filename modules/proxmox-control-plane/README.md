@@ -55,7 +55,7 @@ Two independent mitigations, not mutually exclusive:
 Consumers that apply multiple Proxmox units concurrently (e.g. via a `run --all`-style
 orchestrator) should expect to need the host-side change.
 
-### Booting from a kube-image template
+### Booting from a kube-images template
 
 **A `proxmox_template_vm_id` template is now effectively required for a working
 cluster.** `node-bootstrap`'s cloud-init payload no longer installs RKE2 — it only
@@ -70,7 +70,7 @@ every provider (no more live Ansible install step anywhere in `node-bootstrap` �
 Terraform-level inputs for a plain, non-RKE2 VM; only "boot a working RKE2 node from a
 stock image" is gone.
 
-Set `proxmox_template_vm_id` to a pre-baked kube-image VM template's ID instead of
+Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID instead of
 `os_image_url`/`os_image_file_id`. Nodes are **full**-cloned from it, so they never
 depend on the template surviving. The template carries OS prep, the RKE2 binaries
 (both server and agent units — the role is chosen at launch), the SELinux policy, the

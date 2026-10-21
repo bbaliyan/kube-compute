@@ -2,7 +2,7 @@
 # node-bootstrap renders a lean cloud-init payload. It executes NOTHING: no
 # null_resource, no local-exec, no Ansible, no connection to the node. The
 # heavy half of RKE2 bootstrap (OS prep, RKE2 binaries, SELinux policy, kernel
-# modules, guest agent) is baked into a kube-image template; what's left here
+# modules, guest agent) is baked into a kube-images template; what's left here
 # is per-cluster identity, secrets, and join logic — what can't be baked into
 # a shared image.
 locals {
@@ -51,13 +51,13 @@ locals {
 
   is_server = contains(["server-init", "server-join"], var.node_role)
 
-  # Whether bootstrap.sh should apply the Cilium/Argo CD manifests kube-image
+  # Whether bootstrap.sh should apply the Cilium/Argo CD manifests kube-images
   # already baked onto every template at /opt/kube-compute/manifests/ — a
   # per-cluster runtime decision (CNI choice, GitOps enablement), independent
   # of whether the files exist on disk (they always do). This module renders
   # neither: the live `helm template` render that used to happen here exceeded
-  # Proxmox's 1 MiB cicustom snippet cap on a real apply — see kube-image's
-  # packer/proxmox/build.sh and helm-values/ for where the render moved.
+  # Proxmox's 1 MiB cicustom snippet cap on a real apply — see kube-images'
+  # kube-node/packer/proxmox/build.sh and helm-values/ for where the render moved.
   render_cilium = var.cni == "cilium" && var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
@@ -447,7 +447,7 @@ locals {
   # operator-supplied manifest, a token containing a colon can never break
   # the surrounding YAML), and lets the whole document be safely produced by
   # yamlencode() rather than a text template. Cilium/Argo CD's own manifests
-  # are NOT among these entries — kube-image bakes them directly onto the
+  # are NOT among these entries — kube-images bakes them directly onto the
   # template at /opt/kube-compute/manifests/, and bootstrap.sh reads them
   # from there; embedding Argo CD's ~1.9 MB chart render here is exactly what
   # used to exceed Proxmox's 1 MiB cicustom snippet cap.

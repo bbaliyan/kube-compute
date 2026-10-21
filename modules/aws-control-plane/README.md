@@ -16,10 +16,10 @@ Nothing in this module connects to the node, waits on it, or observes it converg
 returns as soon as the instance and its user-data exist.
 
 The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules, genesis Cilium/Argo
-CD manifests) is expected to already be baked into the AMI, via `kube-image`'s `packer/aws/`
+CD manifests) is expected to already be baked into the AMI, via `kube-images`'s `kube-node/packer/aws/`
 template. **`os_image_ami_id` is opt-in**: pass a kube-image-baked AMI id to get a fully working
 cluster. `os_image_name` is an alternative to `os_image_ami_id` — pass the AMI's name (e.g.
-kube-image's self-descriptive build name) instead of its ID, and the module resolves the ID
+kube-images' self-descriptive build name) instead of its ID, and the module resolves the ID
 itself via a data lookup scoped to your own account and the derived architecture; a pattern
 with the build date/suffix omitted (using EC2's `*`/`?` Name-filter wildcards) resolves to the
 most recent matching build. The default fallback — latest stock AlmaLinux 10, when both are

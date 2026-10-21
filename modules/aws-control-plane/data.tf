@@ -92,7 +92,7 @@ data "aws_ec2_instance_type" "selected" {
   instance_type = var.instance_type
 }
 
-# Self-owned AMI resolved by name (e.g. kube-image's own naming convention) — only when an
+# Self-owned AMI resolved by name (e.g. kube-images' own naming convention) — only when an
 # explicit ID isn't given but a name/pattern is. Scoped to this account (owners = ["self"])
 # and the derived architecture so an x86_64/arm64 pair sharing a version prefix can't collide.
 data "aws_ami" "by_name" {

@@ -24,7 +24,7 @@ When Azure support is revisited, the plan is to follow the same pattern
 `aws-control-plane`/`proxmox-control-plane` now use rather than reintroduce
 live Ansible:
 
-- Boot from a pre-baked `kube-image` template (RKE2 binaries, prerequisites,
+- Boot from a pre-baked `kube-images` template (RKE2 binaries, prerequisites,
   and the Cilium manifest already on disk) instead of installing at boot.
 - Attach a lean `#cloud-config` payload rendered by `modules/node-bootstrap`
   (its current, post-cutover interface) to configure and start RKE2 —

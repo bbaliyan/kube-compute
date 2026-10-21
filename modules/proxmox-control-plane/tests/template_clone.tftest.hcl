@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the kube-image template-clone path: cloning must always be a FULL
+# Guards the kube-images template-clone path: cloning must always be a FULL
 # clone (a linked clone leaves every node depending on a template that
-# kube-image's own prune-images.sh will eventually delete), the disk must not
+# kube-images' own prune-images.sh will eventually delete), the disk must not
 # also try to import a stock image, and exactly one of the three image sources
 # may be set.
 mock_provider "proxmox" {
@@ -46,7 +46,7 @@ run "template_clone_is_always_a_full_clone" {
   }
   assert {
     condition     = proxmox_virtual_environment_vm.control_plane.clone[0].full == true
-    error_message = "full must be true on every clone — a linked clone makes every node permanently depend on the kube-image template, which breaks the moment prune-images.sh deletes it"
+    error_message = "full must be true on every clone — a linked clone makes every node permanently depend on the kube-images template, which breaks the moment prune-images.sh deletes it"
   }
   assert {
     condition     = proxmox_virtual_environment_vm.control_plane.disk[0].import_from == null
@@ -68,7 +68,7 @@ run "stock_image_path_still_creates_no_clone_block" {
 
   assert {
     condition     = length(proxmox_virtual_environment_vm.control_plane.clone) == 0
-    error_message = "the stock-image path must create no clone block — kube-image stays opt-in and kube-compute must keep working standalone"
+    error_message = "the stock-image path must create no clone block — kube-images stays opt-in and kube-compute must keep working standalone"
   }
 }
 
@@ -106,7 +106,7 @@ run "file_id_stock_image_path_creates_no_clone_block" {
 
   assert {
     condition     = length(proxmox_virtual_environment_vm.control_plane.clone) == 0
-    error_message = "the os_image_file_id path must create no clone block — kube-image stays opt-in and kube-compute must keep working standalone"
+    error_message = "the os_image_file_id path must create no clone block — kube-images stays opt-in and kube-compute must keep working standalone"
   }
   assert {
     condition     = proxmox_virtual_environment_vm.control_plane.disk[0].import_from == "local:iso/almalinux-10.qcow2"

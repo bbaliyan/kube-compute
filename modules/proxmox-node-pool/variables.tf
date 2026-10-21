@@ -113,7 +113,7 @@ variable "os_image_file_id" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of a pre-baked kube-image Proxmox VM template to full-clone every worker from, instead of booting a stock cloud image. The template already carries OS prep, the RKE2 binaries (both the server and agent units — this pool enables only rke2-agent at launch), SELinux policy, kernel modules, and the guest agent. Null (the default) keeps the stock path via os_image_url/os_image_file_id — kube-image is opt-in. Set exactly one of os_image_url, os_image_file_id, or proxmox_template_vm_id. No compatibility validation is performed between this ID and what is actually baked in it."
+  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every worker from, instead of booting a stock cloud image. The template already carries OS prep, the RKE2 binaries (both the server and agent units — this pool enables only rke2-agent at launch), SELinux policy, kernel modules, and the guest agent. Null (the default) keeps the stock path via os_image_url/os_image_file_id — kube-images is opt-in. Set exactly one of os_image_url, os_image_file_id, or proxmox_template_vm_id. No compatibility validation is performed between this ID and what is actually baked in it."
   type        = number
   default     = null
 }
