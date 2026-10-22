@@ -38,6 +38,8 @@ value: `trusted_ca_pem`, `registry_mirror_url`, `ssh_authorized_keys`, `dns_serv
 
 `pool_id` and `cpu_units` apply to the control plane and to every pool in `node_pools`. A `node_pools` entry may set its own `pool_id` or `cpu_units` to override them. Unset, there is no Proxmox pool and the CPU weight is the Proxmox default. Do not confuse `pool_id` (a Proxmox resource pool) with a `node_pools` key (a node group).
 
+`cloud_init_upload_mode` applies to the control plane and to every pool in `node_pools`. Unset, the provider default (`stream`) copies the cloud-init snippets with a shell and `sudo`. Set it to `sftp` when the SSH user can only use SFTP. That user needs write permission on the snippets directory.
+
 ## Platform pool
 
 `platform_node_group` names the pool that runs the platform stack:

@@ -424,3 +424,14 @@ variable "boot_scripts" {
     error_message = "A boot script must not have a line that is just KUBE_COMPUTE_BOOT_SCRIPT."
   }
 }
+
+variable "cloud_init_upload_mode" {
+  description = "How the provider copies cloud-init snippet files to the Proxmox host over SSH. Null keeps the provider default, 'stream', which opens a shell and tries sudo. Use 'sftp' when the SSH user is limited to the SFTP subsystem: it needs write permission on the snippets directory and does not use sudo. Has no effect on ISO or image downloads, which use the API."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cloud_init_upload_mode == null ? true : contains(["stream", "sftp"], var.cloud_init_upload_mode)
+    error_message = "cloud_init_upload_mode must be null, \"stream\" or \"sftp\"."
+  }
+}
