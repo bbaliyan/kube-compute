@@ -46,6 +46,7 @@ lint-scripts:
 
 lint-pipelines:
 	$(CHECKS)/pipeline-lint.sh .
+	tests/check-gitlab-ci.sh
 
 validate:
 	for d in $(MODULES); do \
