@@ -119,3 +119,16 @@ run "a_bad_value_is_rejected" {
 
   expect_failures = [var.cloud_init_upload_mode]
 }
+
+run "journal_is_persistent" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      strcontains(proxmox_virtual_environment_file.vendor_data.source_raw[0].data, "/etc/systemd/journald.conf.d/10-persistent.conf"),
+      strcontains(proxmox_virtual_environment_file.vendor_data.source_raw[0].data, "Storage=persistent"),
+      strcontains(proxmox_virtual_environment_file.vendor_data.source_raw[0].data, "systemctl restart systemd-journald"),
+    ])
+    error_message = "the cloud-init snippet must turn on a persistent journal and restart journald"
+  }
+}
