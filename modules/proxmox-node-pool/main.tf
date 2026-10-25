@@ -110,7 +110,7 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
         ["ssh_authorized_keys:"],
         [for k in var.ssh_authorized_keys : "  - ${trimspace(k)}"]
       ) : [],
-      ["runcmd:", "  - systemctl restart systemd-journald", "  - systemctl enable --now qemu-guest-agent", "  - systemctl enable --now serial-getty@ttyS0.service", ""]
+      ["runcmd:", "  - systemctl restart systemd-journald", "  - journalctl --flush", "  - systemctl enable --now qemu-guest-agent", "  - systemctl enable --now serial-getty@ttyS0.service", ""]
     ))
     file_name = "${var.cluster_name}-${var.pool_name}-vendor-data.yaml"
   }
