@@ -81,7 +81,8 @@ run "journal_is_persistent" {
       strcontains(proxmox_virtual_environment_file.vendor_data.source_raw[0].data, "/etc/systemd/journald.conf.d/10-persistent.conf"),
       strcontains(proxmox_virtual_environment_file.vendor_data.source_raw[0].data, "Storage=persistent"),
       strcontains(proxmox_virtual_environment_file.vendor_data.source_raw[0].data, "systemctl restart systemd-journald"),
+      strcontains(proxmox_virtual_environment_file.vendor_data.source_raw[0].data, "journalctl --flush"),
     ])
-    error_message = "the cloud-init snippet must turn on a persistent journal and restart journald"
+    error_message = "the cloud-init snippet must turn on a persistent journal, restart journald and flush it"
   }
 }
