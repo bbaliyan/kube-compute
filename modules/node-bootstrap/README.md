@@ -147,6 +147,10 @@ If `gitops_workloads_repo_url` is not set, the Application has none of them and 
 
 The module writes the `platform` Application at first boot. An existing cluster gets these parameters only when its node is rebuilt.
 
+Warning: on AWS, the control plane sets `user_data_replace_on_change`. If a cluster already has a workloads repo, this change alters its user data. The next apply then replaces the control-plane instance. On a single-node cluster that is the whole cluster. If you are not ready to rebuild, pin the previous module version. A cluster with no workloads repo does not change.
+
+On Proxmox, the user-data snippet is updated in place, so the VM is not expected to be replaced. The new parameters still reach the cluster only after a rebuild.
+
 ## `set_hostname` (for shared, byte-identical cloud-init payloads)
 
 Every caller gets `set_hostname = true` (the default): `hostname`/`fqdn` are
