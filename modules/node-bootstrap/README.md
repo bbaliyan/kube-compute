@@ -135,6 +135,18 @@ syncs on clusters that opted in. This module has no hardcoded knowledge of
 that parameter; it's just another entry in the generic
 `platform_extra_helm_parameters` map.
 
+## Workloads repo parameters on the `platform` Application
+
+If `gitops_workloads_repo_url` is set, the `platform` Application gets three more Helm parameters:
+
+- `workloadsRepoURL`, from `gitops_workloads_repo_url`.
+- `workloadsRevision`, from `gitops_workloads_revision`.
+- `workloadsPath`, from `gitops_workloads_path`.
+
+If `gitops_workloads_repo_url` is not set, the Application has none of them and renders as before. kube-platform treats a missing parameter as empty.
+
+The module writes the `platform` Application at first boot. An existing cluster gets these parameters only when its node is rebuilt.
+
 ## `set_hostname` (for shared, byte-identical cloud-init payloads)
 
 Every caller gets `set_hostname = true` (the default): `hostname`/`fqdn` are
