@@ -142,6 +142,14 @@ locals {
                 value: "${var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""}"
               - name: trustedCaPemB64
                 value: "${base64encode(var.trusted_ca_pem != null ? var.trusted_ca_pem : "")}"
+    %{~if local.workloads_app_enabled~}
+              - name: workloadsRepoURL
+                value: "${local.effective_gitops_workloads_repo_url}"
+              - name: workloadsRevision
+                value: "${var.gitops_workloads_revision}"
+              - name: workloadsPath
+                value: "${var.gitops_workloads_path}"
+    %{~endif~}
     %{~for name, val in var.platform_extra_helm_parameters~}
               - name: ${name}
                 value: "${val}"
