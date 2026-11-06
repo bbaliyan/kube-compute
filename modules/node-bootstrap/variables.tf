@@ -28,7 +28,7 @@ variable "node_fqdn_label" {
 }
 
 variable "set_hostname" {
-  description = "Whether this node's cloud-init sets an explicit hostname/fqdn. true (the default) writes hostname: <node_name> into cloud-config, required because RKE2/kubelet registers the node by OS hostname and every Terraform-provisioned node gets a distinct node_name. false omits hostname/fqdn entirely, relying on the VM platform's own per-instance metadata (e.g. a NoCloud datasource's local-hostname) to supply a unique hostname — needed when the SAME rendered cloud-init is shared across multiple VMs, e.g. CAPI MachineDeployment replicas (see proxmox-cluster's cluster_autoscaler_enabled, which sets this false — this module has no autoscaler-specific knowledge). Unverified for the false case: that the VM platform's metadata actually provides a usable per-VM hostname when cloud-config doesn't set one — real-hardware check required before trusting this in production."
+  description = "Whether this node's cloud-init sets an explicit hostname/fqdn. true (the default) writes hostname: <node_name> into cloud-config, required because RKE2/kubelet registers the node by OS hostname and every Terraform-provisioned node gets a distinct node_name. false omits hostname/fqdn entirely, relying on the VM platform's own per-instance metadata (e.g. a NoCloud datasource's local-hostname) to supply a unique hostname — needed when the SAME rendered cloud-init is shared across multiple VMs, e.g. the instances of an AWS Auto Scaling group (aws-node-pool sets this false). Unverified for the false case: that the VM platform's metadata actually provides a usable per-VM hostname when cloud-config doesn't set one — real-hardware check required before trusting this in production."
   type        = bool
   default     = true
 }
@@ -305,7 +305,7 @@ variable "tsig_key_secret" {
 }
 
 variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests to write under /opt/kube-compute/manifests/ and apply via bootstrap.sh, each gated on its own readiness-wait if the caller's content needs one (this module does not interpret content — callers needing a wait embed it via a separate mechanism; see cluster_autoscaler_crd_wait_enabled below). Empty list (default) applies nothing beyond the existing platform/workloads Applications. Only meaningful for node_role = server-init — genesis-only, mirroring render_cilium/render_argocd."
+  description = "Ordered list of {path, content} manifests to write under /opt/kube-compute/manifests/ and apply via bootstrap.sh, (this module does not interpret content). Empty list (default) applies nothing beyond the existing platform/workloads Applications. Only meaningful for node_role = server-init — genesis-only, mirroring render_cilium/render_argocd."
   type = list(object({
     path    = string
     content = string
@@ -315,18 +315,6 @@ variable "genesis_apply_manifests" {
 
 variable "iscsi_initiator_enabled" {
   description = "Write a deterministic iSCSI InitiatorName (iqn.2026.lan.<cluster_name>:<node_fqdn_label, or node_name if unset>) to /etc/iscsi/initiatorname.iscsi and restart iscsid, replacing the OS-generated random one. Only meaningful where the image already has iscsi-initiator-utils baked in (kube-images' Proxmox template does; AWS uses EBS CSI and has no iSCSI initiator at all). Exists so an iSCSI target's initiator allow-list can be registered once, ahead of time, instead of re-discovered and re-registered by hand after every VM rebuild. False (the default) leaves the OS-generated random name untouched."
-  type        = bool
-  default     = false
-}
-
-variable "cluster_autoscaler_capi_install_baked" {
-  description = "Whether the CAPI install manifest is baked onto the node image at /opt/kube-compute/manifests/capi-install.yaml and should be applied by bootstrap.sh. True suits the Proxmox template, which stages one; false suits AWS, whose image does not, and where Cluster API arrives as a platform Argo CD Application instead -- bootstrap.sh then only waits for the CRDs rather than installing them. Only meaningful when cluster_autoscaler_crd_wait_enabled is true."
-  type        = bool
-  default     = true
-}
-
-variable "cluster_autoscaler_crd_wait_enabled" {
-  description = "Whether bootstrap.sh applies capi-install.yaml and waits for CAPI's core CRDs (machinedeployments.cluster.x-k8s.io) to be Established before applying genesis_apply_manifests entries. Only meaningful when genesis_apply_manifests is non-empty and contains CAPI-dependent content, and only takes effect for node_role = server-init."
   type        = bool
   default     = false
 }

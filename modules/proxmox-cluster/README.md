@@ -88,8 +88,7 @@ Before turning it on:
   allow them from anywhere else you administer from.
 - **Proxmox API from the cluster:** if `cluster_network_cidr` isn't the hosts'
   own subnet (the cluster has its own VLAN, say), allow 8006 to the hosts from
-  it too. Otherwise the cluster autoscaler can't create VMs through Cluster
-  API.
+  it too. Otherwise the cluster can't reach the Proxmox API.
 - **Other VMs:** any other VM that already has a firewall-enabled NIC starts
   being filtered too.
 
@@ -108,8 +107,6 @@ to it.
   be opened this way, and only on the pool running the Service's pods.
 - **SSH:** nodes are reachable only from inside `cluster_network_cidr`. Never
   add 22 to `ingress_ports`.
-- **Autoscaled workers:** those the cluster autoscaler creates through Cluster
-  API get no Proxmox firewall rules.
 
 ## Usage: control-plane only, no worker pools
 
@@ -174,53 +171,9 @@ module "cluster" {
 Each key in `node_pools` becomes one `proxmox-node-pool` instance, wired to this
 cluster's `cluster_name` and `cluster_agent_token` automatically.
 
-## Cluster autoscaler (optional)
-
-This module — not `proxmox-control-plane` or `node-bootstrap` — owns
-`cluster_autoscaler_enabled`, `cluster_autoscaler_worker_min_size`,
-`cluster_autoscaler_worker_max_size`, and `cluster_autoscaler_worker_template`.
-`false` (the default) is a no-op: no CAPI install, no `MachineDeployment`, no
-change to what this module already provisions.
-
-When enabled, this module:
-
-- Renders a `Cluster` + `Secret` + `ProxmoxMachineTemplate` + `MachineDeployment`
-  bundle (`templates/cluster-autoscaler-workers.yaml.tftpl`) — no
-  `RKE2ConfigTemplate`/CAPRKE2 anywhere in it. Workers join via a plain `Secret`
-  referenced by `Machine.spec.bootstrap.dataSecretName`; the `Secret`'s content
-  is this project's own worker cloud-init, rendered by a second, dedicated
-  `node-bootstrap` instantiation (`module.cluster_autoscaler_worker_bootstrap`,
-  `set_hostname = false` — the payload is shared byte-for-byte across every
-  `MachineDeployment` replica, so it cannot carry a node-unique hostname;
-  CAPMOX's own per-VM metadata is relied on instead, unverified against real
-  hardware).
-- Passes the rendered bundle through to `proxmox-control-plane` as a single
-  `genesis_apply_manifests` entry (a generic node-bootstrap mechanism — see
-  [`node-bootstrap`'s README](../node-bootstrap/README.md#genesis-apply-manifests-generic-cluster-autoscaler-is-the-one-caller-today)),
-  with `cluster_autoscaler_crd_wait_enabled = true` so `bootstrap.sh` waits for
-  CAPI's core CRDs before applying it. `proxmox-control-plane`/`node-bootstrap`
-  have no cluster-autoscaler-specific code left in them.
-  `proxmox_template_vm_id` for `cluster_autoscaler_worker_template` points at
-  the **same** kube-images template used everywhere else in this module — only
-  one image variant exists.
-- Merges a `clusterAutoscalerEnabled` Helm parameter into
-  `platform_extra_helm_parameters`, which is what gates kube-platform's own
-  `cluster-autoscaler` Argo CD Application.
-- Requires `cluster_domain` and `dns_server_address` to both be set — autoscaled
-  workers join through the genesis node's self-registered DNS name
-  (`genesis.<cluster_name>.<cluster_domain>`), the same single-target address
-  `proxmox-node-pool`'s own workers default to, computed independently here to
-  avoid a dependency cycle through the control plane's own cloud-init render.
-  Enforced by a `check` block, not a hard `plan`-time error.
-
-`cluster_autoscaler_worker_max_size` must be greater than its `0` default, and
-`cluster_autoscaler_worker_template` must be set; both are enforced by `plan`-time
-validation so an incomplete configuration fails with a clear error rather than
-producing a `MachineDeployment` that can never scale.
-
 ## OS updates
 
-`os_auto_updates`, on by default, has every node, autoscaled workers included, install
+`os_auto_updates`, on by default, has every node install
 OS updates with `dnf-automatic` daily at 06:00 and 15 minutes after each boot. It never
 reboots: kube-platform's Node OS Updates dashboard shows which nodes need one. See
 [`node-bootstrap`'s README](../node-bootstrap/README.md#os-updates).
@@ -256,7 +209,7 @@ outputs. It has not been tried on a running cluster, so plan it before applying.
 `node_pools` worker runs once, at first boot, before RKE2 is installed, for example to join
 a directory. Each sees `CLUSTER_NAME`, `NODE_ROLE` (`control-plane` or `worker`) and
 `NODE_NAME`. A script that fails is logged by cloud-init and does not stop the node.
-Nodes the cluster autoscaler creates do not run them. Unset, a node's cloud-init is
+Unset, a node's cloud-init is
 unchanged. The scripts are part of the node's first-boot cloud-init, and have not been
 tried on a real Proxmox host.
 

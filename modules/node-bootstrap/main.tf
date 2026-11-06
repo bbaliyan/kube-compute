@@ -63,16 +63,14 @@ locals {
 
   # Genesis-only, same as render_cilium/render_argocd — but deliberately NOT
   # gated on argocd_needed/render_argocd: an arbitrary genesis-apply manifest
-  # (e.g. proxmox-cluster's CAPI/CAPMOX cluster-autoscaler bundle) is applied
-  # by bootstrap.sh as a one-time genesis step, independent of whether this
-  # cluster also runs a platform or workloads Argo CD Application. Tying it to
+  # is applied by bootstrap.sh as a one-time genesis step, independent of
+  # whether this cluster also runs a platform or workloads Argo CD Application. Tying it to
   # render_argocd would mean gitops_platform_enabled = false callers never get
   # the write_files entries bootstrap.sh's apply step expects. This module
   # does not render or interpret genesis_apply_manifests' content — that
   # happens in the composing module (e.g. proxmox-cluster), which has access
   # to inputs (like module.control_plane's outputs) this leaf module does not.
   effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
-  effective_crd_wait_enabled        = var.node_role == "server-init" && var.cluster_autoscaler_crd_wait_enabled
   genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
   # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
@@ -354,7 +352,7 @@ locals {
   # baked into the node image; this says which node.env contract it was written
   # against, and the program refuses to run against any other. Bump both
   # together whenever a key below is added, removed, or changes meaning.
-  node_env_contract = 1
+  node_env_contract = 2
 
   # The program itself, read only so this module can check it declares the same
   # contract number. It is never shipped from here -- the node image bakes it,
@@ -365,7 +363,7 @@ locals {
   # Configuration for the baked bootstrap program, as data. These used to be
   # templatefile() arguments, which rendered a per-node copy of a ~9.6 KB script
   # into user data -- and a genesis node carried three of them, its own plus one
-  # inside each worker group's cloud-init in a CAPI bundle. That is what exceeded
+  # inside each worker group's cloud-init in a bundle. That is what exceeded
   # EC2's 16384-byte decoded user-data limit. The program is the image's business
   # now; only these values are this module's.
   #
@@ -392,8 +390,6 @@ locals {
     ARGOCD_NEEDED                 = local.render_argocd ? "1" : "0"
     PLATFORM_APP_ENABLED          = local.platform_app_enabled ? "1" : "0"
     WORKLOADS_APP_ENABLED         = local.workloads_app_enabled ? "1" : "0"
-    CAPI_CRD_WAIT_ENABLED         = local.effective_crd_wait_enabled ? "1" : "0"
-    CAPI_INSTALL_BAKED            = var.cluster_autoscaler_capi_install_baked ? "1" : "0"
     # Space-separated because the program word-splits it. Every path is composed
     # by this module under /opt/kube-compute/manifests, so none can contain one.
     GENESIS_APPLY_MANIFESTS = join(" ", local.genesis_apply_manifest_paths)
@@ -547,8 +543,8 @@ locals {
     [
       # gz+b64, unlike every other file here: a genesis manifest is the one
       # payload large enough to matter against EC2's 25600-byte cap on encoded
-      # user data, and a CAPI bundle carries a base64 bootstrap Secret per worker
-      # group, which plain b64 would then encode a second time. Only clusters
+      # user data, and a genesis manifest may itself carry base64 content, which
+      # plain b64 would then encode a second time. Only clusters
       # that have genesis manifests are affected, so no existing instance's user
       # data changes.
       for m in local.effective_genesis_apply_manifests : {
@@ -616,7 +612,7 @@ locals {
   # hostname, so every node in a cluster MUST get a distinct value here.
   # var.set_hostname = false omits both keys entirely (see that variable's
   # description) — needed only when this same rendered payload is shared
-  # across multiple VMs, e.g. a CAPI MachineDeployment's replicas.
+  # across multiple VMs, e.g. a scale set's replicas.
   cloud_config = merge(
     {
       preserve_hostname = false
