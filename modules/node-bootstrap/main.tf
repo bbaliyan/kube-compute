@@ -64,12 +64,11 @@ locals {
   # Genesis-only, same as render_cilium/render_argocd — but deliberately NOT
   # gated on argocd_needed/render_argocd: an arbitrary genesis-apply manifest
   # is applied by bootstrap.sh as a one-time genesis step, independent of
-  # whether this cluster also runs a platform or workloads Argo CD Application. Tying it to
-  # render_argocd would mean gitops_platform_enabled = false callers never get
-  # the write_files entries bootstrap.sh's apply step expects. This module
-  # does not render or interpret genesis_apply_manifests' content — that
-  # happens in the composing module (e.g. proxmox-cluster), which has access
-  # to inputs (like module.control_plane's outputs) this leaf module does not.
+  # whether this cluster also runs a platform or workloads Argo CD Application.
+  # Tying it to render_argocd would mean gitops_platform_enabled = false callers
+  # never get the write_files entries bootstrap.sh's apply step expects. This
+  # module does not render or interpret genesis_apply_manifests' content; the
+  # caller does.
   effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
   genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
