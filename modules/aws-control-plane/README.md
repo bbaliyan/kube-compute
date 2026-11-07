@@ -34,6 +34,41 @@ therefore stays out of the payload: the bootstrap program is baked into the node
 and with `trusted_ca_in_image` a CA is too. A precondition on the instance names those
 levers when the limit is exceeded.
 
+### A change to the user data of a running node
+
+A change to any input in the user data, such as a Helm parameter of the platform
+Application, does not touch a running node. The instance ignores the change and keeps
+the user data it booted with. cloud-init reads user data only at the first boot, so
+the node would not apply the change anyway.
+
+To apply a change, replace the node on purpose. The replaced node boots with the
+current user data.
+
+The addresses are:
+
+- First node: `module.<name>.aws_instance.control_plane`
+- Other nodes: `module.<name>.aws_instance.control_plane_additional["1"]`
+
+Inside `aws-cluster`, put `module.<name>.module.control_plane.` before the resource
+type instead.
+
+> **Warning:** Replacing a single-node cluster loses the cluster.
+
+1. If the cluster has one node, stop. Replacing it loses the cluster.
+2. Select a node. Replace the additional nodes first, one at a time. Start with key `"1"`.
+3. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+4. Delete the Kubernetes node: `kubectl delete node <node>`.
+5. Replace the instance: `tofu apply -replace='<address>'`.
+6. Verify that the node is `Ready`: `kubectl get nodes`.
+7. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
+8. If another additional node needs the change, go back to step 2.
+
+> **Warning:** Replace the first node last, in its own apply.
+
+9. Do steps 3 to 7 for the first node.
+
+Do not replace several nodes in one apply: etcd loses its quorum.
+
 ## Scope
 
 The module provisions the **node and only what is intrinsic to it** — the EC2 instance, its

@@ -138,9 +138,21 @@ Bootstrap runs asynchronously after `tofu apply` returns — tail
 is made between the template's contents and `k8s_version`/`cilium_version`/
 `argocd_version`; the template's self-describing name is the documentation.
 
-Changing any of `node-bootstrap`'s inputs (a rotated token, a new registry mirror, a
-different platform revision) after a node's first boot has no effect on that
-already-running node — cloud-init only ever reads its user-data once, on first boot,
-and the rendered snippet file is stable/reused rather than triggering a VM
-replacement. Day-2 config changes need a new node (replace), not a `tofu apply` on the
-existing one.
+## A change to the user data of a running node
+
+A change to any input of `node-bootstrap` (a rotated token, a new registry mirror, a
+different platform revision) does not touch a running VM. The snippet on storage gets
+the new content, and the VM keeps the file id it references. cloud-init reads user
+data only at the first boot, so the running node does not apply the change.
+
+To apply a change, replace the VM on purpose. The replaced VM boots with the current
+snippet. Use the steps of "Rolling to a new template", from step 3: they drain the
+node, replace an additional VM with its firewall, verify it, and replace the first VM
+last. The addresses are `module.<name>.proxmox_virtual_environment_vm.control_plane`
+and `module.<name>.proxmox_virtual_environment_vm.control_plane_additional["1"]`.
+Inside `proxmox-cluster`, put `module.control_plane.` before the resource type.
+
+> **Warning:** Replacing a single-node cluster loses the cluster.
+
+Do not replace several VMs in one apply: etcd loses its quorum.
+

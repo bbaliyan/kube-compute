@@ -109,3 +109,17 @@ AMI lookup on it, so an arm64 platform node and an x86_64 dedicated-workload nod
 share one `os_image_name` value as long as its architecture segment is a
 wildcard. Without that filter, a wildcard would let either build satisfy either
 node.
+
+## A change to the user data of a running node
+
+A change to any input in the user data, such as `node_labels`, does not touch a
+running node. The instance keeps the user data it booted with. To apply the change,
+replace the node on purpose.
+
+1. If the node runs workloads that must not stop, drain it: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+2. Delete the Kubernetes node: `kubectl delete node <node>`.
+3. Replace the instance: `tofu apply -replace='module.<name>.aws_instance.node["1"]'`.
+4. Verify that the node is `Ready`: `kubectl get nodes`.
+
+Inside `aws-cluster`, the address is
+`module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`.

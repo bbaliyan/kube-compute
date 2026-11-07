@@ -108,21 +108,37 @@ If `gitops_workloads_repo_url` is set, the `platform` Application gets three mor
 
 If `gitops_workloads_repo_url` is not set, the Application has none of them and renders as before. kube-platform treats a missing parameter as empty.
 
-The module writes the `platform` Application at first boot. An existing cluster gets these parameters only when its node is rebuilt.
+The module writes the `platform` Application at first boot. An existing cluster gets these parameters only when its node is rebuilt. See "A change to the user data of a running node".
 
-Warning: on AWS, the control plane sets `user_data_replace_on_change`. If a cluster already has a workloads repo, this change alters its user data. The next apply then replaces the control-plane instance. On a single-node cluster that is the whole cluster. If you are not ready to rebuild, pin the previous module version.
+## Upgrade note: the Argo CD Applications are built with `yamlencode`
 
-On Proxmox, the user-data snippet is updated in place, so the VM is not expected to be replaced. The new parameters still reach the cluster only after a rebuild.
+The module now renders the `platform` and `workloads` Applications with `yamlencode`. The decoded Applications are the same, but the text is not. So every genesis node that writes the `platform` Application gets new user data, with or without a workloads repo. See "A change to the user data of a running node" for what that does to the node.
 
-## Upgrade warning: the Argo CD Applications are built with `yamlencode`
+## A change to the user data of a running node
 
-The module now renders the `platform` and `workloads` Applications with `yamlencode`. The decoded Applications are the same, but the text is not. So every genesis node that writes the `platform` Application gets new user data, with or without a workloads repo.
+This module renders the user data. Its callers decide what a change does to a node that already runs. Every input of this module is in the user data, so a change to any of them is a user data change. So is a module upgrade that changes the render.
 
-- On AWS, the next apply replaces the genesis control-plane instance. On a single-node cluster, that is the whole cluster.
-- On AWS, join nodes and workers are not affected.
-- On Proxmox, the VM references the snippet by id, so the VM is not expected to be replaced. This is not verified. Run a plan to confirm it.
+cloud-init reads the user data only at the first boot. A running node never applies a change to it.
 
-If you are not ready to rebuild, pin the previous module version.
+The control-plane modules (`aws-control-plane`, `proxmox-control-plane`) and `aws-static-node` treat a change the same way on both providers: the node keeps running. On AWS, the instance keeps the user data it booted with. On Proxmox, the snippet on storage gets the new content, but the VM is not replaced.
+
+To apply a change to a node, replace that node on purpose with `tofu apply -replace='<address>'`.
+
+`aws-node-pool` (an Auto Scaling group) and `proxmox-node-pool` work the same way for running nodes. An Auto Scaling group gives new user data only to the instances it launches later.
+
+### Replace a node on purpose
+
+> **Warning:** Replacing a single-node cluster loses the cluster. Replace one control-plane node at a time, and the first node last, in its own apply.
+
+1. Find the address of the node with `tofu state list`. Examples: `module.<name>.module.control_plane.aws_instance.control_plane_additional["1"]`, `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`, `module.<name>.module.control_plane.proxmox_virtual_environment_vm.control_plane_additional["1"]`.
+2. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+3. Delete the Kubernetes node: `kubectl delete node <node>`.
+4. Run `tofu apply -replace='<address>'`.
+5. Read the plan. Verify that it replaces only the node you named.
+6. Confirm the apply.
+7. Verify that the node is `Ready` and, for a control-plane node, that every etcd pod is `Running`.
+
+On Proxmox, also replace the firewall of an additional control-plane VM. See "Rolling to a new template" in the `proxmox-control-plane` README.
 
 ## `set_hostname` (for shared, byte-identical cloud-init payloads)
 
@@ -145,8 +161,8 @@ instance metadata before the bootstrap program starts RKE2. cluster-autoscaler a
 the AWS cloud controller manager find a node's instance through the providerID. The
 label is otherwise set by a cloud controller manager's node controller, which RKE2's
 is not here (`disable-cloud-controller`) and kube-platform's AWS one does not run.
-Off by default, since turning it on changes the payload and so replaces existing
-nodes.
+Off by default, since turning it on changes the payload of existing nodes. See
+"A change to the user data of a running node".
 
 ## Resources reserved for the node
 

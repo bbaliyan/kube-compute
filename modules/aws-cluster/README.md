@@ -73,7 +73,8 @@ keeping it within a stricter limit, such as Windows' 15, is up to you. `{zone}` 
 availability zone's name, so `control_plane_subnets` must be keyed by zone names such as
 `eu-west-1a`, not zone IDs. Autoscaled nodes keep the names AWS gives them.
 
-Changing a template renames the nodes, which replaces them.
+Changing a template changes the user data of the nodes. A running node keeps its old
+hostname and Kubernetes node name until it is replaced. See "User data changes".
 
 ### Boot scripts
 
@@ -84,7 +85,7 @@ example, join the node to a directory under its own name. Autoscaled nodes do no
 
 Each script is saved to a file and run with no input, so a command that reads from standard
 input cannot swallow the rest of it. The scripts become part of every node's user data, so
-changing them replaces the nodes. A script that fails is logged by cloud-init (`/var/log/cloud-init-output.log`) and does not stop the node
+a changed script runs only on a new node (see "User data changes"). A script that fails is logged by cloud-init (`/var/log/cloud-init-output.log`) and does not stop the node
 from joining the cluster. EC2 user data is limited to 16 KB, so keep the scripts short, or have
 them fetch the real work from somewhere the node can read.
 
@@ -155,7 +156,9 @@ cluster's own groups.
 
 Both find a node's instance through its providerID, so every node of an
 autoscaled cluster registers `aws:///<zone>/<instance-id>`. **Adding the first
-group, or removing the last, replaces the control plane and static nodes.**
+group, or removing the last, changes the user data of the control plane and static
+nodes.** A running node keeps its old registration until it is replaced, so replace
+those nodes on purpose. See "User data changes".
 
 ### Limits
 
@@ -234,9 +237,8 @@ pulls the power, and leave room inside it for the longest
 `terminationGracePeriodSeconds` among the pods that run here. Null disables the
 feature.
 
-It is on by default and adds files to every node's user data, so an existing
-cluster that upgrades to it replaces its control plane and static nodes, as any
-user data change does. Set `graceful_shutdown = null` to leave them as they are.
+It is on by default and adds files to every node's user data. A running node gets
+them only when it is replaced. See "User data changes".
 
 A spot interruption is only partly covered. The OS shutdown arrives at the end of
 the two-minute warning rather than at its start, so this is a backstop; draining on
@@ -251,9 +253,8 @@ need one, and rebooting them is left to whoever runs the cluster. RKE2's own pac
 are excluded from dnf, so system-upgrade-controller stays the only thing that changes
 the Kubernetes version.
 
-It is on by default and changes every node's user data, so an existing cluster that
-upgrades to it replaces its control plane and static nodes. Set
-`os_auto_updates = false` to leave them as they are.
+It is on by default and changes every node's user data. A running node gets it only
+when it is replaced. See "User data changes".
 
 ## Volumes on destroy
 
@@ -277,6 +278,43 @@ with `reclaimPolicy: Retain` carries the same tag and would be swept with the re
 Keep `orphan_volume_cleanup` on to delete data volumes tagged with the cluster's
 `ClusterName`. Callers of `aws-control-plane` without `aws-cluster` keep every
 data volume on destroy.
+
+## User data changes
+
+Most inputs end up in a node's user data: Helm parameters, names, boot scripts,
+`graceful_shutdown`, `os_auto_updates`, and whether the cluster autoscales. A
+module upgrade can change it too. cloud-init reads user data only at the first
+boot, so a running node never applies a change.
+
+A changed user data does not touch a running control-plane or static node. To apply
+it, replace the node on purpose. The addresses are:
+
+- First control-plane node: `module.<name>.module.control_plane.aws_instance.control_plane`
+- Other control-plane nodes: `module.<name>.module.control_plane.aws_instance.control_plane_additional["1"]`
+- Static node: `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`
+
+> **Warning:** Replacing a single-node cluster loses the cluster.
+
+For a control-plane node on a multi-node cluster, replace one node at a time:
+
+1. If the cluster has one node, stop. Replacing it loses the cluster.
+2. Select a node. Replace the additional nodes first, one at a time. Start with key `"1"`.
+3. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+4. Delete the Kubernetes node: `kubectl delete node <node>`.
+5. Replace the instance: `tofu apply -replace='<address>'`.
+6. Verify that the node is `Ready`: `kubectl get nodes`.
+7. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
+8. If another additional node needs the change, go back to step 2.
+
+> **Warning:** Replace the first node last, in its own apply.
+
+9. Do steps 3 to 7 for the first node.
+
+For a static node, drain it, delete the Kubernetes node, replace it, and verify that
+it is `Ready`.
+
+Autoscaled nodes are not affected: an Auto Scaling group gives new user data only to
+the instances it launches later.
 
 ## Testing
 

@@ -356,15 +356,14 @@ resource "aws_instance" "control_plane_additional" {
     tags                  = merge(local.common_tags, { Name = "${local.control_plane_names[each.key]}-root" })
   }
 
-  user_data_base64            = base64gzip(local.combined_user_data[each.key])
-  user_data_replace_on_change = true
+  user_data_base64 = base64gzip(local.combined_user_data[each.key])
 
   tags = merge(local.common_tags, { Name = local.control_plane_names[each.key] })
 
   depends_on = [aws_instance.control_plane, var.destroy_after]
 
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes = [ami, user_data_base64]
   }
 }
 
@@ -581,14 +580,13 @@ resource "aws_instance" "control_plane" {
     tags                  = merge(local.common_tags, { Name = "${local.control_plane_names["0"]}-root" })
   }
 
-  user_data_base64            = base64gzip(local.combined_user_data["0"])
-  user_data_replace_on_change = true # disposable nodes: replace on bootstrap change
+  user_data_base64 = base64gzip(local.combined_user_data["0"])
 
   tags = merge(local.common_tags, { Name = local.control_plane_names["0"] })
 
   lifecycle {
     # Don't replace on AlmaLinux 10 AMI patch drift; remove to deliberately upgrade.
-    ignore_changes = [ami]
+    ignore_changes = [ami, user_data_base64]
 
     precondition {
       condition     = var.control_plane_count == 1 || length(local.distinct_control_plane_azs) >= 3

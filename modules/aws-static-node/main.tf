@@ -206,13 +206,12 @@ resource "aws_instance" "node" {
     tags                  = merge(local.common_tags, { Name = "${local.node_names[each.key]}-root" })
   }
 
-  user_data_base64            = base64gzip(local.combined_user_data[each.key])
-  user_data_replace_on_change = true
+  user_data_base64 = base64gzip(local.combined_user_data[each.key])
 
   tags = merge(local.common_tags, { Name = local.node_names[each.key] })
 
   lifecycle {
     # Don't replace on AMI patch drift; remove to deliberately upgrade.
-    ignore_changes = [ami]
+    ignore_changes = [ami, user_data_base64]
   }
 }
