@@ -83,11 +83,6 @@ locals {
   # Whether the subnet comes from subnet_names, the only case where the module chooses one.
   chooses_subnet = var.subnet_id == null && length(local.subnet_name_candidates) > 0
 
-  # The subnet an existing control plane already sits in. A cluster stays there: the candidates are
-  # read afresh on every plan, and without this a subnet filling up after the cluster was placed
-  # would move it, replacing every node and leaving its EBS volumes in the zone it left.
-  existing_subnet_id = try(data.aws_instance.existing_control_plane[0].subnet_id, null)
-
   # For a new cluster, the first candidate in the caller's order with room for every node it
   # launches with. A subnet with some free addresses but too few would be chosen, then fail the
   # apply partway through.
@@ -97,7 +92,9 @@ locals {
     if data.aws_subnet.by_name[name].available_ip_address_count >= var.subnet_min_free_ips
   ][0], null)
 
-  named_subnet_id = local.existing_subnet_id != null ? local.existing_subnet_id : local.roomy_subnet_id
+  # input, not output: output is unknown until the first apply, and the plan of a new cluster
+  # must already know its subnet.
+  named_subnet_id = try(terraform_data.subnet_choice[0].input, null)
 
   # Network handle: explicit subnet_id → named subnet → first default-VPC subnet. Never creates fabric.
   # Wrapped in try so that resolving to nothing stays null: coalesce raises on all-null arguments,
@@ -178,6 +175,21 @@ locals {
     ClusterName = var.cluster_name
     ManagedBy   = "kube-compute"
   })
+}
+
+# The subnet chosen from subnet_names, kept in state so the cluster stays there. The candidates are
+# read afresh on every plan: without this, a subnet that filled up after the cluster was placed
+# would move it, replacing every node and leaving its EBS volumes in the zone it left. The choice
+# is held here rather than by ignore_changes on the instances, because the security groups' VPC,
+# the zone in node names and the subnet that workers follow all derive from it too.
+resource "terraform_data" "subnet_choice" {
+  count = local.chooses_subnet ? 1 : 0
+
+  input = local.roomy_subnet_id
+
+  lifecycle {
+    ignore_changes = [input]
+  }
 }
 
 # ---- Delivery: the agent token is mirrored into an SSM SecureString and fetched at

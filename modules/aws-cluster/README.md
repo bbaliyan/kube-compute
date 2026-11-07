@@ -104,12 +104,20 @@ static group can take its own `subnet_id` as a deliberate exception.
 across, so the candidates may sit in different zones. A new cluster goes into the
 first candidate with a free address for the control plane and every static node
 that shares its subnet. A candidate with some free addresses but too few is
-skipped, rather than chosen and failing the apply partway. Once the control plane
-exists, running or stopped, the cluster stays in its subnet: the choice is never
-made again, however full that subnet becomes or however the list changes. Moving
-a cluster means destroying it and applying again. Autoscaled workers are not
-counted, since they launch later; one that finds the subnet full fails to join
-until addresses free up.
+skipped, rather than chosen and failing the apply partway. The choice is kept in
+state, so the cluster stays in its subnet: no plan makes the choice again,
+however full that subnet becomes or however the list changes. Autoscaled
+workers are not counted, since they launch later; one that finds the subnet
+full fails to join until addresses free up.
+
+To choose again on purpose, replace the stored choice:
+
+```sh
+tofu apply -replace='module.<name>.module.control_plane.terraform_data.subnet_choice[0]'
+```
+
+If the new choice is a different subnet, the apply replaces every node. You can
+also destroy the cluster and apply again.
 
 Every node carries `kube-compute.io/node-group=<key>`: the static group's name, or
 the autoscaled role's, whatever the node's size. `node_taints` keeps other pods

@@ -192,7 +192,7 @@ variable "vpc_name" {
 }
 
 variable "subnet_names" {
-  description = "Candidate subnets by Name tag, in order of preference. A new cluster is placed in the first with a free address for the control plane and every static node without its own subnet_id; the whole cluster then stays in that subnet for good, even as it fills. Candidates may be in different availability zones. List form of subnet_name; see the aws-control-plane module."
+  description = "Candidate subnets by Name tag, in order of preference. A new cluster is placed in the first with a free address for the control plane and every static node without its own subnet_id; the whole cluster then stays in that subnet, even as it fills. To choose again on purpose, run tofu apply -replace='module.<name>.module.control_plane.terraform_data.subnet_choice[0]'; if the choice changes, every node is replaced. Candidates may be in different availability zones. List form of subnet_name; see the aws-control-plane module."
   type        = list(string)
   default     = null
 }
