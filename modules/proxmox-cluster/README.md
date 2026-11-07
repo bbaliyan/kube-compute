@@ -24,6 +24,8 @@ type, default, and validation — at this module's own top level. See
 `variables.tf` for the full list and field-by-field semantics; this module does not
 re-document them.
 
+`genesis_apply_manifests` is optional. It is a list of `{path, content}` manifests that the first control-plane node applies once, at bootstrap. Unset, nothing extra is applied.
+
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
 entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
 supplies: `cluster_name`, `cluster_agent_token`, the cluster-wide `cluster_dns_name`,

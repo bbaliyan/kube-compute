@@ -92,11 +92,12 @@ module "control_plane" {
   tsig_key_algorithm                = var.tsig_key_algorithm
   tsig_key_secret                   = var.tsig_key_secret
 
-  extra_server_manifests = var.extra_server_manifests
-  graceful_shutdown      = var.graceful_shutdown
-  os_auto_updates        = var.os_auto_updates
-  node_name_template     = var.control_plane_node_name_template
-  boot_scripts           = var.boot_scripts
+  genesis_apply_manifests = var.genesis_apply_manifests
+  extra_server_manifests  = var.extra_server_manifests
+  graceful_shutdown       = var.graceful_shutdown
+  os_auto_updates         = var.os_auto_updates
+  node_name_template      = var.control_plane_node_name_template
+  boot_scripts            = var.boot_scripts
 }
 
 module "node_pools" {

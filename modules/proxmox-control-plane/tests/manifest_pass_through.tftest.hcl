@@ -61,6 +61,13 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
     error_message = "a genesis_apply_manifests entry passed to this module must reach its own genesis node_bootstrap call's write_files"
   }
   assert {
+    condition = output.genesis_apply_manifest_paths == ["/opt/kube-compute/manifests/20-extra-manifest.yaml"] && alltrue([
+      for p in output.genesis_apply_manifest_paths :
+      contains([for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path], p)
+    ])
+    error_message = "genesis_apply_manifest_paths must list exactly the manifests written to the genesis node"
+  }
+  assert {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
       f.encoding == "gz+b64" &&
