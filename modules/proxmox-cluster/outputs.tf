@@ -45,24 +45,9 @@ output "wildcard_registration_enabled" {
   value       = module.control_plane.wildcard_registration_enabled
 }
 
-output "node_arch" {
-  description = "CPU architecture as declared by the operator."
-  value       = module.control_plane.node_arch
-}
-
 output "proxmox_node" {
   description = "Proxmox node the control-plane VM(s) run on."
   value       = module.control_plane.proxmox_node
-}
-
-output "ssh_user" {
-  description = "SSH user for guest access."
-  value       = module.control_plane.ssh_user
-}
-
-output "ssh_private_key_file" {
-  description = "Path to the SSH private key for guest access."
-  value       = module.control_plane.ssh_private_key_file
 }
 
 output "cluster_token" {
