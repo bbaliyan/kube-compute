@@ -6,7 +6,7 @@
 #   BASE_REF             commit the branch started from; empty skips commit-messages
 #   PROVIDERS            providers whose release mirror test-integration builds
 #   TF_PLUGIN_CACHE_DIR  where the platform keeps downloaded providers
-#   JOBS                 parallel jobs of test-commit (default: the CPUs it may use)
+#   JOBS                 parallel jobs of test-commit (default: the CPUs it may use, at most 16)
 #
 # test-commit runs its checks, each module and each test file in parallel,
 # and prints the output of one job at a time. For another target, pass -j.
@@ -22,9 +22,11 @@ BASE_REF  ?= $(shell git rev-parse --verify --quiet origin/main)
 PROVIDERS ?= proxmox aws
 
 # nproc ignores the CPU quota of a container (docker run --cpus), so read the
-# cgroup quota first. More jobs than CPUs only adds memory, not speed.
+# cgroup quota first. More jobs than CPUs only adds memory, not speed. The count
+# stops at 16: the longest module takes about a minute, and every job holds about
+# 400 MiB, so a machine with more cores gains nothing and risks its memory limit.
 JOBS ?= $(shell read -r quota period </sys/fs/cgroup/cpu.max 2>/dev/null && [ "$$quota" != max ] \
-	&& echo $$(( (quota + period - 1) / period )) || nproc)
+	&& cpus=$$(( (quota + period - 1) / period )) || cpus=$$(nproc); echo $$(( cpus > 16 ? 16 : cpus )))
 
 module_of = $(patsubst %/tests/,%,$(dir $(1)))
 
