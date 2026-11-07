@@ -215,11 +215,10 @@ run "worker_payload_skips_genesis_only_content" {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
       strcontains(base64decode(f.content), "NODE_ROLE='worker'") &&
-      strcontains(base64decode(f.content), "ARGOCD_NEEDED='0'") &&
-      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='0'")
+      strcontains(base64decode(f.content), "ARGOCD_NEEDED='0'")
       if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "a worker must be handed none of the genesis-only work: no Argo CD bootstrap, no CAPI wait, and a role the program gates the Cilium apply on"
+    error_message = "a worker must be handed none of the genesis-only work: no Argo CD bootstrap, and a role the program gates the Cilium apply on"
   }
   assert {
     condition = anytrue([

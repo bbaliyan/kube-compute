@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the generic genesis_apply_manifests/cluster_autoscaler_crd_wait_enabled
-# mechanism that replaced the old bespoke cluster_autoscaler_* toggle: disabled
-# (the default, empty list) must leave zero trace in the rendered payload;
-# populated must carry every write_files entry the caller listed plus the
-# CAPI-install/CRD-wait/ordered-apply steps in bootstrap.sh, server-init only.
+# Guards the generic genesis_apply_manifests mechanism: disabled (the default,
+# empty list) must leave zero trace in the rendered payload; populated must carry
+# every write_files entry the caller listed plus the ordered-apply step in
+# bootstrap.sh, server-init only.
 
 variables {
   cluster_name = "test"
@@ -24,18 +23,17 @@ run "genesis_apply_manifests_empty_by_default_leaves_no_trace" {
   assert {
     condition = !contains(
       [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     )
     error_message = "genesis_apply_manifests defaults to an empty list — nothing beyond the platform/workloads Applications should be written"
   }
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='0'") &&
       strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS=''")
       if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "with cluster_autoscaler_crd_wait_enabled = false (the default), the node must be told to wait for nothing and apply nothing"
+    error_message = "with genesis_apply_manifests empty (the default), the node must be told to apply nothing"
   }
 }
 
@@ -49,11 +47,10 @@ run "genesis_apply_manifests_renders_entries_and_apply_steps" {
     gitops_platform_enabled   = false
     gitops_workloads_repo_url = null
 
-    cluster_autoscaler_crd_wait_enabled = true
     genesis_apply_manifests = [
       {
-        path    = "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
-        content = "kind: Cluster\nname: test-autoscaler-workers\n"
+        path    = "/opt/kube-compute/manifests/20-extra-manifest.yaml"
+        content = "kind: Cluster\nname: test-extra\n"
       }
     ]
   }
@@ -61,7 +58,7 @@ run "genesis_apply_manifests_renders_entries_and_apply_steps" {
   assert {
     condition = contains(
       [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     )
     error_message = "a genesis_apply_manifests entry on a server-init node must be written via write_files"
   }
@@ -73,31 +70,27 @@ run "genesis_apply_manifests_renders_entries_and_apply_steps" {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
       f.encoding == "gz+b64" &&
-      f.content == base64gzip("kind: Cluster\nname: test-autoscaler-workers\n")
-      if f.path == "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      f.content == base64gzip("kind: Cluster\nname: test-extra\n")
+      if f.path == "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     ])
     error_message = "this module must not interpret genesis_apply_manifests content — it must be written back out verbatim, compressed but unaltered"
   }
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='1'") &&
-      strcontains(base64decode(f.content), "CAPI_INSTALL_BAKED='1'") &&
-      strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS='/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml'")
+      strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS='/opt/kube-compute/manifests/20-extra-manifest.yaml'")
       if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "the node must be told to install the baked capi-install.yaml, wait for CAPI's CRDs, and which manifests to apply in order"
+    error_message = "the node must be told which manifests to apply in order"
   }
   # The other half of that contract, in the program rather than the payload.
   assert {
     condition = alltrue([
       for line in [
-        "$KUBECTL apply -f \"$KC/manifests/capi-install.yaml\"",
-        "machinedeployments.cluster.x-k8s.io",
         "for manifest_path in $GENESIS_APPLY_MANIFESTS",
       ] : strcontains(local.bootstrap_program, line)
     ])
-    error_message = "the baked program must still install capi-install.yaml, wait for CAPI's CRDs, and apply the listed manifests in order"
+    error_message = "the baked program must still apply the listed manifests in order"
   }
 }
 
@@ -110,10 +103,9 @@ run "genesis_apply_manifests_worker_node_never_renders_the_genesis_apply" {
     registration_address      = "10.0.0.10"
     agent_token_fetch_command = "echo tok"
 
-    cluster_autoscaler_crd_wait_enabled = true
     genesis_apply_manifests = [
       {
-        path    = "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+        path    = "/opt/kube-compute/manifests/20-extra-manifest.yaml"
         content = "kind: Cluster\n"
       }
     ]
@@ -122,18 +114,17 @@ run "genesis_apply_manifests_worker_node_never_renders_the_genesis_apply" {
   assert {
     condition = !contains(
       [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     )
     error_message = "the genesis apply mechanism is server-init-only — a plain worker must never carry it, even with genesis_apply_manifests populated"
   }
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='0'") &&
       strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS=''")
       if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "a worker must never be handed the CAPI-install/CRD-wait work, even with genesis_apply_manifests populated"
+    error_message = "a worker must never be handed manifests to apply, even with genesis_apply_manifests populated"
   }
 }
 
@@ -170,7 +161,7 @@ run "set_hostname_false_omits_hostname_and_fqdn" {
 
   assert {
     condition     = !contains(keys(yamldecode(output.cloud_init_user_data)), "hostname")
-    error_message = "set_hostname = false must omit hostname entirely — a shared cloud-init payload (e.g. a CAPI MachineDeployment's replicas) cannot carry a node-unique hostname"
+    error_message = "set_hostname = false must omit hostname entirely — a shared cloud-init payload (e.g. an Auto Scaling group's instances) cannot carry a node-unique hostname"
   }
   assert {
     condition     = !contains(keys(yamldecode(output.cloud_init_user_data)), "fqdn")

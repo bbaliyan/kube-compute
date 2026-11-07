@@ -88,52 +88,15 @@ rendered copy of the program in `write_files`, which overwrites the baked one. T
 failing direction is a module newer than the image, and `runcmd` names it — it tests
 the program exists before running it and says what to rebuild.
 
-## Genesis-apply manifests (generic; cluster-autoscaler is the one caller today)
+## Genesis-apply manifests
 
-This module no longer knows anything about cluster-autoscaler, CAPI, or
-CAPMOX specifically. It exposes two generic inputs instead:
+`genesis_apply_manifests` is an ordered list of `{path, content}` entries. This module
+writes each one verbatim under `/opt/kube-compute/manifests/` with `write_files`.
+`bootstrap.sh` then runs `kubectl apply -f` on each one in order. This module does not
+interpret `content` at all.
 
-- `genesis_apply_manifests` — an ordered list of `{path, content}` entries,
-  written verbatim under `/opt/kube-compute/manifests/` via `write_files` and
-  `kubectl apply -f`'d in order by `bootstrap.sh`. This module does not
-  interpret `content` at all.
-- `cluster_autoscaler_crd_wait_enabled` — gates a `bootstrap.sh` block that
-  waits for cert-manager's CRDs (installed by the platform Argo CD
-  Application, applied just before this block), applies the kube-images-baked
-  `capi-install.yaml` (CAPI core + CAPMOX manifests — their webhook TLS is
-  provisioned via cert-manager `Issuer`/`Certificate` objects, a hard
-  dependency), and waits for CAPI's own core CRDs to be `Established`
-  **before** applying the `genesis_apply_manifests` entries. Despite the
-  name, it is not cluster-autoscaler-specific — any caller needing CAPI's
-  CRDs to exist first can use it.
-
-Both are genesis-only (`server-init` only). `genesis_apply_manifests` itself
-has no opinion on `gitops_platform_enabled`. `cluster_autoscaler_crd_wait_enabled`
-is different: it is NOT independent of `gitops_platform_enabled` — cert-manager
-only exists on this cluster because the platform Argo CD Application installs
-it, so setting this true with `gitops_platform_enabled = false` leaves
-`capi-install.yaml` with no way to ever succeed. `proxmox-cluster` (the one
-caller today) enforces this with its own
-`cluster_autoscaler_requires_platform_gitops` precondition.
-
-The one real caller today is `modules/proxmox-cluster`, which owns the
-`cluster_autoscaler_enabled` toggle and everything cluster-autoscaler-specific:
-it renders a `Cluster` + `Secret` (containing this same module's own shared
-worker `cloud_init_user_data`, via a second `node_bootstrap` instantiation
-with `set_hostname = false`) + `ProxmoxMachineTemplate` + `MachineDeployment`
-bundle (see that module's README/`templates/cluster-autoscaler-workers.yaml.tftpl`),
-passes it in as a single `genesis_apply_manifests` entry, and sets
-`cluster_autoscaler_crd_wait_enabled = var.cluster_autoscaler_enabled`. There
-is deliberately no `RKE2ConfigTemplate`/CAPRKE2 in that bundle — workers join
-via a plain `Secret` referenced by `Machine.spec.bootstrap.dataSecretName`,
-reusing this project's existing worker cloud-init logic.
-
-`proxmox-cluster` also merges a `clusterAutoscalerEnabled` Helm parameter
-into `platform_extra_helm_parameters` before it reaches this module — that
-gates kube-platform's own `cluster-autoscaler` Argo CD Application so it only
-syncs on clusters that opted in. This module has no hardcoded knowledge of
-that parameter; it's just another entry in the generic
-`platform_extra_helm_parameters` map.
+The input is genesis-only (`server-init` only). It does not depend on
+`gitops_platform_enabled`. No module in this repo sets it today.
 
 ## Workloads repo parameters on the `platform` Application
 
@@ -158,10 +121,9 @@ written into cloud-config from `node_name`, required because RKE2/kubelet
 registers the node by OS hostname. `set_hostname = false` omits both keys
 entirely — the only reason to do this is when the exact same rendered
 `cloud_init_user_data` is shared across multiple VMs that cannot each get
-their own render (e.g. every replica of a CAPI `MachineDeployment`, via one
-Secret referenced by `dataSecretName`). The VM platform's own per-instance
-metadata (e.g. CAPMOX/cloud-init's NoCloud `local-hostname`) is relied on
-instead to supply a unique hostname — **this specific assumption is
+their own render (e.g. every instance of an AWS Auto Scaling group, via one
+launch template). The VM platform's own per-instance
+metadata is relied on instead to supply a unique hostname — **this specific assumption is
 unverified against real hardware**, flagged explicitly as a first
 real-cluster check for any `set_hostname = false` caller.
 
@@ -267,7 +229,7 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
   for why the MIME combine lives there, not here). `aws-node-pool`'s ASG
   launch template calls this module with `set_hostname = false` since every
   pool member shares one rendered payload — same pattern as
-  `proxmox-cluster`'s cluster-autoscaler workers.
+  the same.
   `modules/azure-control-plane`/`modules/azure-node-pool` no longer exist as
   working code — reduced to placeholders (their prior implementation called
   this module's pre-cutover interface and was never validated against real

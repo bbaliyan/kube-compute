@@ -11,7 +11,7 @@
 # node.env (configuration) and secrets.env (tokens), both written by cloud-init.
 # It used to be rendered per node by Terraform's templatefile() and shipped in
 # user data, which cost ~9.6 KB there and again inside every worker group's
-# cloud-init in a CAPI bundle. EC2 allows 16384 decoded bytes of user data for
+# cloud-init in a worker bundle. EC2 allows 16384 decoded bytes of user data for
 # everything a node boots with, and three copies of this program did not fit.
 # Baking it is also what the images already do with the Cilium and Argo CD
 # renders, for the same reason on Proxmox, whose snippet cap is 1 MiB.
@@ -22,7 +22,7 @@
 # on the next line rather than half-configuring a node. An image NEWER than the
 # module needs no version check -- an older module ships its own rendered copy
 # of this file in write_files, which simply overwrites the baked one.
-BOOTSTRAP_CONTRACT=1
+BOOTSTRAP_CONTRACT=2
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
@@ -54,10 +54,6 @@ wait_until() {
     fi
     sleep 5
   done
-}
-
-cert_manager_webhook_has_endpoints() {
-  [ -n "$($KUBECTL get endpoints cert-manager-webhook -n cert-manager -o jsonpath='{.subsets}' 2>/dev/null)" ]
 }
 
 # Own IP, discovered on the node itself — the same probe the Ansible role's
@@ -354,66 +350,8 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
   fi
 fi
 
-if [ "$CAPI_CRD_WAIT_ENABLED" = "1" ]; then
-  # ---- CAPI/CAPMOX install + genesis-apply entries: genesis only, after the
-  #      node is Ready, and deliberately AFTER the Argo CD block above (not
-  #      before, as an earlier revision had it). clusterctl's generated
-  #      CAPI-core/CAPMOX manifests provision their webhook TLS via
-  #      cert-manager Issuer/Certificate objects (cert-manager.io/v1) — a hard
-  #      dependency, not cosmetic — and cert-manager itself is only installed
-  #      by the platform Argo CD Application applied just above (kube-platform's
-  #      wave-0 cert-manager-app.yaml). Applying capi-install.yaml before that
-  #      exists fails outright ("no matches for kind Issuer/Certificate in
-  #      version cert-manager.io/v1: ensure CRDs are installed first"),
-  #      confirmed on a real apply. The composing module (proxmox-cluster) is
-  #      expected to enforce cluster_autoscaler_enabled requires
-  #      gitops_platform_enabled via its own precondition — this block does not
-  #      re-check that, it only waits for the dependency that precondition
-  #      guarantees will eventually appear.
-  #
-  #      CRDs existing is NOT sufficient, though — confirmed on a second real
-  #      apply after the CRD-wait alone was in place: cert-manager's chart
-  #      installs the CRDs and starts the webhook Deployment in the same Helm
-  #      release, so the CRD-established/controller-not-ready race that
-  #      already bit the machinedeployments CRD wait below applies just as
-  #      much to cert-manager's own *validating* webhook — Issuer/Certificate
-  #      is gated by ValidatingWebhookConfiguration "webhook.cert-manager.io"
-  #      at admission time, and that failed with "no endpoints available for
-  #      service cert-manager-webhook" when the webhook Pod hadn't finished
-  #      starting yet, even though the CRDs themselves already existed. Wait
-  #      for the Service to actually have endpoints (a Pod passed its
-  #      readiness probe and got registered), not just for the CRD type to
-  #      exist. This script does not interpret GENESIS_APPLY_MANIFESTS'
-  #      content — the composing module decides what goes in the list; this is
-  #      just the ordered apply. ----
-  wait_until "cert-manager CRDs" $KUBECTL get crd certificates.cert-manager.io issuers.cert-manager.io || exit 1
-  wait_until "cert-manager-webhook endpoints" cert_manager_webhook_has_endpoints || exit 1
-  if [ "$CAPI_INSTALL_BAKED" = "1" ]; then
-    $KUBECTL apply -f "$KC/manifests/capi-install.yaml"
-    # Wait for CAPI's core CRDs to be Established before applying anything that
-    # references them — same "CRD-established vs controller-running" race this
-    # project already hit and fixed for Argo CD's own bootstrap (see the
-    # CoreDNS-wait / argocd-application-controller-wait loops above).
-    for _ in $(seq 1 60); do
-      if $KUBECTL get crd machinedeployments.cluster.x-k8s.io >/dev/null 2>&1; then
-        break
-      fi
-      sleep 2
-    done
-  else
-    # No baked capi-install.yaml on this image: Cluster API arrives as a platform
-    # Argo CD Application, so this waits rather than installs. The wait is far
-    # longer than the baked case because Argo CD has to sync the operator, the
-    # operator has to reconcile the providers, and every one of those pulls images.
-    wait_until "Cluster API CRDs" $KUBECTL get crd machinedeployments.cluster.x-k8s.io || exit 1
-  fi
-fi
-
-# Not nested inside the CAPI_CRD_WAIT_ENABLED block above: the genesis-apply
-# list is a generic mechanism, not autoscaler-specific, so its own apply must
-# not silently depend on that flag being set too — a caller passing manifests
-# with the wait flag left false would otherwise get them written to disk
-# (write_files runs unconditionally) but never applied, with no error anywhere.
+# The genesis-apply list is a generic mechanism: this script does not interpret
+# the content, it only applies the manifests in order.
 # Unquoted on purpose: this is a space-separated list that must word-split.
 # shellcheck disable=SC2086
 for manifest_path in $GENESIS_APPLY_MANIFESTS; do

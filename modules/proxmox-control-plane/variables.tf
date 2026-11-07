@@ -368,18 +368,12 @@ variable "tsig_key_secret" {
 }
 
 variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests forwarded verbatim to node-bootstrap's own identically-named variable — see that module's description for the full contract. proxmox-cluster is the actual owner of what goes in this list (e.g. the CAPI/CAPMOX cluster-autoscaler bundle, when cluster_autoscaler_enabled is true there); this module is a pure pass-through to its own genesis node_bootstrap call."
+  description = "Ordered list of {path, content} manifests forwarded verbatim to node-bootstrap's own identically-named variable — see that module's description for the full contract. This module is a pure pass-through to its own genesis node_bootstrap call."
   type = list(object({
     path    = string
     content = string
   }))
   default = []
-}
-
-variable "cluster_autoscaler_crd_wait_enabled" {
-  description = "Forwarded verbatim to node-bootstrap's own identically-named variable. Only meaningful when genesis_apply_manifests is non-empty and contains CAPI-dependent content."
-  type        = bool
-  default     = false
 }
 
 variable "extra_server_manifests" {

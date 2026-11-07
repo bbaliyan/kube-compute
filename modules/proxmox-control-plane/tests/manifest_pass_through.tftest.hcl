@@ -1,10 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the genesis_apply_manifests/cluster_autoscaler_crd_wait_enabled/
-# extra_server_manifests pass-throughs: this module owns none of the
-# cluster-autoscaler rendering itself (proxmox-cluster does, see that
-# module's own cluster_autoscaler tests) — it is a pure forward of these
-# variables into its own genesis module "node_bootstrap" call, the same
-# pattern every other node-bootstrap variable already gets here.
+# Guards the genesis_apply_manifests/extra_server_manifests pass-throughs: this
+# module is a pure forward of these variables into its own genesis module
+# "node_bootstrap" call, the same pattern every other node-bootstrap variable
+# already gets here.
 mock_provider "proxmox" {
   mock_resource "proxmox_download_file" {
     defaults = { id = "local:iso/bharat.img" }
@@ -37,9 +35,9 @@ run "defaults_produce_no_genesis_apply_content" {
   assert {
     condition = !contains(
       [for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path],
-      "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     )
-    error_message = "genesis_apply_manifests/cluster_autoscaler_crd_wait_enabled default to empty/false — nothing extra should be written"
+    error_message = "genesis_apply_manifests defaults to empty — nothing extra should be written"
   }
 }
 
@@ -47,11 +45,10 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
   command = apply
 
   variables {
-    cluster_autoscaler_crd_wait_enabled = true
     genesis_apply_manifests = [
       {
-        path    = "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
-        content = "kind: Cluster\nname: bharat-autoscaler-workers\n"
+        path    = "/opt/kube-compute/manifests/20-extra-manifest.yaml"
+        content = "kind: Cluster\nname: bharat-extra\n"
       }
     ]
   }
@@ -59,7 +56,7 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
   assert {
     condition = contains(
       [for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path],
-      "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     )
     error_message = "a genesis_apply_manifests entry passed to this module must reach its own genesis node_bootstrap call's write_files"
   }
@@ -67,20 +64,10 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
       f.encoding == "gz+b64" &&
-      f.content == base64gzip("kind: Cluster\nname: bharat-autoscaler-workers\n")
-      if f.path == "/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml"
+      f.content == base64gzip("kind: Cluster\nname: bharat-extra\n")
+      if f.path == "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     ])
     error_message = "the entry's content must be forwarded verbatim, unmodified by this module -- node-bootstrap writes a genesis manifest gz+b64, so byte equality against base64gzip is the check, HCL having no gunzip"
-  }
-  assert {
-    condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "CAPI_CRD_WAIT_ENABLED='1'") &&
-      strcontains(base64decode(f.content), "CAPI_INSTALL_BAKED='1'") &&
-      strcontains(base64decode(f.content), "GENESIS_APPLY_MANIFESTS='/opt/kube-compute/manifests/20-cluster-autoscaler-workers.yaml'")
-      if f.path == "/opt/kube-compute/node.env"
-    ])
-    error_message = "cluster_autoscaler_crd_wait_enabled = true must reach the node: the baked bootstrap program gates its CAPI install and CRD wait on these values"
   }
 }
 
