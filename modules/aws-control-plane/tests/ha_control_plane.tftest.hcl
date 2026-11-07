@@ -35,6 +35,13 @@ run "control_plane_count_3_places_one_per_az_behind_nlb" {
     error_message = "control_plane_count=3 must plan the genesis node plus 2 additional control-plane nodes"
   }
   assert {
+    condition = alltrue([
+      for node in concat([aws_instance.control_plane], values(aws_instance.control_plane_additional)) :
+      node.root_block_device[0].delete_on_termination
+    ])
+    error_message = "every control-plane node's root volume must be deleted with its instance"
+  }
+  assert {
     condition     = length(aws_lb.control_plane) == 1
     error_message = "control_plane_count=3 must plan an internal NLB"
   }

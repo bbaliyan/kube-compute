@@ -574,29 +574,6 @@ resource "aws_instance" "control_plane" {
 
   tags = merge(local.common_tags, { Name = local.control_plane_names["0"] })
 
-  # Marks every attached EBS volume (root + any CSI-provisioned data volumes)
-  # delete-on-termination right before the instance is destroyed, so AWS cleans them up
-  # without needing the API server/kubectl/SSM reachable at destroy time.
-  #
-  # Destroy-time provisioners may only reference `self` (Terraform rejects var./resource
-  # references here to avoid destroy-order cycles) — region is derived from
-  # self.availability_zone since var.aws_region isn't allowed.
-  provisioner "local-exec" {
-    when       = destroy
-    on_failure = continue
-    command    = <<-EOT
-      REGION="${substr(self.availability_zone, 0, length(self.availability_zone) - 1)}"
-      MAPPINGS=$(aws ec2 describe-volumes --region "$REGION" \
-        --filters Name=attachment.instance-id,Values=${self.id} \
-        --query 'Volumes[].Attachments[0].{DeviceName:Device,Ebs:{DeleteOnTermination:`true`}}' \
-        --output json)
-      if [ -n "$MAPPINGS" ] && [ "$MAPPINGS" != "[]" ]; then
-        aws ec2 modify-instance-attribute --region "$REGION" \
-          --instance-id ${self.id} --block-device-mappings "$MAPPINGS"
-      fi
-    EOT
-  }
-
   lifecycle {
     # Don't replace on AlmaLinux 10 AMI patch drift; remove to deliberately upgrade.
     ignore_changes = [ami]

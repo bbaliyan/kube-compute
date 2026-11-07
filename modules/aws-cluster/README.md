@@ -249,6 +249,9 @@ upgrades to it replaces its control plane and static nodes. Set
 
 ## Volumes on destroy
 
+A destroy deletes each node's root volume with its instance. It deletes no data
+volume by itself, including one still attached to a node.
+
 `orphan_volume_cleanup` deletes the cluster's dynamically provisioned EBS volumes
 once its nodes are gone. A destroy never deletes a PVC, so the CSI driver is never
 asked to release the volume behind it, and it is left detached and billed. Nothing
