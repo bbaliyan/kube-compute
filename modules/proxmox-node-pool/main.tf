@@ -211,6 +211,10 @@ resource "proxmox_virtual_environment_vm" "worker" {
   }
 
   lifecycle {
+    # A new template reaches only new or replaced workers, so one apply never
+    # rebuilds the whole pool. See the README for the rolling replacement.
+    ignore_changes = [clone]
+
     precondition {
       condition = length(compact([
         var.os_image_url != null ? "url" : "",

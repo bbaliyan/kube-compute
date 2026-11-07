@@ -73,6 +73,12 @@ the second node is healthy, and never in the same apply as the second node. Any 
 that answers at the peer IP can start a join attempt, so the peer IP must belong to the second
 control-plane node only.
 
+On Proxmox a new `proxmox_template_vm_id` reaches only new VMs and VMs that you replace, so one
+apply never rebuilds every node. Replace the nodes one at a time: the additional control-plane
+nodes first, the first node last and in its own apply, then the workers. The
+`proxmox-control-plane` and `proxmox-node-pool` READMEs give the steps. The AWS control plane
+also keeps its nodes on a new AMI.
+
 ### Endpoint options (AWS)
 
 `endpoint_mode` picks how joining nodes reach the registration endpoint: `loadbalancer`

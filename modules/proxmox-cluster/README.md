@@ -193,6 +193,14 @@ stopping it: 180 seconds by default when the host shuts down. Null turns it off.
 [`node-bootstrap`'s README](../node-bootstrap/README.md#graceful-shutdown). Like
 `os_auto_updates`, it reaches a node only when that node is rebuilt.
 
+## New template
+
+A new `proxmox_template_vm_id`, for the control plane or for a pool, reaches only new VMs
+and VMs that you replace. An apply does not replace the existing nodes. To roll them one at
+a time, see "Rolling to a new template" in the
+[`proxmox-control-plane`](../proxmox-control-plane/README.md#rolling-to-a-new-template) and
+[`proxmox-node-pool`](../proxmox-node-pool/README.md#rolling-to-a-new-template) READMEs.
+
 ## Node names
 
 `control_plane_node_name_template` names the control-plane VMs, and each `node_pools`
