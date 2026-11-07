@@ -266,6 +266,10 @@ instances after Terraform has stopped waiting on it. Whoever runs the destroy ne
 Turn it off where a volume is meant to outlive its cluster: a PersistentVolume kept
 with `reclaimPolicy: Retain` carries the same tag and would be swept with the rest.
 
+Keep `orphan_volume_cleanup` on to delete data volumes tagged with the cluster's
+`ClusterName`. Callers of `aws-control-plane` without `aws-cluster` keep every
+data volume on destroy.
+
 ## Testing
 
     cd modules/aws-cluster
