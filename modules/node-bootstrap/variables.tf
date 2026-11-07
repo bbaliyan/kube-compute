@@ -202,8 +202,8 @@ variable "platform_extra_helm_parameters" {
 variable "platform_helm_values_object" {
   # any, not map(any): map(any) forces every top-level value to unify to one
   # common type, which breaks the moment two callers' objects have
-  # genuinely different-shaped attributes (e.g. cluster-media's
-  # gpuOperatorHelmValues vs. storageProvisionerHelmValues) -- "all map
+  # genuinely different-shaped attributes (e.g. a list value next to
+  # a nested object) -- "all map
   # elements must have the same type". Stays `any`; the null-fallback in
   # locals.platform_values_object uses try(), not a `? :` ternary or
   # coalesce(), specifically because try() is the one HCL construct whose
