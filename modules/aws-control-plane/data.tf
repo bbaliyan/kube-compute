@@ -51,23 +51,6 @@ data "aws_route53_zone" "private" {
   private_zone = true
 }
 
-# This cluster's control plane, if it already exists, running or stopped. Found by its tags rather
-# than from state, so a cluster placed by an older version of this module is found too.
-data "aws_instances" "existing_control_plane" {
-  count = local.chooses_subnet ? 1 : 0
-
-  instance_tags = {
-    ClusterName = var.cluster_name
-    Name        = "kube-compute-${var.cluster_name}"
-  }
-  instance_state_names = ["pending", "running", "stopping", "stopped"]
-}
-
-data "aws_instance" "existing_control_plane" {
-  count       = length(try(data.aws_instances.existing_control_plane[0].ids, [])) > 0 ? 1 : 0
-  instance_id = sort(data.aws_instances.existing_control_plane[0].ids)[0]
-}
-
 # The subnet the node launches into. Also yields the VPC ID for the module-owned security group.
 data "aws_subnet" "selected" {
   id = local.effective_subnet_id
