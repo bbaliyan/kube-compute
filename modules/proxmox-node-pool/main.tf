@@ -334,11 +334,14 @@ resource "proxmox_virtual_environment_firewall_options" "worker" {
   # in-place update — bpg/proxmox's firewall_rules resource then fails
   # ("could not find rule with signature ... during repositioning") trying to
   # reposition rules it remembers from the old VM against the new VM's
-  # actually-empty ruleset. See proxmox-control-plane's identical lifecycle
+  # actually-empty ruleset. See proxmox-control-plane's similar lifecycle
   # block for the full explanation; confirmed against a real apply.
+  #
+  # The trigger is this worker's own id: the id changes only on replacement,
+  # so an in-place update or another worker's replacement leaves it alone.
   lifecycle {
     replace_triggered_by = [
-      proxmox_virtual_environment_vm.worker,
+      proxmox_virtual_environment_vm.worker[each.key].id,
     ]
   }
 }
@@ -351,7 +354,7 @@ resource "proxmox_virtual_environment_firewall_rules" "worker" {
 
   lifecycle {
     replace_triggered_by = [
-      proxmox_virtual_environment_vm.worker,
+      proxmox_virtual_environment_vm.worker[each.key].id,
     ]
   }
 
