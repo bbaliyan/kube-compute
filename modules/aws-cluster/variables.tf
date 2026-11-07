@@ -412,7 +412,11 @@ variable "orphan_volume_cleanup" {
     platform chart must tag volumes with it (kube-platform's aws-ebs provisioner does).
 
     Turn it off where a volume is meant to outlive its cluster: a PersistentVolume kept with
-    reclaimPolicy Retain is tagged the same as any other and would be swept.
+    reclaimPolicy Retain is tagged the same as any other and would be swept. With it off, a
+    destroy deletes only the nodes' root volumes and keeps every data volume, attached or not.
+
+    Keep it on to delete data volumes tagged with the cluster's ClusterName. Callers of
+    aws-control-plane without aws-cluster keep every data volume on destroy.
   EOT
   type        = bool
   default     = true

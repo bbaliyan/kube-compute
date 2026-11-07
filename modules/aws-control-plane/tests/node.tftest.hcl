@@ -31,6 +31,10 @@ run "node_resources" {
     error_message = "root volume type must honor the default (gp3)"
   }
   assert {
+    condition     = aws_instance.control_plane.root_block_device[0].delete_on_termination
+    error_message = "the root volume must be deleted with its instance"
+  }
+  assert {
     condition = contains(concat(
       [for r in aws_vpc_security_group_ingress_rule.node : r.to_port],
       [for r in aws_vpc_security_group_ingress_rule.node_extra : r.to_port]
