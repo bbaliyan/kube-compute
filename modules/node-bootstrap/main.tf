@@ -72,8 +72,10 @@ locals {
   effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
   genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
-  # Rendered by templatefile()/yamlencode() here, not on the node — keeps the
-  # node free of any templating engine.
+  # Rendered by yamlencode() here, not on the node — keeps the node free of
+  # any templating engine. Both Argo CD Applications are built as objects and
+  # encoded, so a caller's value can hold any character without changing the
+  # structure around it.
   #
   # try(), not a `? :` ternary or coalesce() -- see the note on the
   # platform_helm_values_object variable declaration. try()'s own arguments
@@ -95,14 +97,6 @@ locals {
     var.workloads_helm_values_object != null
   )
 
-  # kube-platform's bootstrap chart reads a clusterAutoscalerEnabled Helm
-  # value to decide whether to deploy the cluster-autoscaler Argo CD
-  # Application (bootstrap/templates/cluster-autoscaler-app.yaml). This
-  # module doesn't own that decision (proxmox-cluster does), so it's not a
-  # hardcoded parameter here — the composing module passes it through the
-  # generic platform_extra_helm_parameters map instead. Omitting it falls
-  # back to kube-platform's own chart default (false).
-  #
   # Multi-source Application: the second source (ref: values, no chart)
   # makes platform-versions/values.yaml available to the first source's
   # `helm.valueFiles`, so bootstrap's chart templates (cilium-app.yaml,
@@ -111,99 +105,91 @@ locals {
   # .Values.k8sVersion. This is what makes bumping platform-versions/values.yaml
   # alone enough to roll Cilium/Argo CD forward kube-platform-wide, with no
   # per-cluster apply and no editing the Application templates themselves.
-  platform_app_yaml = <<-EOT
-    apiVersion: argoproj.io/v1alpha1
-    kind: Application
-    metadata:
-      name: platform
-      namespace: argocd
-    spec:
-      project: default
-      sources:
-        - repoURL: ${local.effective_gitops_platform_repo_url}
-          targetRevision: ${local.effective_gitops_platform_revision}
-          path: bootstrap
-          helm:
-            valueFiles:
-              - $values/platform/platform-versions/values.yaml
-            parameters:
-              - name: platformRepoURL
-                value: "${local.effective_gitops_platform_repo_url}"
-              - name: platformRevision
-                value: "${local.effective_gitops_platform_revision}"
-              - name: certMode
-                value: "${var.cert_mode}"
-              - name: clusterName
-                value: "${var.cluster_name}"
-              - name: clusterFqdnSuffix
-                value: "${var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : ""}"
-              - name: trustedCaPemB64
-                value: "${base64encode(var.trusted_ca_pem != null ? var.trusted_ca_pem : "")}"
-    %{~if local.workloads_app_enabled~}
-              - name: workloadsRepoURL
-                value: "${local.effective_gitops_workloads_repo_url}"
-              - name: workloadsRevision
-                value: "${var.gitops_workloads_revision}"
-              - name: workloadsPath
-                value: "${var.gitops_workloads_path}"
-    %{~endif~}
-    %{~for name, val in var.platform_extra_helm_parameters~}
-              - name: ${name}
-                value: "${val}"
-    %{~endfor~}
-            valuesObject:
-              ${indent(14, yamlencode(local.platform_values_object))}
-        - repoURL: ${local.effective_gitops_platform_repo_url}
-          targetRevision: ${local.effective_gitops_platform_revision}
-          ref: values
-      destination:
-        server: https://kubernetes.default.svc
-        namespace: argocd
-      syncPolicy:
-        automated: { prune: true, selfHeal: true }
-        syncOptions: ["CreateNamespace=true"]
-  EOT
+  platform_helm_parameters = concat(
+    [
+      { name = "platformRepoURL", value = local.effective_gitops_platform_repo_url },
+      { name = "platformRevision", value = local.effective_gitops_platform_revision },
+      { name = "certMode", value = var.cert_mode },
+      { name = "clusterName", value = var.cluster_name },
+      { name = "clusterFqdnSuffix", value = var.cluster_fqdn_suffix != null ? var.cluster_fqdn_suffix : "" },
+      { name = "trustedCaPemB64", value = base64encode(var.trusted_ca_pem != null ? var.trusted_ca_pem : "") },
+    ],
+    local.workloads_app_enabled ? [
+      { name = "workloadsRepoURL", value = local.effective_gitops_workloads_repo_url },
+      { name = "workloadsRevision", value = var.gitops_workloads_revision },
+      { name = "workloadsPath", value = var.gitops_workloads_path },
+    ] : [],
+    [for name, val in var.platform_extra_helm_parameters : { name = name, value = val }],
+  )
+
+  platform_app = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata   = { name = "platform", namespace = "argocd" }
+    spec = {
+      project = "default"
+      sources = [
+        {
+          repoURL        = local.effective_gitops_platform_repo_url
+          targetRevision = local.effective_gitops_platform_revision
+          path           = "bootstrap"
+          helm = {
+            valueFiles   = ["$values/platform/platform-versions/values.yaml"]
+            parameters   = local.platform_helm_parameters
+            valuesObject = local.platform_values_object
+          }
+        },
+        {
+          repoURL        = local.effective_gitops_platform_repo_url
+          targetRevision = local.effective_gitops_platform_revision
+          ref            = "values"
+        },
+      ]
+      destination = local.argocd_app_destination
+      syncPolicy  = local.argocd_app_sync_policy
+    }
+  }
+
+  platform_app_yaml = yamlencode(local.platform_app)
+
+  argocd_app_destination = { server = "https://kubernetes.default.svc", namespace = "argocd" }
+  argocd_app_sync_policy = {
+    automated   = { prune = true, selfHeal = true }
+    syncOptions = ["CreateNamespace=true"]
+  }
 
   # Deliberately independent of the platform Application: no shared app-of-apps
   # parent, no sync-wave ordering against it. Eventual consistency — if a
   # workload needs something platform provides, Argo CD's own automated
   # selfHeal/retry converges it once platform catches up.
-  workloads_app_yaml = <<-EOT
-    apiVersion: argoproj.io/v1alpha1
-    kind: Application
-    metadata:
-      name: workloads
-      namespace: argocd
-    spec:
-      project: default
-      source:
-        repoURL: ${local.effective_gitops_workloads_repo_url}
-        targetRevision: ${var.gitops_workloads_revision}
-        path: ${var.gitops_workloads_path}
-    %{~if local.workloads_helm_configured~}
-        helm:
-    %{~if length(var.workloads_extra_helm_parameters) > 0~}
-          parameters:
-    %{~for name, val in var.workloads_extra_helm_parameters~}
-            - name: ${name}
-              value: "${val}"
-    %{~endfor~}
-    %{~endif~}
-    %{~if var.workloads_helm_values_object != null~}
-          valuesObject:
-            ${indent(12, yamlencode(local.workloads_values_object))}
-    %{~endif~}
-    %{~else~}
-        directory:
-          recurse: true
-    %{~endif~}
-      destination:
-        server: https://kubernetes.default.svc
-        namespace: argocd
-      syncPolicy:
-        automated: { prune: true, selfHeal: true }
-        syncOptions: ["CreateNamespace=true"]
-  EOT
+  workloads_helm = merge(
+    length(var.workloads_extra_helm_parameters) > 0 ? {
+      parameters = [for name, val in var.workloads_extra_helm_parameters : { name = name, value = val }]
+    } : {},
+    var.workloads_helm_values_object != null ? { valuesObject = local.workloads_values_object } : {},
+  )
+
+  workloads_app = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata   = { name = "workloads", namespace = "argocd" }
+    spec = {
+      project = "default"
+      source = merge(
+        {
+          repoURL        = local.effective_gitops_workloads_repo_url
+          targetRevision = var.gitops_workloads_revision
+          path           = var.gitops_workloads_path
+        },
+        local.workloads_helm_configured ? { helm = local.workloads_helm } : {},
+        local.workloads_helm_configured ? {} : { directory = { recurse = true } },
+      )
+      destination = local.argocd_app_destination
+      syncPolicy  = local.argocd_app_sync_policy
+    }
+  }
+
+  workloads_app_yaml = yamlencode(local.workloads_app)
 
   # Ported from registries.yaml.j2, including the containerd TLS pin to the
   # same anchors path the trusted CA is written to.
