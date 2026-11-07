@@ -474,6 +474,13 @@ variable "boot_scripts" {
   default     = []
 }
 
+variable "replace_on_user_data_change" {
+  description = "What a change to a control-plane node's user data does to its running VM. false (default): the VM keeps running with the user data it booted with; to apply the change, replace the VM on purpose with tofu apply -replace=<VM address>. true: the next apply replaces the control-plane VMs whose user data changed; on a single-node cluster that is the whole cluster. Turning this on replaces only the VMs whose user data changed while it was off. Turning it off replaces no VM, unless the same apply changes their user data. node_pools workers are not affected. See the proxmox-control-plane module."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "cloud_init_upload_mode" {
   description = "How the provider copies cloud-init snippet files to the Proxmox host over SSH. Null keeps the provider default, 'stream', which opens a shell and tries sudo. Use 'sftp' when the SSH user is limited to the SFTP subsystem: it needs write permission on the snippets directory and does not use sudo. Has no effect on ISO or image downloads, which use the API."
   type        = string

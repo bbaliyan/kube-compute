@@ -138,9 +138,34 @@ Bootstrap runs asynchronously after `tofu apply` returns — tail
 is made between the template's contents and `k8s_version`/`cilium_version`/
 `argocd_version`; the template's self-describing name is the documentation.
 
+## A change to the user data of a running node
+
 Changing any of `node-bootstrap`'s inputs (a rotated token, a new registry mirror, a
-different platform revision) after a node's first boot has no effect on that
-already-running node — cloud-init only ever reads its user-data once, on first boot,
-and the rendered snippet file is stable/reused rather than triggering a VM
-replacement. Day-2 config changes need a new node (replace), not a `tofu apply` on the
-existing one.
+different platform revision) after a node's first boot does not replace the VM by
+default. The snippet on storage gets the new content, and the VM keeps the file id it
+references. cloud-init reads user data only at the first boot, so the running node
+does not apply the change.
+
+To apply a change to a node, replace the VM on purpose, one at a time. Follow steps 3
+to 12 of "Rolling to a new template": they replace an additional VM with its firewall,
+and the first VM last. The replaced VM boots with the current snippet.
+
+Warning: on a multi-node cluster, `replace_on_user_data_change = true` replaces all
+VMs in one apply when a change is in every VM's user data, such as a new registry
+mirror. The cluster then loses etcd quorum. On a multi-node cluster, keep the default
+and replace the VMs one at a time.
+
+`replace_on_user_data_change = true` replaces VMs at every user data change instead:
+
+- Each VM is replaced, with its firewall, when its own user data changes. A Helm
+  parameter is in the first VM's user data only.
+- On a single-node cluster, a replacement is the whole cluster.
+- Turning it on replaces only the VMs whose user data changed while it was off.
+- Turning it off replaces no VM, unless the same apply changes their user data.
+
+The module records a hash of each VM's user data in `terraform_data.genesis_user_data`
+and `terraform_data.additional_user_data`. The hash changes only while the input is on.
+
+Before this input existed, a snippet change left the VMs alone, as the default still
+does. The first apply after an upgrade to this version replaces every control-plane
+VM once, because it creates the hash records.

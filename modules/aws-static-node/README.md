@@ -109,3 +109,22 @@ AMI lookup on it, so an arm64 platform node and an x86_64 dedicated-workload nod
 share one `os_image_name` value as long as its architecture segment is a
 wildcard. Without that filter, a wildcard would let either build satisfy either
 node.
+
+## A change to the user data of a running node
+
+A change to any input in the user data, such as `node_labels`, does not replace a
+running node by default. The instance keeps the user data it booted with. To apply
+the change, replace the node on purpose:
+
+```sh
+tofu apply -replace='module.<name>.aws_instance.node["1"]'
+```
+
+`replace_on_user_data_change = true` replaces each node when its user data changes.
+Turning it on replaces only the nodes whose user data changed while it was off.
+Turning it off replaces no node, unless the same apply changes their user data.
+
+Before this input existed, every user data change replaced the nodes. The default
+is now to keep them. The first apply after an upgrade to this version replaces
+every node of the group once, because it creates the hash records in
+`terraform_data.user_data`.

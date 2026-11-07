@@ -165,6 +165,13 @@ variable "os_auto_updates" {
   default     = true
 }
 
+variable "replace_on_user_data_change" {
+  description = "What a change to a node's user data (any input rendered into its cloud-init, such as node_labels) does to a running node of this group. false (default): the node keeps running with the user data it booted with; to apply the change, replace the node on purpose with tofu apply -replace=<instance address>. true: the next apply replaces each node whose user data changed. Turning this on replaces only the nodes whose user data changed while it was off. Turning it off replaces no node, unless the same apply changes their user data."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "destroy_after" {
   description = "Something that must outlive this module's nodes at destroy. It orders their destruction and nothing else, so it is never read as a value."
   type        = string

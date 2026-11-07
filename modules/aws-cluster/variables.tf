@@ -448,3 +448,10 @@ variable "boot_scripts" {
   type        = list(string)
   default     = []
 }
+
+variable "replace_on_user_data_change" {
+  description = "What a change to a node's user data does to running control-plane and static nodes. false (default): they keep running with the user data they booted with; to apply the change, replace a node on purpose with tofu apply -replace=<instance address>. true: the next apply replaces the nodes whose user data changed; on a single-node cluster that is the whole cluster. Turning this on replaces only the nodes whose user data changed while it was off. Turning it off replaces no node, unless the same apply changes their user data. Autoscaled nodes are not affected: a launch template change reaches only new instances. See the aws-control-plane and aws-static-node modules."
+  type        = bool
+  default     = false
+  nullable    = false
+}

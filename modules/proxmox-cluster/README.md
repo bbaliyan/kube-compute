@@ -223,6 +223,15 @@ Unset, a node's cloud-init is
 unchanged. The scripts are part of the node's first-boot cloud-init, and have not been
 tried on a real Proxmox host.
 
+## User data changes
+
+A change to an input in a node's cloud-init does not replace its VM by default. The
+running node does not apply the change. To apply it, replace the VM on purpose with
+`tofu apply -replace`. `replace_on_user_data_change = true` replaces the control-plane
+VMs at every change instead. See proxmox-control-plane's "A change to the user data of a
+running node" for the addresses, the firewall of an additional VM and the etcd warning.
+`node_pools` workers keep running in both cases.
+
 ## Existing standalone modules remain fully supported
 
 `proxmox-control-plane` and `proxmox-node-pool` are unchanged and continue to work

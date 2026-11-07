@@ -98,6 +98,8 @@ module "control_plane" {
   os_auto_updates         = var.os_auto_updates
   node_name_template      = var.control_plane_node_name_template
   boot_scripts            = var.boot_scripts
+
+  replace_on_user_data_change = var.replace_on_user_data_change
 }
 
 module "node_pools" {

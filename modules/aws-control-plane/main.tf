@@ -331,6 +331,22 @@ module "node_bootstrap_additional" {
   # first server only — node-bootstrap also enforces this at the task level.
 }
 
+# Used by replace_on_user_data_change: a node is replaced when the input of its
+# entry changes. ignore_changes freezes input, so with the opt-in off a new hash
+# never reaches it. With the opt-in on, triggers_replace carries the hash, and a
+# new hash recreates the entry with the new input. Turning the opt-in on or off
+# also recreates the entry, but its input changes only if the user data did.
+resource "terraform_data" "user_data" {
+  for_each = toset(concat(["0"], keys(module.node_bootstrap_additional)))
+
+  input            = sha256(local.combined_user_data[each.key])
+  triggers_replace = var.replace_on_user_data_change ? sha256(local.combined_user_data[each.key]) : null
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
 resource "aws_instance" "control_plane_additional" {
   for_each = var.control_plane_count > 1 && length(local.control_plane_subnet_ids) > 0 ? { for i in range(1, var.control_plane_count) : tostring(i) => local.control_plane_subnet_ids[i] } : {}
 
@@ -356,15 +372,15 @@ resource "aws_instance" "control_plane_additional" {
     tags                  = merge(local.common_tags, { Name = "${local.control_plane_names[each.key]}-root" })
   }
 
-  user_data_base64            = base64gzip(local.combined_user_data[each.key])
-  user_data_replace_on_change = true
+  user_data_base64 = base64gzip(local.combined_user_data[each.key])
 
   tags = merge(local.common_tags, { Name = local.control_plane_names[each.key] })
 
   depends_on = [aws_instance.control_plane, var.destroy_after]
 
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes       = [ami, user_data_base64]
+    replace_triggered_by = [terraform_data.user_data[each.key].input]
   }
 }
 
@@ -581,14 +597,15 @@ resource "aws_instance" "control_plane" {
     tags                  = merge(local.common_tags, { Name = "${local.control_plane_names["0"]}-root" })
   }
 
-  user_data_base64            = base64gzip(local.combined_user_data["0"])
-  user_data_replace_on_change = true # disposable nodes: replace on bootstrap change
+  user_data_base64 = base64gzip(local.combined_user_data["0"])
 
   tags = merge(local.common_tags, { Name = local.control_plane_names["0"] })
 
   lifecycle {
     # Don't replace on AlmaLinux 10 AMI patch drift; remove to deliberately upgrade.
-    ignore_changes = [ami]
+    # A user data change replaces the node only through replace_on_user_data_change.
+    ignore_changes       = [ami, user_data_base64]
+    replace_triggered_by = [terraform_data.user_data["0"].input]
 
     precondition {
       condition     = var.control_plane_count == 1 || length(local.distinct_control_plane_azs) >= 3

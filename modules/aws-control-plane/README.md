@@ -34,6 +34,45 @@ therefore stays out of the payload: the bootstrap program is baked into the node
 and with `trusted_ca_in_image` a CA is too. A precondition on the instance names those
 levers when the limit is exceeded.
 
+### A change to the user data of a running node
+
+A change to any input in the user data, such as a Helm parameter of the platform
+Application, does not replace a running node by default. The instance ignores the
+change and keeps the user data it booted with. cloud-init reads user data only at
+the first boot, so the node would not apply the change anyway.
+
+To apply a change to a node, replace it on purpose:
+
+```sh
+tofu apply -replace='module.<name>.aws_instance.control_plane'
+tofu apply -replace='module.<name>.aws_instance.control_plane_additional["1"]'
+```
+
+The replaced node boots with the current user data. Replace one node at a time, so
+that etcd keeps its quorum.
+
+Warning: on a multi-node cluster, `replace_on_user_data_change = true` replaces all
+nodes in one apply when a change is in every node's user data, such as a new
+registry mirror. The cluster then loses etcd quorum. On a multi-node cluster, keep
+the default and replace the nodes one at a time.
+
+`replace_on_user_data_change = true` replaces nodes at every user data change
+instead:
+
+- Each node is replaced when its own user data changes. A Helm parameter is in the
+  first node's user data only.
+- On a single-node cluster, a replacement is the whole cluster.
+- Turning it on replaces only the nodes whose user data changed while it was off.
+- Turning it off replaces no node, unless the same apply changes their user data.
+
+The module records a hash of each node's user data in `terraform_data.user_data`.
+The hash changes only while the input is on.
+
+Before this input existed, every user data change replaced the nodes. The default
+is now to keep them. The first apply after an upgrade to this version replaces
+every control-plane node once, because it creates the hash records. See
+node-bootstrap's "A change to the user data of a running node" for both providers.
+
 ## Scope
 
 The module provisions the **node and only what is intrinsic to it** — the EC2 instance, its

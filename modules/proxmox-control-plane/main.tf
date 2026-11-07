@@ -465,7 +465,8 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     # A new template reaches only new or replaced VMs, so one apply never
     # rebuilds every control-plane node and etcd member. See the README for
     # the rolling replacement.
-    ignore_changes = [clone]
+    ignore_changes       = [clone]
+    replace_triggered_by = [terraform_data.genesis_user_data.input]
 
     precondition {
       condition = length(compact([
@@ -566,12 +567,43 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
     network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data[each.key].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
   }
 
-  # Same reason as the genesis VM above.
   lifecycle {
-    ignore_changes = [clone]
+    # Same reason as the genesis VM above.
+    ignore_changes       = [clone]
+    replace_triggered_by = [terraform_data.additional_user_data[each.key].input]
   }
 
   depends_on = [proxmox_virtual_environment_vm.control_plane]
+}
+
+# Used by replace_on_user_data_change: a VM is replaced when the input of its
+# entry changes. ignore_changes freezes input, so with the opt-in off a new hash
+# never reaches it. With the opt-in on, triggers_replace carries the hash, and a
+# new hash recreates the entry with the new input. Turning the opt-in on or off
+# also recreates the entry, but its input changes only if the user data did.
+#
+# Two resources, because the additional VMs' user data depends on the first VM:
+# one resource would make the first VM depend on itself.
+resource "terraform_data" "genesis_user_data" {
+  input            = sha256(local.node_init_data_genesis)
+  triggers_replace = var.replace_on_user_data_change ? sha256(local.node_init_data_genesis) : null
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
+# Key "0" is there for the firewall resources, which are keyed like the VMs.
+# Its input never changes; the first VM's firewall follows the VM itself.
+resource "terraform_data" "additional_user_data" {
+  for_each = toset(concat(["0"], keys(module.node_bootstrap_additional)))
+
+  input            = sha256(lookup(local.node_init_data_additional, each.key, ""))
+  triggers_replace = var.replace_on_user_data_change ? sha256(lookup(local.node_init_data_additional, each.key, "")) : null
+
+  lifecycle {
+    ignore_changes = [input]
+  }
 }
 
 locals {
@@ -628,9 +660,12 @@ resource "proxmox_virtual_environment_firewall_options" "control_plane" {
   # one) won't auto-recreate this shared resource — acceptable for now since
   # the bug this fixes is far more common (any image/template rebuild) than
   # replacing one specific additional CP node in isolation.
+  # additional_user_data has an entry for every key here, so it closes that gap
+  # for the replacements that replace_on_user_data_change makes.
   lifecycle {
     replace_triggered_by = [
       proxmox_virtual_environment_vm.control_plane,
+      terraform_data.additional_user_data[each.key].input,
     ]
   }
 }
@@ -646,6 +681,7 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
   lifecycle {
     replace_triggered_by = [
       proxmox_virtual_environment_vm.control_plane,
+      terraform_data.additional_user_data[each.key].input,
     ]
   }
 
