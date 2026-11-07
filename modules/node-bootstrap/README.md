@@ -120,23 +120,25 @@ This module renders the user data. Its callers decide what a change does to a no
 
 cloud-init reads the user data only at the first boot. A running node never applies a change to it.
 
-The control-plane modules (`aws-control-plane`, `proxmox-control-plane`) and `aws-static-node` treat a change the same way on both providers:
+The control-plane modules (`aws-control-plane`, `proxmox-control-plane`) and `aws-static-node` treat a change the same way on both providers: the node keeps running. On AWS, the instance keeps the user data it booted with. On Proxmox, the snippet on storage gets the new content, but the VM is not replaced.
 
-- By default, the node keeps running. On AWS, the instance keeps the user data it booted with. On Proxmox, the snippet on storage gets the new content, but the VM is not replaced.
-- To apply a change to one node, replace that node on purpose. See "Replace a node on purpose".
-- To replace nodes on every change, set `replace_on_user_data_change = true`. The next apply then replaces each node whose user data changed. On a single-node cluster that is the whole cluster. On a multi-node cluster, a change in every node's user data replaces all control-plane nodes in one apply, and etcd loses its quorum. Turning the input on or off replaces only nodes whose user data changed. See each module's README.
-- The first apply after an upgrade to the version with this input replaces these nodes once.
+To apply a change to a node, replace that node on purpose with `tofu apply -replace='<address>'`.
 
-`aws-node-pool` (an Auto Scaling group) and `proxmox-node-pool` do not have the input. An Auto Scaling group gives new user data only to the instances it launches later. A `proxmox-node-pool` worker keeps running, as a control-plane VM does by default.
+`aws-node-pool` (an Auto Scaling group) and `proxmox-node-pool` work the same way for running nodes. An Auto Scaling group gives new user data only to the instances it launches later.
 
 ### Replace a node on purpose
 
-1. Find the address of the node in the plan or with `tofu state list`. Examples: `module.<name>.module.control_plane.aws_instance.control_plane`, or `module.<name>.module.control_plane.proxmox_virtual_environment_vm.control_plane_additional["1"]`.
-2. Run `tofu apply -replace='<address>'`.
-3. Read the plan. Verify that it replaces only the nodes you named.
-4. Confirm the apply.
+> **Warning:** Replacing a single-node cluster loses the cluster. Replace one control-plane node at a time, and the first node last, in its own apply.
 
-A replaced node boots with the current user data. Replace one control-plane node at a time, so that etcd keeps its quorum. On Proxmox, also replace the firewall of an additional control-plane VM: add `-replace` for its `proxmox_virtual_environment_firewall_options.control_plane["<key>"]` and `proxmox_virtual_environment_firewall_rules.control_plane["<key>"]`. The first VM's firewall is replaced with it.
+1. Find the address of the node with `tofu state list`. Examples: `module.<name>.module.control_plane.aws_instance.control_plane_additional["1"]`, `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`, `module.<name>.module.control_plane.proxmox_virtual_environment_vm.control_plane_additional["1"]`.
+2. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+3. Delete the Kubernetes node: `kubectl delete node <node>`.
+4. Run `tofu apply -replace='<address>'`.
+5. Read the plan. Verify that it replaces only the node you named.
+6. Confirm the apply.
+7. Verify that the node is `Ready` and, for a control-plane node, that every etcd pod is `Running`.
+
+On Proxmox, also replace the firewall of an additional control-plane VM. See "Rolling to a new template" in the `proxmox-control-plane` README.
 
 ## `set_hostname` (for shared, byte-identical cloud-init payloads)
 

@@ -140,32 +140,19 @@ is made between the template's contents and `k8s_version`/`cilium_version`/
 
 ## A change to the user data of a running node
 
-Changing any of `node-bootstrap`'s inputs (a rotated token, a new registry mirror, a
-different platform revision) after a node's first boot does not replace the VM by
-default. The snippet on storage gets the new content, and the VM keeps the file id it
-references. cloud-init reads user data only at the first boot, so the running node
-does not apply the change.
+A change to any input of `node-bootstrap` (a rotated token, a new registry mirror, a
+different platform revision) does not touch a running VM. The snippet on storage gets
+the new content, and the VM keeps the file id it references. cloud-init reads user
+data only at the first boot, so the running node does not apply the change.
 
-To apply a change to a node, replace the VM on purpose, one at a time. Follow steps 3
-to 12 of "Rolling to a new template": they replace an additional VM with its firewall,
-and the first VM last. The replaced VM boots with the current snippet.
+To apply a change, replace the VM on purpose. The replaced VM boots with the current
+snippet. Use the steps of "Rolling to a new template", from step 3: they drain the
+node, replace an additional VM with its firewall, verify it, and replace the first VM
+last. The addresses are `module.<name>.proxmox_virtual_environment_vm.control_plane`
+and `module.<name>.proxmox_virtual_environment_vm.control_plane_additional["1"]`.
+Inside `proxmox-cluster`, put `module.control_plane.` before the resource type.
 
-Warning: on a multi-node cluster, `replace_on_user_data_change = true` replaces all
-VMs in one apply when a change is in every VM's user data, such as a new registry
-mirror. The cluster then loses etcd quorum. On a multi-node cluster, keep the default
-and replace the VMs one at a time.
+> **Warning:** Replacing a single-node cluster loses the cluster.
 
-`replace_on_user_data_change = true` replaces VMs at every user data change instead:
+Do not replace several VMs in one apply: etcd loses its quorum.
 
-- Each VM is replaced, with its firewall, when its own user data changes. A Helm
-  parameter is in the first VM's user data only.
-- On a single-node cluster, a replacement is the whole cluster.
-- Turning it on replaces only the VMs whose user data changed while it was off.
-- Turning it off replaces no VM, unless the same apply changes their user data.
-
-The module records a hash of each VM's user data in `terraform_data.genesis_user_data`
-and `terraform_data.additional_user_data`. The hash changes only while the input is on.
-
-Before this input existed, a snippet change left the VMs alone, as the default still
-does. The first apply after an upgrade to this version replaces every control-plane
-VM once, because it creates the hash records.

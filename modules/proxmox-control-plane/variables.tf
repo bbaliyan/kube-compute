@@ -419,13 +419,6 @@ variable "boot_scripts" {
   }
 }
 
-variable "replace_on_user_data_change" {
-  description = "What a change to a node's user data (any input rendered into its cloud-init snippet, such as a Helm parameter of the platform Application) does to a running control-plane VM. false (default): the snippet on storage is updated, but the VM keeps running with the user data it booted with; to apply the change, replace the VM on purpose with tofu apply -replace=<VM address>. true: the next apply replaces each VM whose user data changed, with its firewall. On a single-node cluster that is the whole cluster; on a multi-node cluster a change in every VM's user data replaces all VMs in one apply. Turning this on replaces only the VMs whose user data changed while it was off. Turning it off replaces no VM, unless the same apply changes their user data."
-  type        = bool
-  default     = false
-  nullable    = false
-}
-
 variable "cloud_init_upload_mode" {
   description = "How the provider copies cloud-init snippet files to the Proxmox host over SSH. Null keeps the provider default, 'stream', which opens a shell and tries sudo. Use 'sftp' when the SSH user is limited to the SFTP subsystem: it needs write permission on the snippets directory and does not use sudo. Has no effect on ISO or image downloads, which use the API."
   type        = string

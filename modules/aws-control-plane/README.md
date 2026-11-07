@@ -37,41 +37,37 @@ levers when the limit is exceeded.
 ### A change to the user data of a running node
 
 A change to any input in the user data, such as a Helm parameter of the platform
-Application, does not replace a running node by default. The instance ignores the
-change and keeps the user data it booted with. cloud-init reads user data only at
-the first boot, so the node would not apply the change anyway.
+Application, does not touch a running node. The instance ignores the change and keeps
+the user data it booted with. cloud-init reads user data only at the first boot, so
+the node would not apply the change anyway.
 
-To apply a change to a node, replace it on purpose:
+To apply a change, replace the node on purpose. The replaced node boots with the
+current user data.
 
-```sh
-tofu apply -replace='module.<name>.aws_instance.control_plane'
-tofu apply -replace='module.<name>.aws_instance.control_plane_additional["1"]'
-```
+The addresses are:
 
-The replaced node boots with the current user data. Replace one node at a time, so
-that etcd keeps its quorum.
+- First node: `module.<name>.aws_instance.control_plane`
+- Other nodes: `module.<name>.aws_instance.control_plane_additional["1"]`
 
-Warning: on a multi-node cluster, `replace_on_user_data_change = true` replaces all
-nodes in one apply when a change is in every node's user data, such as a new
-registry mirror. The cluster then loses etcd quorum. On a multi-node cluster, keep
-the default and replace the nodes one at a time.
+Inside `aws-cluster`, put `module.<name>.module.control_plane.` before the resource
+type instead.
 
-`replace_on_user_data_change = true` replaces nodes at every user data change
-instead:
+> **Warning:** Replacing a single-node cluster loses the cluster.
 
-- Each node is replaced when its own user data changes. A Helm parameter is in the
-  first node's user data only.
-- On a single-node cluster, a replacement is the whole cluster.
-- Turning it on replaces only the nodes whose user data changed while it was off.
-- Turning it off replaces no node, unless the same apply changes their user data.
+1. If the cluster has one node, stop. Replacing it loses the cluster.
+2. Select a node. Replace the additional nodes first, one at a time. Start with key `"1"`.
+3. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+4. Delete the Kubernetes node: `kubectl delete node <node>`.
+5. Replace the instance: `tofu apply -replace='<address>'`.
+6. Verify that the node is `Ready`: `kubectl get nodes`.
+7. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
+8. If another additional node needs the change, go back to step 2.
 
-The module records a hash of each node's user data in `terraform_data.user_data`.
-The hash changes only while the input is on.
+> **Warning:** Replace the first node last, in its own apply.
 
-Before this input existed, every user data change replaced the nodes. The default
-is now to keep them. The first apply after an upgrade to this version replaces
-every control-plane node once, because it creates the hash records. See
-node-bootstrap's "A change to the user data of a running node" for both providers.
+9. Do steps 3 to 7 for the first node.
+
+Do not replace several nodes in one apply: etcd loses its quorum.
 
 ## Scope
 

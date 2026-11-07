@@ -286,27 +286,35 @@ Most inputs end up in a node's user data: Helm parameters, names, boot scripts,
 module upgrade can change it too. cloud-init reads user data only at the first
 boot, so a running node never applies a change.
 
-By default, the next apply keeps the control plane and static nodes running with
-the user data they booted with. To apply a change, replace a node on purpose:
+A changed user data does not touch a running control-plane or static node. To apply
+it, replace the node on purpose. The addresses are:
 
-```sh
-tofu apply -replace='module.<name>.module.control_plane.aws_instance.control_plane'
-```
+- First control-plane node: `module.<name>.module.control_plane.aws_instance.control_plane`
+- Other control-plane nodes: `module.<name>.module.control_plane.aws_instance.control_plane_additional["1"]`
+- Static node: `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`
 
-Replace one control-plane node at a time. Autoscaled nodes are not affected: an
-Auto Scaling group gives new user data only to the instances it launches later.
+> **Warning:** Replacing a single-node cluster loses the cluster.
 
-Set `replace_on_user_data_change = true` to replace the nodes whose user data
-changed at every apply instead. On a single-node cluster that is the whole
-cluster. On a multi-node cluster, a change in every node's user data replaces all
-control-plane nodes in one apply, and etcd loses its quorum. Turning it on
-replaces only the nodes whose user data changed while it was off. Turning it off
-replaces no node, unless the same apply changes their user data.
+For a control-plane node on a multi-node cluster, replace one node at a time:
 
-Before this input existed, every user data change replaced the nodes. The
-default is now to keep them. The first apply after an upgrade to this version
-replaces the control plane and static nodes once, because it creates the hash
-records that the input uses.
+1. If the cluster has one node, stop. Replacing it loses the cluster.
+2. Select a node. Replace the additional nodes first, one at a time. Start with key `"1"`.
+3. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+4. Delete the Kubernetes node: `kubectl delete node <node>`.
+5. Replace the instance: `tofu apply -replace='<address>'`.
+6. Verify that the node is `Ready`: `kubectl get nodes`.
+7. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
+8. If another additional node needs the change, go back to step 2.
+
+> **Warning:** Replace the first node last, in its own apply.
+
+9. Do steps 3 to 7 for the first node.
+
+For a static node, drain it, delete the Kubernetes node, replace it, and verify that
+it is `Ready`.
+
+Autoscaled nodes are not affected: an Auto Scaling group gives new user data only to
+the instances it launches later.
 
 ## Testing
 

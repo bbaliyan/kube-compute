@@ -167,7 +167,6 @@ module "control_plane" {
   os_auto_updates                   = var.os_auto_updates
   node_name_template                = var.control_plane_node_name_template
   boot_scripts                      = var.boot_scripts
-  replace_on_user_data_change       = var.replace_on_user_data_change
 }
 
 # See modules/aws-static-node/README.md for why named instances suit fixed roles.
@@ -187,8 +186,6 @@ module "static_nodes" {
   os_auto_updates           = var.os_auto_updates
   node_name_template        = each.value.node_name_template
   boot_scripts              = var.boot_scripts
-
-  replace_on_user_data_change = var.replace_on_user_data_change
 
   # Ingress runs with the platform, so only the platform group answers on the external ports.
   security_group_ids = concat(

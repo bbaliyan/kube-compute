@@ -212,24 +212,6 @@ resource "aws_instance" "node" {
 
   lifecycle {
     # Don't replace on AMI patch drift; remove to deliberately upgrade.
-    # A user data change replaces a node only through replace_on_user_data_change.
-    ignore_changes       = [ami, user_data_base64]
-    replace_triggered_by = [terraform_data.user_data[each.key].input]
-  }
-}
-
-# Used by replace_on_user_data_change: a node is replaced when the input of its
-# entry changes. ignore_changes freezes input, so with the opt-in off a new hash
-# never reaches it. With the opt-in on, triggers_replace carries the hash, and a
-# new hash recreates the entry with the new input. Turning the opt-in on or off
-# also recreates the entry, but its input changes only if the user data did.
-resource "terraform_data" "user_data" {
-  for_each = local.node_keys
-
-  input            = sha256(local.combined_user_data[each.key])
-  triggers_replace = var.replace_on_user_data_change ? sha256(local.combined_user_data[each.key]) : null
-
-  lifecycle {
-    ignore_changes = [input]
+    ignore_changes = [ami, user_data_base64]
   }
 }

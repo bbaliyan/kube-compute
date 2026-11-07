@@ -225,12 +225,10 @@ tried on a real Proxmox host.
 
 ## User data changes
 
-A change to an input in a node's cloud-init does not replace its VM by default. The
-running node does not apply the change. To apply it, replace the VM on purpose with
-`tofu apply -replace`. `replace_on_user_data_change = true` replaces the control-plane
-VMs at every change instead. See proxmox-control-plane's "A change to the user data of a
-running node" for the addresses, the firewall of an additional VM and the etcd warning.
-`node_pools` workers keep running in both cases.
+A changed input in a node's cloud-init does not touch a running VM. The node does not
+apply the change. To apply it, replace the VM on purpose with `tofu apply -replace`.
+See proxmox-control-plane's "A change to the user data of a running node" for the
+addresses and the steps. `node_pools` workers keep running in the same way.
 
 ## Existing standalone modules remain fully supported
 
