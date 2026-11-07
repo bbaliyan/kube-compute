@@ -13,6 +13,21 @@ The pool that runs ingress sets `allowed_ingress_cidrs` and `ingress_ports`, whi
 those ports on its workers, and keeps `manage_wildcard_dns_record` on so the wildcard
 record points at them. Every other pool of the cluster turns the record off.
 
+## Rolling to a new template
+
+A new `proxmox_template_vm_id` reaches only new workers and workers that you replace. An apply does not replace the existing workers. To move them to the new template, replace them one at a time. The firewall of a worker follows its VM.
+
+Roll the control plane first. See the `proxmox-control-plane` README. Inside `proxmox-cluster`, put `module.node_pools["<pool>"].` before the address below.
+
+1. Set `proxmox_template_vm_id` to the new template.
+2. Run `tofu apply`. The plan must not replace a VM.
+3. Select a worker, for example key `"0"`, the first worker.
+4. Drain the worker: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+5. Delete the worker: `kubectl delete node <node>`.
+6. Replace the worker: `tofu apply -replace='proxmox_virtual_environment_vm.worker["0"]'`.
+7. Verify that the worker is `Ready`: `kubectl get nodes`.
+8. If a worker is still on the old template, go back to step 3.
+
 ## Join token and firewall ipset naming
 
 This pool takes `cluster_agent_token` as a plain input variable — pass it the value of

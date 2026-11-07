@@ -462,6 +462,11 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   }
 
   lifecycle {
+    # A new template reaches only new or replaced VMs, so one apply never
+    # rebuilds every control-plane node and etcd member. See the README for
+    # the rolling replacement.
+    ignore_changes = [clone]
+
     precondition {
       condition = length(compact([
         var.os_image_url != null ? "url" : "",
@@ -559,6 +564,11 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
     # Same static/DHCP branch as the primary control_plane resource above —
     # network_data_dhcp[0] content is identical for every control-plane node.
     network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data[each.key].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
+  }
+
+  # Same reason as the genesis VM above.
+  lifecycle {
+    ignore_changes = [clone]
   }
 
   depends_on = [proxmox_virtual_environment_vm.control_plane]

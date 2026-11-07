@@ -24,6 +24,47 @@ On a multi-node cluster with static IPs, the first node probes the second node's
 
 The probe checks only the second node. Replace the first node only while the second node is healthy, and never in the same apply as the second node. Any HTTPS service that answers at the peer IP can start a join attempt, so the peer IP must belong to the second control-plane node only.
 
+## Rolling to a new template
+
+A new `proxmox_template_vm_id` reaches only new VMs and VMs that you replace. An apply does not replace the existing nodes, so their disks and etcd data stay. To move the existing nodes to the new template, replace them one at a time.
+
+A replaced node gets a new disk. Delete its Kubernetes node first: RKE2 then removes its etcd member and accepts a new node with the same name.
+
+The firewall of an additional node does not follow its VM by itself, so replace it in the same apply. The firewall of the first node follows its VM.
+
+Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
+
+> **Warning:** On a single-node cluster, a replaced node starts a new cluster. The cluster loses its data.
+
+> **Warning:** On a multi-node cluster with DHCP, a replaced first node starts a new etcd cluster. Do not replace the first node there.
+
+1. Set `proxmox_template_vm_id` to the new template.
+2. Run `tofu apply`. The plan must not replace a VM.
+3. Select an additional node, for example key `"1"`, the second node.
+4. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+5. Delete the node: `kubectl delete node <node>`.
+6. Replace the VM and its firewall:
+
+   ```sh
+   tofu apply \
+     -replace='proxmox_virtual_environment_vm.control_plane_additional["1"]' \
+     -replace='proxmox_virtual_environment_firewall_options.control_plane["1"]' \
+     -replace='proxmox_virtual_environment_firewall_rules.control_plane["1"]'
+   ```
+
+7. Verify that the node is `Ready`: `kubectl get nodes`.
+8. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
+9. If an additional node is still on the old template, go back to step 3.
+
+> **Warning:** Replace the first node last, in its own apply. It rejoins through the second node, so the second node must be healthy.
+
+10. Drain the first node, and then delete it, as in steps 4 and 5.
+11. Replace the first node: `tofu apply -replace='proxmox_virtual_environment_vm.control_plane'`.
+12. Do steps 7 and 8 again.
+13. Roll the workers. See the `proxmox-node-pool` README.
+
+Roll the control plane before the workers: a kubelet must not be newer than the API server.
+
 ## Proxmox pool and CPU weight
 
 Both inputs are optional. Unset, the VMs join no pool and keep the Proxmox default CPU weight.
