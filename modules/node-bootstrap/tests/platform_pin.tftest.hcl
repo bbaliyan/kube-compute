@@ -34,8 +34,7 @@ run "null_repo_url_falls_back_to_the_pin" {
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "repoURL: null") &&
-      !strcontains(base64decode(f.content), "targetRevision: null")
+      alltrue([for s in yamldecode(base64decode(f.content)).spec.sources : s.repoURL != null && s.targetRevision != null])
       if f.path == "/opt/kube-compute/manifests/10-platform-app.yaml"
     ])
     error_message = "a literal null must never reach the platform Application manifest"

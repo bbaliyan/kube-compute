@@ -42,9 +42,9 @@ run "workloads_repo_adds_three_parameters" {
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "- name: workloadsRepoURL\n                value: \"https://example.test/workloads.git\"") &&
-      strcontains(base64decode(f.content), "- name: workloadsRevision\n                value: \"release\"") &&
-      strcontains(base64decode(f.content), "- name: workloadsPath\n                value: \"apps\"")
+      contains(yamldecode(base64decode(f.content)).spec.sources[0].helm.parameters, { name = "workloadsRepoURL", value = "https://example.test/workloads.git" }) &&
+      contains(yamldecode(base64decode(f.content)).spec.sources[0].helm.parameters, { name = "workloadsRevision", value = "release" }) &&
+      contains(yamldecode(base64decode(f.content)).spec.sources[0].helm.parameters, { name = "workloadsPath", value = "apps" })
       if f.path == "/opt/kube-compute/manifests/10-platform-app.yaml"
     ])
     error_message = "with a workloads repo the platform Application must carry workloadsRepoURL, workloadsRevision and workloadsPath from the gitops_workloads_* inputs"
