@@ -18,16 +18,20 @@ from the OpenTofu Registry, from its mirror repo, or from here by git SHA -- see
 
 ## Modules
 
-| Module | Purpose |
-|--------|---------|
-| `modules/node-bootstrap`      | Renders a single node's RKE2 bootstrap as a lean cloud-init `#cloud-config` payload — hostname, secrets, join logic, RKE2/CNI/GitOps config — role-aware (`server-init` / `server-join` / `worker`). No execution, no provider resources, no Ansible: only produces a string. Assumes RKE2 binaries/prerequisites are already baked into the node image ([`kube-images`](https://github.com/bbaliyan/kube-images)) — a stock cloud image won't have a working RKE2 install. **AWS and Proxmox both consume this module today**, booting from a kube-image-baked image with no live connection to the node. Azure has no caller yet — see `modules/node-bootstrap/README.md`. |
-| `modules/aws-control-plane`           | AWS control-plane node(s) + shared cluster resources: join tokens, cluster security group, agent-token SSM parameter, registration endpoint (AlmaLinux 10). Boots from a pre-baked [`kube-images`](https://github.com/bbaliyan/kube-images) AMI (`os_image_ami_id`) — no live Ansible connection, no `aws-cluster-facts` dependency. |
-| `modules/aws-node-pool`     | AWS worker group: an Auto Scaling group cluster-autoscaler scales from zero, joining an existing aws-control-plane cluster (AlmaLinux 10). |
-| `modules/proxmox-control-plane`       | Proxmox control-plane node(s) + shared cluster resources: join tokens (via cloud-init), cluster/etcd firewall ipsets, genesis-direct registration endpoint, optional RFC2136 DNS registration (AlmaLinux 10). Boots from a pre-baked [`kube-images`](https://github.com/bbaliyan/kube-images) template (`proxmox_template_vm_id`) — see its README's "Booting from a kube-images template" section. |
-| `modules/proxmox-node-pool` | Fixed Proxmox node pool (discrete VMs) joining an existing proxmox-control-plane cluster (AlmaLinux 10). Same kube-images template requirement as `proxmox-control-plane`. |
-| `modules/dns-registration` | Publishes an A record set to an RFC2136-compliant DNS server via TSIG-authenticated dynamic update. Used by `proxmox-control-plane` for its HA registration endpoint. |
-| `modules/azure-control-plane`         | **Placeholder — not implemented.** Azure is a target provider but has no working module; the prior live-Ansible implementation was removed, unvalidated against real Azure (no Azure connectivity in the dev environment). See the module's README for intended direction. |
-| `modules/azure-node-pool`   | **Placeholder — not implemented.** Same reason as `azure-control-plane`. |
+Each provider has one cluster module that composes the others. Use it when you want one state for a whole cluster. Use the provider modules directly when you want a separate state for the control plane and each pool.
+
+| Layer | Module | Purpose |
+|-------|--------|---------|
+| Cluster | `modules/aws-cluster` | One state for a whole AWS cluster: the control plane, named workers and autoscaled workers. It is the root of the AWS registry release. |
+| Cluster | `modules/proxmox-cluster` | One state for a whole Proxmox cluster: the control plane and the worker pools. It is the root of the Proxmox registry release. |
+| Provider | `modules/aws-control-plane` | The control-plane node(s) and the cluster-wide resources: join tokens, security groups, IAM, the API load balancer and DNS records. With `control_plane_count = 1` it is a complete single-node cluster. |
+| Provider | `modules/aws-static-node` | A group of named, fixed worker instances in one role, such as `platform` or `build`. `node_count` sets how many. |
+| Provider | `modules/aws-node-pool` | One role of workers that cluster-autoscaler scales from zero, as EC2 Auto Scaling groups. |
+| Provider | `modules/proxmox-control-plane` | The control-plane VM(s) on Proxmox, with the join tokens and the cluster and etcd firewall groups. |
+| Provider | `modules/proxmox-node-pool` | A pool of fixed worker VMs on Proxmox, named `<cluster>-<pool>-<n>`. |
+| Shared | `modules/node-bootstrap` | Renders the boot configuration (`#cloud-config`) for one node, for a role the caller has already chosen: `server-init`, `server-join` or `worker`. It produces a string and creates no resource. It expects the RKE2 binaries to be baked into the node image from [`kube-images`](https://github.com/bbaliyan/kube-images). |
+| Shared | `modules/dns-registration` | Publishes an A record set to an RFC2136 DNS server with a TSIG-signed dynamic update. Proxmox uses it because its DNS server is external. AWS creates its Route 53 records with `aws_route53_record`, because Route 53 does not accept RFC2136 updates. |
+| Placeholder | `modules/azure-control-plane`, `modules/azure-node-pool` | Not implemented. Azure is a target provider, and each directory holds only a README. |
 
 ## Concepts
 
