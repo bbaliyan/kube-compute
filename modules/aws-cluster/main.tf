@@ -77,7 +77,7 @@ locals {
 # detached and billed. The nodes depend on this resource, through destroy_after, to have it
 # destroyed last: Terraform destroys a dependent before its dependency. It is passed to the
 # nodes rather than set as depends_on on the modules, which would defer every data source in
-# them to apply and leave the control plane's existing-instance lookup uncountable at plan.
+# the modules to apply.
 resource "terraform_data" "volume_sweep" {
   input = {
     enabled      = var.orphan_volume_cleanup

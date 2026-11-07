@@ -171,7 +171,9 @@ variable "subnet_names" {
     The choice is made once and kept in state. The cluster then stays in that subnet whatever this
     list says or however full that subnet becomes: it is never moved by an apply. The candidates
     may be in different availability zones, since a cluster only ever occupies the one it was
-    placed in. To move a cluster, destroy it and apply again.
+    placed in. To choose again on purpose, run
+    `tofu apply -replace='module.<name>.terraform_data.subnet_choice[0]'`. If the choice changes,
+    every node is replaced. To move a cluster, you can also destroy it and apply again.
   EOT
   type        = list(string)
   default     = null
