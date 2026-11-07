@@ -34,6 +34,12 @@ locals {
   )
   registration_address = var.dns_server_address != null ? local.genesis_dns_name : local.genesis_ip
 
+  # A replaced genesis node must probe a peer, not registration_address: that address
+  # is its own IP, and genesis rewrites the genesis DNS record to itself before the
+  # probe runs, so the probe would never see the live cluster. Only a static peer IP
+  # is known before genesis exists; a DHCP peer IP would close a dependency cycle.
+  genesis_rejoin_probe_address = var.control_plane_count > 1 && local.static_ips ? split("/", var.control_plane_ip_addresses[1])[0] : null
+
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")
   # Cilium operator replica count isn't a per-cluster knob here: kube-images bakes the
@@ -203,6 +209,7 @@ module "node_bootstrap" {
   cni                             = local.effective_cni
   cluster_token                   = random_password.server_token.result
   cluster_agent_token             = random_password.agent_token.result
+  registration_address            = local.genesis_rejoin_probe_address
   extra_tls_sans                  = compact([local.wildcard_name, local.genesis_dns_name])
   trusted_ca_pem                  = var.trusted_ca_pem
   registry_mirror_url             = var.registry_mirror_url
