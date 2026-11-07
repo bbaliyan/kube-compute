@@ -110,9 +110,19 @@ If `gitops_workloads_repo_url` is not set, the Application has none of them and 
 
 The module writes the `platform` Application at first boot. An existing cluster gets these parameters only when its node is rebuilt.
 
-Warning: on AWS, the control plane sets `user_data_replace_on_change`. If a cluster already has a workloads repo, this change alters its user data. The next apply then replaces the control-plane instance. On a single-node cluster that is the whole cluster. If you are not ready to rebuild, pin the previous module version. A cluster with no workloads repo does not change.
+Warning: on AWS, the control plane sets `user_data_replace_on_change`. If a cluster already has a workloads repo, this change alters its user data. The next apply then replaces the control-plane instance. On a single-node cluster that is the whole cluster. If you are not ready to rebuild, pin the previous module version.
 
 On Proxmox, the user-data snippet is updated in place, so the VM is not expected to be replaced. The new parameters still reach the cluster only after a rebuild.
+
+## Upgrade warning: the Argo CD Applications are built with `yamlencode`
+
+The module now renders the `platform` and `workloads` Applications with `yamlencode`. The decoded Applications are the same, but the text is not. So every genesis node that writes the `platform` Application gets new user data, with or without a workloads repo.
+
+- On AWS, the next apply replaces the genesis control-plane instance. On a single-node cluster, that is the whole cluster.
+- On AWS, join nodes and workers are not affected.
+- On Proxmox, the VM references the snippet by id, so the VM is not expected to be replaced. This is not verified. Run a plan to confirm it.
+
+If you are not ready to rebuild, pin the previous module version.
 
 ## `set_hostname` (for shared, byte-identical cloud-init payloads)
 

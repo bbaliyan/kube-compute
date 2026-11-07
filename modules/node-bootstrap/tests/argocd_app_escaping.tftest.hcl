@@ -52,6 +52,9 @@ run "platform_helm_parameters_round_trip" {
     error_message = "every platform_extra_helm_parameters entry must decode to the exact name and value the caller passed"
   }
 
+  # 9 built-in parameters come before the extras: the 6 that every platform
+  # Application carries, and the 3 workloads* ones that a workloads repo adds.
+  # A test assertion cannot read another run's output, so the count is written out.
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
