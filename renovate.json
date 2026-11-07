@@ -6,6 +6,7 @@
     ":gitSignOff"
   ],
   "enabledManagers": [
+    "devcontainer",
     "terraform",
     "github-actions",
     "gitlabci",
