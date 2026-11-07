@@ -63,7 +63,7 @@ variable "cluster_agent_token" {
 }
 
 variable "registration_address" {
-  description = "IP or FQDN of the existing cluster's registration endpoint (a control plane's registration_address output). Used to build config.yaml's server: https://<address>:9345. Required for node_role server-join or worker; ignored for server-init."
+  description = "IP or FQDN of the existing cluster's registration endpoint (a control plane's registration_address output). Used to build config.yaml's server: https://<address>:9345. Required for node_role server-join or worker. Optional for server-init: when set, the node probes this address at boot and joins the cluster that answers instead of initializing a new one (the rejoin probe)."
   type        = string
   default     = null
 }

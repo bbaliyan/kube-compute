@@ -22,6 +22,8 @@ computes the same formula independently to reference the cluster ipset by name.
 
 On a multi-node cluster with static IPs, the first node probes the second node's IP at boot. If the cluster answers, a replaced first node rejoins it instead of starting a new etcd cluster. With DHCP, no peer IP is known before the first node exists, so there is no probe. Use `control_plane_ip_addresses` on a multi-node cluster.
 
+The probe checks only the second node. Replace the first node only while the second node is healthy, and never in the same apply as the second node. Any HTTPS service that answers at the peer IP can start a join attempt, so the peer IP must belong to the second control-plane node only.
+
 ## Proxmox pool and CPU weight
 
 Both inputs are optional. Unset, the VMs join no pool and keep the Proxmox default CPU weight.
