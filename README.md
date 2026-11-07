@@ -62,9 +62,12 @@ required) and gives joining nodes a stable `registration_address`:
   real Proxmox cluster before production use — validated so far only with `tofu test` against a
   mocked provider.
 
-On every provider, a control-plane node probes `registration_address` at boot before deciding
-whether to join the existing quorum or initialize a new one, so replacing the first
-control-plane node is a safe rejoin, not a split-brain risk.
+On a multi-node cluster, the first control-plane node probes the live cluster at boot before
+deciding whether to join the existing quorum or initialize a new one, so replacing it is a safe
+rejoin, not a split-brain risk. On AWS it probes `registration_address`. On Proxmox it probes the
+second control-plane node's static IP, because its own join address points back at itself. A
+Proxmox cluster whose control-plane nodes use DHCP has no address to probe, so a replaced first
+node initializes a new cluster.
 
 ### Endpoint options (AWS)
 

@@ -130,3 +130,72 @@ run "ha_control_plane_over_dhcp" {
     error_message = "control_plane_count = 3 over DHCP must still create exactly 2 additional control-plane VMs"
   }
 }
+
+# apply, not plan: the rendered payload embeds random_password's result, which is
+# unknown at plan time.
+run "single_node_genesis_has_no_probe_address" {
+  command = apply
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "REGISTRATION_ADDRESS=''")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "a single-node genesis has no peer to rejoin, so its node.env must leave REGISTRATION_ADDRESS empty"
+  }
+}
+
+run "ha_genesis_probes_a_static_peer" {
+  command = apply
+  variables {
+    control_plane_count        = 3
+    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
+    cluster_domain             = "example.com"
+    cluster_network_cidr       = "192.168.1.0/24"
+    vm_gateway                 = "192.168.1.1"
+    dns_server_address         = "192.168.1.53"
+    tsig_key_name              = "kube-compute"
+    tsig_key_secret            = "ZmFrZXNlY3JldA=="
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "REGISTRATION_ADDRESS='192.168.1.11'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "an HA genesis must probe the second control-plane node's static IP: a replaced genesis points its own join name back at itself"
+  }
+  assert {
+    condition = alltrue([
+      for k, v in proxmox_virtual_environment_file.node_init_additional : anytrue([
+        for f in yamldecode(v.source_raw[0].data).write_files :
+        strcontains(base64decode(f.content), "REGISTRATION_ADDRESS='genesis.bharat.example.com'")
+        if f.path == "/opt/kube-compute/node.env"
+      ])
+    ])
+    error_message = "the other control-plane nodes must still join through the genesis join name"
+  }
+}
+
+run "ha_genesis_over_dhcp_has_no_probe_address" {
+  command = apply
+  variables {
+    control_plane_count  = 3
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "REGISTRATION_ADDRESS=''")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "over DHCP no peer IP is known before genesis exists, so genesis must not carry a probe address"
+  }
+}

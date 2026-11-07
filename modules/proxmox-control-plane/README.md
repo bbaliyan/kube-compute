@@ -18,6 +18,10 @@ Similarly, the cluster-wide and etcd-peer firewall ipset names
 convention computed locally from `cluster_name`, not a shared output. `proxmox-node-pool`
 computes the same formula independently to reference the cluster ipset by name.
 
+## Replacing the first control-plane node
+
+On a multi-node cluster with static IPs, the first node probes the second node's IP at boot. If the cluster answers, a replaced first node rejoins it instead of starting a new etcd cluster. With DHCP, no peer IP is known before the first node exists, so there is no probe. Use `control_plane_ip_addresses` on a multi-node cluster.
+
 ## Proxmox pool and CPU weight
 
 Both inputs are optional. Unset, the VMs join no pool and keep the Proxmox default CPU weight.
