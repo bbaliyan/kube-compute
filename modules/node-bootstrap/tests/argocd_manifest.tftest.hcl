@@ -2,6 +2,7 @@
 # The Argo CD manifest is downloaded by bootstrap.sh at first boot. This module
 # only passes its URL and sha256 on, as data in node.env, and refuses to render
 # a first server that would have nothing to download or nothing to verify with.
+# Both inputs default to a pinned kube-platform release.
 
 variables {
   cluster_name        = "test"
@@ -28,7 +29,20 @@ run "url_and_hash_reach_node_env" {
   }
 }
 
-run "first_server_with_gitops_needs_both_inputs" {
+run "defaults_pass_validation_and_reach_node_env" {
+  command = plan
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "ARGOCD_MANIFEST_URL='https://github.com/bbaliyan/kube-platform/releases/download/stable-20261108/argocd-bootstrap.yaml'")
+      && strcontains(base64decode(f.content), "ARGOCD_MANIFEST_SHA256='e18c81805a4d299e93003c16662b889a05e075cc969a11098e54a4dabceb234d'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "with no manifest input, node.env must carry the pinned default URL and sha256"
+  }
+}
+
+run "first_server_with_gitops_rejects_null_inputs" {
   command = plan
   variables {
     argocd_manifest_url    = null

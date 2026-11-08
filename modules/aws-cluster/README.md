@@ -126,14 +126,12 @@ off; pods that belong there need a matching toleration.
 
 ## Argo CD manifest
 
-The first control-plane node downloads Argo CD at first boot. Set `argocd_manifest_url`
-and `argocd_manifest_sha256` to a kube-platform release's `argocd-bootstrap.yaml` and
-its sha256. Both are required while a platform or workloads Application is enabled.
+The first control-plane node downloads Argo CD at first boot. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` default to a pinned kube-platform release, so no extra input is needed. See [`node-bootstrap`](../node-bootstrap/README.md) to move to a newer release.
 
 This is a breaking change. Upgrade in this order:
 
 1. Rebuild the AMI without Argo CD. It then carries the matching `bootstrap.sh`.
-2. Move to this version and set the two inputs.
+2. Move to this version. The two Argo CD manifest inputs have defaults.
 
 A new AMI with the old module, or the reverse, fails at the first line of `bootstrap.sh`.
 
