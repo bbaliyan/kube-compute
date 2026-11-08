@@ -199,7 +199,7 @@ variable "cluster_dns_name" {
 }
 
 variable "cluster_domain" {
-  description = "DNS suffix matching the control plane's own cluster_domain (e.g. 'homelab.local'). Required to compute the wildcard record's zone; ignored when dns_server_address is null."
+  description = "DNS suffix matching the control plane's own cluster_domain (e.g. 'cluster.example'). Required to compute the wildcard record's zone; ignored when dns_server_address is null."
   type        = string
   default     = null
 }
@@ -217,7 +217,7 @@ variable "dns_server_port" {
 }
 
 variable "dns_transport" {
-  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp' — see proxmox-control-plane's identical variable for why (tcp was found to fail against Technitium with a mid-update EOF)."
+  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp'. See proxmox-control-plane's identical variable."
   type        = string
   default     = "udp"
   validation {

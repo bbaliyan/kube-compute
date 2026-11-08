@@ -12,7 +12,7 @@
 # and that the VM keeps its snippet reference and clone source.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
-    defaults = { id = "local:snippets/bharat.yaml" }
+    defaults = { id = "local:snippets/example.yaml" }
   }
   mock_resource "proxmox_virtual_environment_vm" {
     defaults = {
@@ -25,18 +25,18 @@ mock_provider "proxmox" {
 # An apply would otherwise run nsupdate against the test's DNS server.
 override_module {
   target  = module.dns_registration
-  outputs = { fqdn = "api.bharat.example.com.", record_created = true }
+  outputs = { fqdn = "api.example.example.com.", record_created = true }
 }
 
 override_module {
   target  = module.dns_registration_wildcard
-  outputs = { fqdn = "*.bharat.example.com.", record_created = true }
+  outputs = { fqdn = "*.example.example.com.", record_created = true }
 }
 
 variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   proxmox_node           = "pve"
   vm_cores               = 4
   vm_memory_mb           = 8192

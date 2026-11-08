@@ -12,7 +12,7 @@ variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
   os_image_name          = "kube-image-*"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   aws_region             = "eu-west-1"
   allowed_ingress_cidrs  = ["10.0.0.0/8"]
   subnet_id              = "subnet-abc"

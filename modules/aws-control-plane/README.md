@@ -128,7 +128,7 @@ their own instance IAM role) are never exposed as raw values outside the module.
 only the agent token, so a compromised worker cannot rejoin as control-plane/etcd.
 
 One security group carries east-west traffic: `aws_security_group.cluster` (self-referencing,
-every member, exposed as `cluster_security_group_id` for a future `aws-node-pool` unit to attach
+every member, exposed as `cluster_security_group_id` for an `aws-node-pool` unit to attach
 to by id). It admits all traffic among members, workers included, so etcd (2379-2380) is not
 limited to control-plane nodes. `registration_address` is what a joining node's
 `--server` flag targets — for `control_plane_count = 1` this is the control-plane node's private
@@ -165,12 +165,11 @@ AMI first, then move to this version. See
 ## Container Network Interface (CNI)
 
 `cni` is `null` by default, resolving to `"cilium"` regardless of topology. `"default"`
-(Canal/flannel+Calico) remains selectable as an escape hatch for a consumer-supplied playbook
-targeting a different OS, but is not viable on AlmaLinux 10 (this project's only supported OS):
+(Canal/flannel+Calico) remains selectable as an escape hatch for a consumer-supplied image
+that ships a different CNI, but is not viable on AlmaLinux 10 (this project's only supported OS):
 its kernel dropped the legacy `br_netfilter`/`xt_conntrack`/`xt_comment` modules flannel and
-Felix's iptables dataplane require — confirmed via a real apply, not theoretical. On a
-single-node cluster, the Cilium operator's replica count is set to `1` (chart default `2`) so
-the second replica doesn't sit permanently `Pending`. The cluster security group's
+Felix's iptables dataplane require. The baked Cilium manifest sets the operator to `1`
+replica (chart default `2`) on every topology, so a single-node cluster has no `Pending` replica. The cluster security group's
 self-referencing all-protocol rule already covers every CNI's traffic, so switching `cni` never
 requires a security-group change.
 
@@ -203,7 +202,7 @@ IP-only), `node_provider` (`"aws"`), `node_control_ref`. Plus `wildcard_dns_name
 `node_arch`, `effective_ami_id`, `vpc_id`, `subnet_id`, `node_iam_role_name`. Join flow:
 `registration_address` (a node's private IP for `control_plane_count = 1`, otherwise shaped by
 `endpoint_mode`), `control_plane_node_refs` (every control-plane node, not just the first),
-`cluster_security_group_id`, and `agent_token_ssm_parameter`. A future `aws-node-pool` unit reads
+`cluster_security_group_id`, and `agent_token_ssm_parameter`. An `aws-node-pool` unit reads
 the last two via a `dependency "control_plane"` block to attach workers to the cluster SG and
 fetch the agent token. Raw join token values are never outputs — workers only need the SSM
 parameter name.

@@ -17,7 +17,7 @@ variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
   os_image_ami_id        = "ami-0123456789abcdef0"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   aws_region             = "eu-west-1"
   allowed_ingress_cidrs  = ["10.0.0.0/8"]
   subnet_id              = "subnet-abc"
@@ -73,7 +73,7 @@ run "dns_mode_plans_multivalue_records_and_health_checks" {
     error_message = "each health check must be backed by its own EC2 status-check alarm"
   }
   assert {
-    condition     = output.registration_address == "cp.bharat.example.internal"
+    condition     = output.registration_address == "cp.example.example.internal"
     error_message = "dns mode's registration_address must be the shared record name (cp.<cluster>.<domain>)"
   }
 }

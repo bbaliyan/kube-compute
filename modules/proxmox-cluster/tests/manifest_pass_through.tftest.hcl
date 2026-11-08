@@ -3,7 +3,7 @@
 # reaches the genesis render.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
-    defaults = { id = "local:snippets/bharat.yaml" }
+    defaults = { id = "local:snippets/example.yaml" }
   }
   mock_resource "proxmox_virtual_environment_vm" {
     defaults = {
@@ -16,7 +16,7 @@ mock_provider "proxmox" {
 variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   proxmox_node           = "pve"
   vm_cores               = 4
   vm_memory_mb           = 8192
@@ -42,7 +42,7 @@ run "genesis_apply_manifests_reach_the_control_plane" {
     genesis_apply_manifests = [
       {
         path    = "/opt/kube-compute/manifests/20-extra-manifest.yaml"
-        content = "kind: Cluster\nname: bharat-extra\n"
+        content = "kind: Cluster\nname: example-extra\n"
       }
     ]
   }

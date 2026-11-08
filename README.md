@@ -53,26 +53,30 @@ Each provider has one cluster module that composes the others. Use it when you w
 
 ### High availability (`control_plane_count = 3` or `5`)
 
-Each provider places one control-plane node per availability zone (at least 3 distinct AZs
-required) and gives joining nodes a stable `registration_address`:
+Joining nodes use a stable `registration_address`. The providers differ in where they place the nodes:
+
+- **AWS** places one control-plane node per availability zone. It needs at least 3 distinct zones.
+- **Proxmox** places every control-plane VM on the one `proxmox_node`. Losing that host stops the whole control plane.
+
+The address comes from the provider:
 
 - **AWS** — an internal Network Load Balancer on port 6443; `registration_address` is its DNS
   name.
 - **Azure** — not implemented (see `modules/azure-control-plane`'s README); an internal Standard
   `azurerm_lb` on port 6443 is the intended design.
-- **Proxmox** — no managed load-balancer primitive, so joining control-plane nodes dial genesis's
-  own IP directly (`registration_address`); `cluster_fqdn` (optionally published via
-  `dns-registration`) is the stable multi-node address for clients outside the join flow — see
-  `modules/dns-registration`'s README. Verify the live join flow and DNS registration against a
-  real Proxmox cluster before production use — validated so far only with `tofu test` against a
-  mocked provider.
+- **Proxmox** — no managed load-balancer primitive, so joining control-plane nodes dial the
+  `genesis.<cluster>.<cluster_domain>` DNS name (`registration_address`). DNS is required for
+  more than one control-plane node, so set `cluster_domain` and `dns_server_address`.
+  `cluster_fqdn` is the stable multi-node address for clients outside the join flow. See
+  `modules/dns-registration`'s README. Only `tofu test` against a mocked provider has validated the join
+  flow and the DNS registration so far.
 
 On a multi-node cluster, the first control-plane node probes the live cluster at boot. If the
 cluster answers, the node joins it. If not, the node initializes a new cluster. On AWS it probes
 `registration_address`. On Proxmox it probes the static IP of every other control-plane node, in
-order, because its own join address points back at itself. It joins through the first one that
-answers. A Proxmox cluster whose control-plane nodes use DHCP has no address to probe, so a
-replaced first node initializes a new cluster.
+order (`rejoin_probe_addresses`), because its own join address points back at itself. It joins
+through the first one that answers. A Proxmox cluster whose control-plane nodes use DHCP has no
+address to probe, so a replaced first node initializes a new cluster.
 
 If no probed address answers, the node initializes a new cluster. So do not replace the first
 node in the same apply as every other control-plane node. Any HTTPS service that answers at a

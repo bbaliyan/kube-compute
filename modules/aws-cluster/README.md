@@ -222,13 +222,6 @@ is off from Friday afternoon to Sunday evening. The stop fires `MON-FRI` and the
 start `SUN-THU`. A time zone without daylight saving, such as UTC, keeps those
 hours the same all year in every location.
 
-Before v0.3.0 this input was `nightly_stop`, with `time`, `days` and
-`start_days`. For a schedule that crossed midnight, `days` then named the days
-the stop fired and `start_days` those the start did; now `days` names the days
-the cluster runs and the start days follow from it. The rename replaces nothing:
-the schedules keep their names in AWS, and `moved` blocks carry them to their
-new addresses in state.
-
 `all_instance_ids` lists the instances Terraform owns individually, also as
 `local.all_instance_ids` for files a consumer generates into this directory.
 

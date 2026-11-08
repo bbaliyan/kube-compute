@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
-    defaults = { id = "local:snippets/bharat.yaml" }
+    defaults = { id = "local:snippets/example.yaml" }
   }
   mock_resource "proxmox_virtual_environment_vm" {
     defaults = {
@@ -15,18 +15,18 @@ mock_provider "proxmox" {
 # the resource is not enough: its provisioners still run.
 override_module {
   target  = module.dns_registration
-  outputs = { fqdn = "api.bharat.example.com.", record_created = true }
+  outputs = { fqdn = "api.example.example.com.", record_created = true }
 }
 
 override_module {
   target  = module.dns_registration_wildcard
-  outputs = { fqdn = "*.bharat.example.com.", record_created = true }
+  outputs = { fqdn = "*.example.example.com.", record_created = true }
 }
 
 variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   proxmox_node           = "pve"
   vm_cores               = 4
   vm_memory_mb           = 8192
@@ -169,7 +169,7 @@ run "ha_genesis_probes_every_static_peer" {
     condition = alltrue([
       for k, v in { for k, v in proxmox_virtual_environment_file.node_init : k => v if k != "0" } : anytrue([
         for f in yamldecode(v.source_raw[0].data).write_files :
-        strcontains(base64decode(f.content), "REGISTRATION_ADDRESS='genesis.bharat.example.com'")
+        strcontains(base64decode(f.content), "REGISTRATION_ADDRESS='genesis.example.example.com'")
         if f.path == "/opt/kube-compute/node.env"
       ])
     ])

@@ -1,13 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Shells out to nsupdate rather than using the hashicorp/dns provider: a real
-# apply against Technitium found every dynamic update sent by that provider
-# (add and delete alike) rejected with "NOTIMP", while the byte-for-byte
-# equivalent operation via nsupdate succeeded every time, including
-# node-bootstrap's own genesis self-registration (which already shells out to
-# nsupdate for the same reason — see that module's files/bootstrap.sh). Root
-# cause not pinned down beyond "something in that provider's RFC2136 wire
-# encoding" — not worth chasing further when nsupdate is proven reliable.
+# Shells out to nsupdate rather than using the hashicorp/dns provider: some DNS
+# servers reject every dynamic update that provider sends with "NOTIMP", while the
+# same operation via nsupdate succeeds. node-bootstrap's genesis self-registration
+# also uses nsupdate.
 # Requires nsupdate (bind-utils/dnsutils) on the machine running `tofu apply`.
 locals {
   # Same derivation as node-bootstrap's local.nsupdate_flags: -v forces TCP,
@@ -30,9 +26,9 @@ locals {
 # its own `environment` block instead (evaluated at apply time, never written
 # into any resource attribute) — but OpenTofu's destroy-time provisioners
 # reject ANY reference outside `self`/`count.index`/`each.key`, full stop, even
-# a plain leaf variable with no resource dependency (confirmed the hard way:
-# `tofu init` refuses to even validate a destroy provisioner's `environment`
-# block referencing `var.tsig_key_secret`). So the destroy-time script below
+# a plain leaf variable with no resource dependency (`tofu init` refuses to
+# validate a destroy provisioner's `environment` block that references
+# `var.tsig_key_secret`). So the destroy-time script below
 # reads the secret straight from its inherited process environment
 # (`TF_VAR_tsig_key_secret`) instead of through any Terraform-evaluated
 # reference — the same env var every caller in this project already sets to

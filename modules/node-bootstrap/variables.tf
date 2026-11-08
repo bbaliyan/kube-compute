@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 variable "cluster_name" {
-  description = "Cluster name. Drives the kubeconfig server SAN."
+  description = "Cluster name. It sets the clusterName Helm parameter, the iSCSI initiator name and CLUSTER_NAME in node.env."
   type        = string
 }
 
@@ -16,7 +16,7 @@ variable "cluster_fqdn" {
 }
 
 variable "cluster_fqdn_suffix" {
-  description = "Optional DNS suffix under which the platform's web-UI ingress hostnames are published (e.g. 'cluster-1.example.com' yields argocd.cluster-1.example.com). Distinct from cluster_fqdn, which is the API server name (api.<suffix>) — the ingress suffix must not carry the 'api.' prefix. Null/empty disables platform ingress."
+  description = "Optional DNS suffix under which the platform's web-UI ingress hostnames are published (e.g. 'my-cluster.example.com' yields argocd.my-cluster.example.com). Distinct from cluster_fqdn, which is the API server name (api.<suffix>) — the ingress suffix must not carry the 'api.' prefix. Null/empty disables platform ingress."
   type        = string
   default     = null
 }
@@ -98,7 +98,7 @@ variable "cni" {
 }
 
 variable "trusted_ca_pem" {
-  description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private or homelab CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
+  description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
   type        = string
   default     = null
   sensitive   = true
@@ -254,7 +254,7 @@ variable "dns_self_register_zone" {
 }
 
 variable "dns_self_register_record_name" {
-  description = "Record name, relative to dns_self_register_zone (e.g. 'genesis.cluster-3' for zone 'lan.' registers 'genesis.cluster-3.lan.'). Required when dns_self_register_zone is set; ignored otherwise."
+  description = "Record name, relative to dns_self_register_zone (e.g. 'genesis.my-cluster' for zone 'example.test.' registers 'genesis.my-cluster.example.test.'). Required when dns_self_register_zone is set; ignored otherwise."
   type        = string
   default     = null
 

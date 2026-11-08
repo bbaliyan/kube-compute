@@ -127,9 +127,7 @@ The template must not bake Argo CD, and it must bake the matching `bootstrap.sh`
 rebuild the template first, then move to this version. See
 [`node-bootstrap`](../node-bootstrap/README.md) for the upgrade order.
 
-No compatibility check
-is made between the template's contents and `k8s_version`/`cilium_version`/
-`argocd_version`; the template's self-describing name is the documentation.
+No check compares the template's contents with this module's inputs. The template's name is the documentation.
 
 ## A change to the user data of a running node
 

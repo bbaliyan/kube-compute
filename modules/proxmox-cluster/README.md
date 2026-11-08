@@ -231,8 +231,7 @@ outputs. It has not been tried on a running cluster, so plan it before applying.
 a directory. Each sees `CLUSTER_NAME`, `NODE_ROLE` (`control-plane` or `worker`) and
 `NODE_NAME`. A script that fails is logged by cloud-init and does not stop the node.
 Unset, a node's cloud-init is
-unchanged. The scripts are part of the node's first-boot cloud-init, and have not been
-tried on a real Proxmox host.
+unchanged. The scripts are part of the node's first-boot cloud-init,.
 
 ## User data changes
 

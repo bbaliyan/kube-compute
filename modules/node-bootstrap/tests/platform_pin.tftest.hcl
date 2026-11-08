@@ -7,7 +7,7 @@
 # optional() object-type attributes, not plain string variables passed through
 # a module call). coalesce() in main.tf's effective_gitops_platform_repo_url/
 # _revision locals is the actual fix; this test locks it in against the
-# cloud-init payload the same way it used to against the Ansible extra-vars.
+# cloud-init payload.
 
 variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"

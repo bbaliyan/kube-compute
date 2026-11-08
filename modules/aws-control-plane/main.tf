@@ -363,8 +363,7 @@ resource "aws_security_group" "node" {
 
   lifecycle {
     # create_before_destroy avoids a name_prefix collision when the SG is replaced. The
-    # instance's SG re-association is a separate apply step, so this is not zero-downtime —
-    # acceptable for disposable dev clusters.
+    # instance's SG re-association is a separate apply step, so this is not zero-downtime.
     create_before_destroy = true
   }
 }
@@ -441,9 +440,8 @@ resource "aws_iam_instance_profile" "node" {
 # than silently under-spreading the quorum. The other nodes are left out of for_each
 # then, so the precondition reports it and not an index error.
 #
-# Genesis used to be a resource of its own that the other nodes depended on. A
-# resource cannot depend on its own instances, so they now start together; a
-# joining node retries until genesis answers, as it already had to.
+# A resource cannot depend on its own instances, so the nodes start together. A
+# joining node retries until genesis answers.
 resource "aws_instance" "control_plane" {
   for_each = {
     for i in range(var.control_plane_count) : tostring(i) => try(local.control_plane_subnet_ids[i], local.genesis_subnet_id)

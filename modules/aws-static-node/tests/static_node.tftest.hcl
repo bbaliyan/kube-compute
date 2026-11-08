@@ -10,10 +10,10 @@ mock_provider "aws" {
 
 variables {
   os_image_ami_id           = "ami-0123456789abcdef0"
-  cluster_name              = "bharat"
+  cluster_name              = "example"
   aws_region                = "eu-west-1"
   registration_address      = "10.0.1.5"
-  agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
+  agent_token_ssm_parameter = "/kube-compute/example/agent-token"
   security_group_ids        = ["sg-cluster123"]
   subnet_id                 = "subnet-cp-a"
 }
@@ -42,7 +42,7 @@ run "named_instances_not_a_group" {
   }
   assert {
     condition = alltrue([
-      for name, _ in output.node_refs : contains(["platform-bharat-1", "platform-bharat-2"], name)
+      for name, _ in output.node_refs : contains(["platform-example-1", "platform-example-2"], name)
     ])
     error_message = "node names must be <group>-<cluster>-<n>, numbered from 1 like the control plane's own cp-<cluster>-1"
   }
@@ -98,7 +98,7 @@ run "each_node_gets_its_own_hostname_and_the_groups_taints" {
   }
 
   assert {
-    condition     = yamldecode(module.node_bootstrap["1"].cloud_init_user_data).hostname == "dedicated-bharat-1"
+    condition     = yamldecode(module.node_bootstrap["1"].cloud_init_user_data).hostname == "dedicated-example-1"
     error_message = "each node's cloud-init must set its own hostname -- RKE2 registers the Kubernetes node name from it, and a name Terraform chose is the reason this module exists"
   }
   assert {
@@ -127,7 +127,7 @@ run "each_node_gets_its_own_hostname_and_the_groups_taints" {
   assert {
     condition = anytrue([
       for f in yamldecode(module.node_bootstrap["1"].cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "/kube-compute/bharat/agent-token'\nAGENT")
+      !strcontains(base64decode(f.content), "/kube-compute/example/agent-token'\nAGENT")
       if f.path == "/opt/kube-compute/secrets.env"
     ])
     error_message = "the join token itself must never be in user_data -- only the SSM fetch command that retrieves it at boot"

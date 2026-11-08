@@ -184,9 +184,8 @@ run "server_init_payload_is_valid_cloud_config" {
 # derived from its FQDN, cluster_fqdn_suffix) collides with the wildcard
 # cluster DNS record for that same zone — with a pod's default ndots:5, a
 # bare external hostname like "github.com" gets that search suffix tried
-# first, silently resolving to the cluster's own wildcard IP. Confirmed on
-# cluster-1: Argo CD's repo-server tried to git-clone github.com against the
-# node's own IP over HTTPS and got connection refused.
+# first, silently resolving to the cluster's own wildcard IP. A clone of
+# github.com then fails with connection refused.
 run "dns_servers_set_gives_kubelet_a_search_domain_free_resolv_conf" {
   command = plan
 

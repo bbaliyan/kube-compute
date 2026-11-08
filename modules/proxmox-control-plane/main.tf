@@ -62,26 +62,13 @@ locals {
   # Netplan v2 network-config, one per control-plane index. OpenTofu forbids heredocs
   # inside ternaries, so both branches are precomputed and selected per-index below.
   #
-  # "to: 0.0.0.0/0" not Netplan's "to: default": AlmaLinux 9's stock cloud-init doesn't
-  # parse "default" in a route's `to:` field — fails init-local with "Address default
-  # is not a valid ip address" and silently falls back to NetworkManager's own DHCP
-  # profile, no apply-time error. Explicit CIDR is understood by every cloud-init
-  # version.
+  # "to: 0.0.0.0/0", not Netplan's "to: default": some cloud-init versions do not parse
+  # "default" in a route's `to:` field. They fall back to NetworkManager's DHCP profile
+  # with no apply-time error. An explicit CIDR works on every version.
   #
-  # "eth0" as the ethernets key directly, not a "primary" alias + match: {name: "en*"}:
-  # verified this doesn't work on AlmaLinux 9 — its kernel cmdline sets net.ifnames=0
-  # biosdevname=0, so its NIC is always legacy eth0/eth1, never predictable ens*/enp*.
-  # Separately, cloud-init's RHEL/NetworkManager renderer ignores `match` entirely,
-  # writing the key verbatim as DEVICE= — so a "primary" key produced an unbindable
-  # ifcfg-primary that NetworkManager silently left inactive, never erroring, while its
-  # own auto-DHCP profile stayed up.
-  #
-  # NOT independently re-verified against AlmaLinux 10 (the template this module now
-  # points at) — both bugs live in cloud-init/NetworkManager internals, not RKE2, so
-  # likely unchanged, but that's an assumption. Both workarounds are a superset of
-  # stock config's needs — confirm on a real Proxmox apply against AlmaLinux 10 before
-  # relying on this in production, and revert to a "match: {name: en*}" primary key if
-  # AlmaLinux 10's NIC naming did change.
+  # "eth0" is the ethernets key itself, not a "primary" alias with a `match` block:
+  # cloud-init's NetworkManager renderer ignores `match` and writes the key verbatim as
+  # DEVICE=, which leaves an unbindable connection inactive. The guest NIC is named eth0.
   network_data_static = { for i, cidr in local.cp_ip_cidrs : i => <<-EOT
     version: 2
     ethernets:
@@ -425,7 +412,7 @@ resource "proxmox_virtual_environment_firewall_options" "control_plane" {
   # remembers from the old VM against the new VM's actually-empty ruleset.
   # Forcing replacement whenever the VM replaces keeps this resource's
   # lifecycle tied to the VM it belongs to, avoiding the broken update path
-  # entirely. Confirmed against a real apply (image rebuild -> template swap).
+  # entirely.
   #
   # The trigger is this node's own VM id: the id changes only on replacement,
   # so an in-place update or another node's replacement leaves it alone.
