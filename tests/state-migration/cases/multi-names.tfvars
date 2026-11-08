@@ -1,7 +1,7 @@
 # A dedicated control plane, a static platform node and an autoscaled worker pool.
-cluster_name  = "example-multi"
-cluster_type  = "dedicated_control_plane"
-instance_type = "t4g.large"
+cluster_name    = "example-multi"
+cluster_type    = "dedicated_control_plane"
+instance_type   = "t4g.large"
 os_image_ami_id = "@os_image_ami_id@"
 
 static_nodes = {

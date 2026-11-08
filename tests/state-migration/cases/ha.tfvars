@@ -3,7 +3,7 @@
 cluster_name                = "example-ha"
 cluster_type                = "dedicated_control_plane"
 instance_type               = "t3a.large"
-os_image_ami_id = "@os_image_ami_id@"
+os_image_ami_id             = "@os_image_ami_id@"
 control_plane_count         = 3
 endpoint_mode               = "static"
 static_registration_address = "10.0.1.10"

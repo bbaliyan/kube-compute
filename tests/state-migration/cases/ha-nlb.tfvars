@@ -4,7 +4,7 @@
 cluster_name        = "example-ha-nlb"
 cluster_type        = "dedicated_control_plane"
 instance_type       = "t3a.large"
-os_image_ami_id = "@os_image_ami_id@"
+os_image_ami_id     = "@os_image_ami_id@"
 control_plane_count = 3
 endpoint_mode       = "loadbalancer"
 
