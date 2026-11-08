@@ -30,30 +30,51 @@ cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
 With no parts, `user_data` is the plain cloud-config.
 
 The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
-modules, the guest agent, **and the genesis Cilium/Argo CD manifests** — is
+modules, the guest agent, **and the genesis Cilium manifest** — is
 expected to already be baked into the image the caller boots the VM from (a
-template built by kube-images; see its `kube-node/packer/proxmox/build.sh` and `helm-values/`
-for where that render happens). This module only renders the per-cluster
+template built by kube-images). Argo CD is not baked; the first server downloads it
+(see below). This module only renders the per-cluster
 identity, secrets, and join logic that can't be baked into a shared image.
 `modules/proxmox-control-plane` and `modules/proxmox-node-pool` are the only
 callers currently wired for this — both accept an optional
 `proxmox_template_vm_id` to full-clone a pre-baked image, alongside their
 older stock-cloud-image paths.
 
-## Cilium/Argo CD are baked, not rendered here
+## Cilium is baked, Argo CD is downloaded
 
-An earlier version of this module shelled out to `helm template` at plan
-time (via a `data.external` source) and embedded the rendered manifest whole
-in the cloud-init payload. That stopped working for real: Argo CD's chart
-alone renders to ~1.9 MB, and Proxmox's `cicustom` snippet upload has a hard
-1 MiB cap — a real `tofu apply` against `cluster-1` failed with
-`file '...' too long - aborting`. The render moved to kube-images' Packer
-build instead (once, at bake time). This module's `render_cilium`/
-`render_argocd` locals now only decide whether `bootstrap.sh` applies the
-files kube-images already put at
-`/opt/kube-compute/manifests/{cilium.yaml,00-argocd.yaml}` on the template —
-a per-cluster runtime decision (CNI choice, GitOps enablement), independent
-of whether the files exist (they always do, on a kube-images-baked template).
+The node image bakes the Cilium manifest at `/opt/kube-compute/manifests/cilium.yaml`.
+A node with `cni: cilium` is not Ready without it. The `render_cilium` local only
+decides whether `bootstrap.sh` applies it.
+
+The image does not bake Argo CD. kube-platform publishes one manifest per release,
+`argocd-bootstrap.yaml`, with its sha256. It is about 2 MB, too big for the cloud-init
+payload (Proxmox allows 1 MiB). So the first server downloads it at first boot:
+
+1. `bootstrap.sh` downloads `argocd_manifest_url`. It retries a few times.
+2. It compares the file with `argocd_manifest_sha256`. If they differ, the boot fails.
+3. It applies the file with server-side apply.
+4. It waits for the Argo CD workloads to roll out.
+
+Each failure stops the boot and is written to `/var/log/kube-compute-bootstrap.log`.
+The node needs a route to the URL at first boot.
+
+`argocd_manifest_url` and `argocd_manifest_sha256` have no default. They are required
+on the first server while a platform or workloads Application is enabled, and the plan
+fails without them. The hash must be 64 lowercase hex characters. Take both from a
+kube-platform release, for example
+`https://github.com/bbaliyan/kube-platform/releases/download/<tag>/argocd-bootstrap.yaml`.
+
+### Upgrade order
+
+This change is breaking. The `node.env` contract moves from 2 to 3.
+
+1. Rebuild the node image without the baked Argo CD manifest. The new image carries
+   the new `bootstrap.sh`.
+2. Move the module to the new major version and set the two inputs.
+
+An image with the old module, or the new module with the old image, fails on the
+contract check at the first line of `bootstrap.sh`. Existing clusters do not change
+until a node is replaced.
 
 ## Watching progress during a real apply
 

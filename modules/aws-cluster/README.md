@@ -124,6 +124,19 @@ Every node carries `kube-compute.io/node-group=<key>`: the static group's name, 
 the autoscaled role's, whatever the node's size. `node_taints` keeps other pods
 off; pods that belong there need a matching toleration.
 
+## Argo CD manifest
+
+The first control-plane node downloads Argo CD at first boot. Set `argocd_manifest_url`
+and `argocd_manifest_sha256` to a kube-platform release's `argocd-bootstrap.yaml` and
+its sha256. Both are required while a platform or workloads Application is enabled.
+
+This is a breaking change. Upgrade in this order:
+
+1. Rebuild the AMI without Argo CD. It then carries the matching `bootstrap.sh`.
+2. Move to this version and set the two inputs.
+
+A new AMI with the old module, or the reverse, fails at the first line of `bootstrap.sh`.
+
 ## Platform node
 
 `platform_node_group` names the static group that runs the platform stack:

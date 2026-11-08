@@ -15,8 +15,8 @@ shell-script part that enables the SSM Agent (SSM stays this module's operator-a
 Nothing in this module connects to the node, waits on it, or observes it converge; `apply`
 returns as soon as the instance and its user-data exist.
 
-The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules, genesis Cilium/Argo
-CD manifests) is expected to already be baked into the AMI, via `kube-images`' `kube-node/packer/aws/`
+The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules, genesis Cilium
+manifest) is expected to already be baked into the AMI, via `kube-images`' `kube-node/packer/aws/`
 template. You must pass a kube-images-baked AMI with `os_image_ami_id`, or its name with
 `os_image_name`. If you pass neither, the plan fails. A stock image has no RKE2, so a node
 booted from it would never join. With `os_image_name`, the module resolves the ID itself
@@ -152,6 +152,15 @@ registration endpoint the same way a worker retries its join target; node-bootst
 staggered, self-healing retry handles the one genuine etcd constraint (one non-voting learner at
 a time) among the joining siblings. Argo/platform GitOps inputs are only ever passed to the
 genesis node, so platform bootstrap manifests never race on more than one server.
+
+## Argo CD manifest
+
+The genesis node downloads Argo CD at first boot. Set `argocd_manifest_url` and
+`argocd_manifest_sha256` to a kube-platform release's `argocd-bootstrap.yaml` and its
+sha256. Both are required while a platform or workloads Application is enabled. The
+AMI must not bake Argo CD, and it must bake the matching `bootstrap.sh`: rebuild the
+AMI first, then move to this version. See
+[`node-bootstrap`](../node-bootstrap/README.md) for the upgrade order.
 
 ## Container Network Interface (CNI)
 
