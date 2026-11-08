@@ -53,6 +53,8 @@ The cases and the seed are the same for both.
    `-j9` runs the cases at the same time. They share the seed and the emulator, and each has its own state file.
    To run one case, set `SM_CASES`, for example `SM_CASES=ha-nlb`.
 
+CI runs this on pull requests that touch the AWS modules, `node-bootstrap`, this directory or the Makefile, and on pushes to main. The job runs `make state-migration-ci`, which installs moto 5.2.5 in a venv, starts it and runs all cases. A failed job uploads each `changes.txt`.
+
 3. Read the result in `/tmp/state-migration/<case>/changes.txt`.
 
 The emulator must be empty: the seed creates resources by name.
