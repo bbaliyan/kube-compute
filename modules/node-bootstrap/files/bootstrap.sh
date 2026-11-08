@@ -13,8 +13,9 @@
 # user data, which cost ~9.6 KB there and again inside every worker group's
 # cloud-init in a worker bundle. EC2 allows 16384 decoded bytes of user data for
 # everything a node boots with, and three copies of this program did not fit.
-# Baking it is also what the images already do with the Cilium and Argo CD
-# renders, for the same reason on Proxmox, whose snippet cap is 1 MiB.
+# Baking it is also what the images already do with the Cilium render, for the
+# same reason on Proxmox, whose snippet cap is 1 MiB. Argo CD is not baked: this
+# script downloads kube-platform's published manifest on the first server.
 #
 # The contract between this file and the module that writes node.env is the
 # integer below. Bump it whenever a key is added, removed, or changes meaning,
@@ -22,7 +23,7 @@
 # on the next line rather than half-configuring a node. An image NEWER than the
 # module needs no version check -- an older module ships its own rendered copy
 # of this file in write_files, which simply overwrites the baked one.
-BOOTSTRAP_CONTRACT=2
+BOOTSTRAP_CONTRACT=3
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
@@ -273,6 +274,30 @@ else
   fi
 fi
 
+if [ "$CNI" = "cilium" ] && [ "$NODE_ROLE" = "server-init" ]; then
+  # RKE2 re-applies every file under server/manifests on each rke2-server start
+  # (the k3s deploy controller starts with force=true). Once the platform has
+  # upgraded Cilium, a restart of this server would put the older baked render
+  # back. So remove the baked file as soon as Cilium is running. Deleting a
+  # manifest file does not delete the resources it created (k3s documents this;
+  # the controller deletes resources only for --disable), so Cilium keeps running.
+  # If Cilium is not Ready in time, keep the file: RKE2 keeps retrying it.
+  CILIUM_READY=0
+  for _ in $(seq 1 30); do
+    if $KUBECTL rollout status daemonset/cilium -n kube-system --timeout=10s >/dev/null 2>&1; then
+      CILIUM_READY=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$CILIUM_READY" -eq 1 ]; then
+    rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml
+    echo "kube-compute: Cilium Ready, removed the baked cilium.yaml $(date -Is)"
+  else
+    echo "kube-compute: WARNING: Cilium did not become Ready within ~6 minutes, so the baked cilium.yaml stays in server/manifests and RKE2 re-applies it on every restart" >&2
+  fi
+fi
+
 if [ "$ARGOCD_NEEDED" = "1" ]; then
   # ---- GitOps/Argo CD bootstrap: genesis only, after the node is Ready ----
   # Node Ready only means the CNI is minimally configured — not that CoreDNS
@@ -310,10 +335,21 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
   else
     echo "kube-compute: CoreDNS Ready $(date -Is)"
   fi
+  # The Argo CD manifest is published by kube-platform and pinned by URL and
+  # sha256. Every failure here is fatal: a node without Argo CD never syncs.
+  ARGOCD_MANIFEST="$(mktemp)"
+  trap 'rm -f "$ARGOCD_MANIFEST"' EXIT
+  curl -fsSL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 120 \
+    -o "$ARGOCD_MANIFEST" "$ARGOCD_MANIFEST_URL"
+  if ! echo "$ARGOCD_MANIFEST_SHA256  $ARGOCD_MANIFEST" | sha256sum -c - >/dev/null; then
+    echo "kube-compute: $ARGOCD_MANIFEST_URL does not match sha256 $ARGOCD_MANIFEST_SHA256" >&2
+    exit 1
+  fi
   # --server-side is required: a client-side apply stores the previous config in
   # a last-applied-configuration annotation, and Argo CD's applicationsets CRD
-  # exceeds Kubernetes' 262144-byte annotation limit.
-  $KUBECTL apply --server-side -f "$KC/manifests/00-argocd.yaml"
+  # exceeds Kubernetes' 262144-byte annotation limit. --force-conflicts takes
+  # ownership of fields from an earlier partial apply on a retried boot.
+  $KUBECTL apply --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
   # NOT a health wait — only blocks until the API server serves the Application
   # type (avoids a "no matches for kind Application" race). Deliberately does not
   # wait for argocd-server to roll out: on a tainted control plane, or before a

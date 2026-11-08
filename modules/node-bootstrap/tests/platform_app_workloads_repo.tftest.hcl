@@ -4,11 +4,13 @@
 # the Application must render exactly as before, with no workloads parameters.
 
 variables {
-  cluster_name        = "test"
-  node_name           = "test-cp-0"
-  node_role           = "server-init"
-  cluster_token       = "tok"
-  cluster_agent_token = "agenttok"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
+  node_role              = "server-init"
+  cluster_token          = "tok"
+  cluster_agent_token    = "agenttok"
 }
 
 run "no_workloads_repo_adds_no_parameters" {

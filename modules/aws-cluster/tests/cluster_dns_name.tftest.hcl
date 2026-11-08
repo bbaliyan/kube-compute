@@ -7,14 +7,16 @@ mock_provider "aws" {
 }
 
 variables {
-  os_image_name         = "kube-image-*"
-  cluster_name          = "app-red"
-  aws_region            = "eu-west-1"
-  allowed_ingress_cidrs = ["10.0.0.0/8"]
-  subnet_id             = "subnet-abc"
-  os_image_ami_id       = "ami-0123456789abcdef0"
-  cluster_domain        = "red.example.internal"
-  hosted_zone_id        = "Z0123456789ABCDEFGHIJ"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  os_image_name          = "kube-image-*"
+  cluster_name           = "app-red"
+  aws_region             = "eu-west-1"
+  allowed_ingress_cidrs  = ["10.0.0.0/8"]
+  subnet_id              = "subnet-abc"
+  os_image_ami_id        = "ami-0123456789abcdef0"
+  cluster_domain         = "red.example.internal"
+  hosted_zone_id         = "Z0123456789ABCDEFGHIJ"
 }
 
 run "without_it_the_dns_name_is_the_cluster_name" {

@@ -3,8 +3,10 @@
 # cloud_init_render.tftest.hcl), plus the two cases where it must not render.
 
 variables {
-  cluster_name = "test"
-  node_name    = "test-worker-0"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-worker-0"
 }
 
 run "worker_renders_every_taint_quoted" {

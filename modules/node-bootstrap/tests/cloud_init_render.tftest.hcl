@@ -12,8 +12,10 @@
 # handed, plus that it references every key node.env defines.
 
 variables {
-  cluster_name = "test"
-  node_name    = "test-cp-0"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
 }
 
 run "server_init_payload_is_valid_cloud_config" {
@@ -76,6 +78,26 @@ run "server_init_payload_is_valid_cloud_config" {
       strcontains(local.bootstrap_program, k)
     ])
     error_message = "every key node.env defines must be read by the baked program, or the two halves of the boot have drifted apart"
+  }
+  # The baked cilium.yaml must not outlive the Cilium handoff to Argo CD: RKE2
+  # re-applies every server/manifests file on each start. The removal must come
+  # after the Cilium wait, inside the genesis-only branch, and appear once.
+  assert {
+    condition = (
+      length(split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", local.bootstrap_program)) == 2
+      && strcontains(split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", local.bootstrap_program)[0], "rollout status daemonset/cilium -n kube-system")
+    )
+    error_message = "bootstrap.sh must remove the baked cilium.yaml exactly once, after it waits for the Cilium DaemonSet"
+  }
+  assert {
+    condition = (
+      strcontains(local.bootstrap_program, "if [ \"$CNI\" = \"cilium\" ] && [ \"$NODE_ROLE\" = \"server-init\" ]; then\n  # RKE2 re-applies")
+      && !strcontains(
+        split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", split("if [ \"$CNI\" = \"cilium\" ] && [ \"$NODE_ROLE\" = \"server-init\" ]; then\n  # RKE2 re-applies", local.bootstrap_program)[1])[0],
+        "\nfi\n"
+      )
+    )
+    error_message = "the baked cilium.yaml must be removed only inside the cilium and server-init branch, never for a joining server or a worker"
   }
   assert {
     condition     = strcontains(local.bootstrap_program, "BOOTSTRAP_CONTRACT=${local.node_env_contract}")

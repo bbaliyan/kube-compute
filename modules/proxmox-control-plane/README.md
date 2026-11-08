@@ -118,7 +118,16 @@ depend on the template surviving. The template carries OS prep, the RKE2 binarie
 kernel modules, and the guest agent; this module supplies only per-cluster identity,
 secrets, and join logic, as a cloud-init payload rendered by `node-bootstrap`.
 Bootstrap runs asynchronously after `tofu apply` returns — tail
-`/var/log/kube-compute-bootstrap.log` on the node to watch it. No compatibility check
+`/var/log/kube-compute-bootstrap.log` on the node to watch it.
+
+The first control-plane node downloads Argo CD at first boot. Set `argocd_manifest_url`
+and `argocd_manifest_sha256` to a kube-platform release's `argocd-bootstrap.yaml` and
+its sha256. Both are required while a platform or workloads Application is enabled.
+The template must not bake Argo CD, and it must bake the matching `bootstrap.sh`:
+rebuild the template first, then move to this version. See
+[`node-bootstrap`](../node-bootstrap/README.md) for the upgrade order.
+
+No compatibility check
 is made between the template's contents and `k8s_version`/`cilium_version`/
 `argocd_version`; the template's self-describing name is the documentation.
 

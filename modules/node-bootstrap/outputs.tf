@@ -8,6 +8,11 @@ output "cloud_init_user_data" {
     condition     = strcontains(local.bootstrap_program, "BOOTSTRAP_CONTRACT=${local.node_env_contract}")
     error_message = "files/bootstrap.sh declares a different bootstrap contract than node_env_contract in main.tf. They are the two halves of one agreement -- the program refuses to run against a node.env written for another contract -- so bump them together."
   }
+
+  precondition {
+    condition     = !local.render_argocd || (var.argocd_manifest_url != null && var.argocd_manifest_sha256 != null)
+    error_message = "argocd_manifest_url and argocd_manifest_sha256 are required on the first server while a platform or workloads Application is enabled. Set both to a kube-platform release's argocd-bootstrap.yaml and its sha256."
+  }
 }
 
 output "node_name" {
@@ -18,5 +23,10 @@ output "node_name" {
 output "user_data" {
   description = "The final user data for this node: cloud_init_user_data alone when there are no boot scripts and no SSM Agent part, otherwise a MIME multipart/mixed document with those shell-script parts ahead of the cloud-config. The caller delivers it verbatim (gzip and base64 it for EC2). Sensitive, for the same reasons as cloud_init_user_data."
   value       = local.user_data
-  sensitive   = true
+
+  precondition {
+    condition     = !local.render_argocd || (var.argocd_manifest_url != null && var.argocd_manifest_sha256 != null)
+    error_message = "argocd_manifest_url and argocd_manifest_sha256 are required on the first server while a platform or workloads Application is enabled. Set both to a kube-platform release's argocd-bootstrap.yaml and its sha256."
+  }
+  sensitive = true
 }

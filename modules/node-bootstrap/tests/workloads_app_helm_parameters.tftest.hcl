@@ -9,8 +9,10 @@
 # when neither is set (no dangling `helm:` key).
 
 variables {
-  cluster_name = "test"
-  node_name    = "test-cp-0"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
 }
 
 run "workloads_app_helm_parameters_render_nested_and_flat" {

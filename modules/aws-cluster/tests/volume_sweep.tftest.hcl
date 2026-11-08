@@ -18,12 +18,14 @@ mock_provider "aws" {
 }
 
 variables {
-  os_image_name         = "kube-image-*"
-  cluster_name          = "bharat"
-  aws_region            = "eu-west-1"
-  allowed_ingress_cidrs = ["10.0.0.0/8"]
-  subnet_id             = "subnet-abc"
-  os_image_ami_id       = "ami-0123456789abcdef0"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  os_image_name          = "kube-image-*"
+  cluster_name           = "bharat"
+  aws_region             = "eu-west-1"
+  allowed_ingress_cidrs  = ["10.0.0.0/8"]
+  subnet_id              = "subnet-abc"
+  os_image_ami_id        = "ami-0123456789abcdef0"
 }
 
 run "the_sweep_matches_this_cluster_in_its_own_region" {

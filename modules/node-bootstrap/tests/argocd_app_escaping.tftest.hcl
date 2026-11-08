@@ -5,11 +5,13 @@
 # number) must stay strings, because Helm parameters and revisions are strings.
 
 variables {
-  cluster_name        = "test"
-  node_name           = "test-cp-0"
-  node_role           = "server-init"
-  cluster_token       = "tok"
-  cluster_agent_token = "agenttok"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
+  node_role              = "server-init"
+  cluster_token          = "tok"
+  cluster_agent_token    = "agenttok"
 
   gitops_workloads_repo_url = "https://example.test/workloads.git"
   gitops_workloads_revision = "1.0"

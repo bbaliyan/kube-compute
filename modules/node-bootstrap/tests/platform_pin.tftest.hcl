@@ -10,11 +10,13 @@
 # cloud-init payload the same way it used to against the Ansible extra-vars.
 
 variables {
-  cluster_name        = "test"
-  node_name           = "test-cp-0"
-  node_role           = "server-init"
-  cluster_token       = "tok"
-  cluster_agent_token = "agenttok"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
+  node_role              = "server-init"
+  cluster_token          = "tok"
+  cluster_agent_token    = "agenttok"
 }
 
 run "null_repo_url_falls_back_to_the_pin" {
@@ -87,10 +89,11 @@ run "disabled_platform_renders_no_application_at_all" {
     error_message = "gitops_platform_enabled = false must skip the platform Application entirely, even though the pin would otherwise apply"
   }
   assert {
-    condition = !contains(
-      [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/manifests/00-argocd.yaml"
-    )
-    error_message = "with no platform and no workloads Application, Argo CD itself must not be installed either"
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "ARGOCD_NEEDED='0'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "with no platform and no workloads Application, node.env must tell bootstrap.sh not to install Argo CD"
   }
 }
