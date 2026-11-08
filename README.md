@@ -27,7 +27,7 @@ Each provider has one cluster module that composes the others. Use it when you w
 | Provider | `modules/aws-control-plane` | The control-plane node(s) and the cluster-wide resources: join tokens, security groups, IAM, the API load balancer and DNS records. With `control_plane_count = 1` it is a complete single-node cluster. |
 | Provider | `modules/aws-static-node` | A group of named, fixed worker instances in one role, such as `platform` or `build`. `node_count` sets how many. |
 | Provider | `modules/aws-node-pool` | One role of workers that cluster-autoscaler scales from zero, as EC2 Auto Scaling groups. |
-| Provider | `modules/proxmox-control-plane` | The control-plane VM(s) on Proxmox, with the join tokens and the cluster and etcd firewall groups. |
+| Provider | `modules/proxmox-control-plane` | The control-plane VM(s) on Proxmox, with the join tokens and the cluster firewall group. |
 | Provider | `modules/proxmox-node-pool` | A pool of fixed worker VMs on Proxmox, named `<cluster>-<pool>-<n>`. |
 | Shared | `modules/node-bootstrap` | Renders the boot configuration (`#cloud-config`) for one node, for a role the caller has already chosen: `server-init`, `server-join` or `worker`. It produces a string and creates no resource. It expects the RKE2 binaries to be baked into the node image from [`kube-images`](https://github.com/bbaliyan/kube-images). |
 | Shared | `modules/dns-registration` | Publishes an A record set to an RFC2136 DNS server with a TSIG-signed dynamic update. Proxmox uses it because its DNS server is external. AWS creates its Route 53 records with `aws_route53_record`, because Route 53 does not accept RFC2136 updates. |

@@ -5,7 +5,6 @@ locals {
   # dependency between the two modules. This module owns the ipset resources;
   # node-pool never creates one.
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
-  etcd_ipset_name    = "kube-compute-${var.cluster_name}-etcd"
 
   has_domain    = var.cluster_domain != null
   dns_name      = coalesce(var.cluster_dns_name, var.cluster_name)
@@ -139,18 +138,6 @@ resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
 
   cidr {
     name = coalesce(var.cluster_network_cidr, "${split("/", coalesce(try(var.control_plane_ip_addresses[0], null), "0.0.0.0/32"))[0]}/32")
-  }
-}
-
-resource "proxmox_virtual_environment_firewall_ipset" "etcd" {
-  name    = local.etcd_ipset_name
-  comment = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
-
-  dynamic "cidr" {
-    for_each = local.cp_ips
-    content {
-      name = "${cidr.value}/32"
-    }
   }
 }
 
@@ -654,15 +641,6 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
     action  = "ACCEPT"
     source  = "+${local.cluster_ipset_name}"
     comment = "all traffic among cluster members"
-  }
-
-  rule {
-    type    = "in"
-    action  = "ACCEPT"
-    proto   = "tcp"
-    dport   = "2379:2380"
-    source  = "+${local.etcd_ipset_name}"
-    comment = "etcd peer/client traffic, control-plane nodes only"
   }
 
   dynamic "rule" {

@@ -130,10 +130,10 @@ This module generates its own join tokens directly (`random_password.server_toke
 their own instance IAM role) are never exposed as raw values outside the module. Workers receive
 only the agent token, so a compromised worker cannot rejoin as control-plane/etcd.
 
-Two security groups carry east-west traffic, both created here: `aws_security_group.cluster`
-(self-referencing, every member, exposed as `cluster_security_group_id` for a future
-`aws-node-pool` unit to attach to by id) and `control_plane_etcd` (control-plane-only, scopes
-etcd 2379-2380 so workers can never reach it). `registration_address` is what a joining node's
+One security group carries east-west traffic: `aws_security_group.cluster` (self-referencing,
+every member, exposed as `cluster_security_group_id` for a future `aws-node-pool` unit to attach
+to by id). It admits all traffic among members, workers included, so etcd (2379-2380) is not
+limited to control-plane nodes. `registration_address` is what a joining node's
 `--server` flag targets — for `control_plane_count = 1` this is the control-plane node's private
 IP.
 

@@ -232,35 +232,6 @@ resource "aws_vpc_security_group_egress_rule" "cluster_all" {
   tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-cluster-egress-all" })
 }
 
-resource "aws_security_group" "control_plane_etcd" {
-  name_prefix = "kube-compute-${var.cluster_name}-etcd-"
-  description = "kube-compute ${var.cluster_name}: etcd peer/client traffic, control-plane nodes only."
-  vpc_id      = local.module_vpc_id
-  tags        = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd" })
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_vpc_security_group_ingress_rule" "etcd_peer" {
-  security_group_id            = aws_security_group.control_plane_etcd.id
-  description                  = "etcd peer/client traffic among control-plane nodes"
-  ip_protocol                  = "tcp"
-  from_port                    = 2379
-  to_port                      = 2380
-  referenced_security_group_id = aws_security_group.control_plane_etcd.id
-  tags                         = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd-peer" })
-}
-
-resource "aws_vpc_security_group_egress_rule" "etcd_all" {
-  security_group_id = aws_security_group.control_plane_etcd.id
-  description       = "all egress"
-  ip_protocol       = "-1"
-  cidr_ipv4         = "0.0.0.0/0"
-  tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-etcd-egress-all" })
-}
-
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
@@ -337,7 +308,7 @@ resource "aws_instance" "control_plane_additional" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = each.value
-  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
+  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
   # hop_limit 3, not AWS's generally-documented 2: confirmed live that 2 isn't enough for a
@@ -557,7 +528,7 @@ resource "aws_instance" "control_plane" {
   ami                    = local.effective_ami_id
   instance_type          = var.instance_type
   subnet_id              = local.genesis_subnet_id
-  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id, aws_security_group.control_plane_etcd.id]
+  vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id]
   iam_instance_profile   = aws_iam_instance_profile.node.name
 
   # hop_limit 3, not AWS's commonly-documented 2. Confirmed live: with hop_limit 2, a pod's
