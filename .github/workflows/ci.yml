@@ -26,11 +26,21 @@ jobs:
         with:
           fetch-depth: 0
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Only main saves the cache, so a pull request cannot replace or evict what
+      # main restores. A pull request that changes a lock file runs cold.
+      # No restore-keys: tofu never prunes the directory, so a partial restore
+      # would carry every old provider version forward.
+      - id: plugins
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: /tmp/tofu-plugins
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
           key: tofu-plugins-${{ hashFiles('**/.terraform.lock.hcl') }}
       - run: make test-commit BASE_REF=${{ github.event.pull_request.base.sha || github.event.before }}
+      - if: github.ref == 'refs/heads/main' && steps.plugins.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: ${{ steps.plugins.outputs.cache-primary-key }}
 
   integration:
     needs: commit
