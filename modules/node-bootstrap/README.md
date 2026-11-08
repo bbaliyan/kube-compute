@@ -66,7 +66,9 @@ kube-platform release, for example
 
 ### Upgrade order
 
-This change is breaking. The `node.env` contract moves from 2 to 3.
+This change is breaking. The `node.env` contract moves from 2 to 4. Contract 3 was never
+released. Contract 4 adds `REJOIN_PROBE_ADDRESSES`, the list of addresses a first server probes
+for a live cluster before it starts etcd (the `rejoin_probe_addresses` input).
 
 1. Rebuild the node image without the baked Argo CD manifest. The new image carries
    the new `bootstrap.sh`.

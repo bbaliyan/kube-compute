@@ -20,11 +20,12 @@ locals {
   genesis_dns_name     = local.has_domain ? "genesis.${local.dns_name}.${trimsuffix(var.cluster_domain, ".")}" : null
   registration_address = local.genesis_dns_name
 
-  # A replaced genesis node must probe a peer, not registration_address: that address
+  # A replaced genesis node must probe its peers, not registration_address: that address
   # resolves to genesis itself, and genesis rewrites the genesis DNS record to itself before the
-  # probe runs, so the probe would never see the live cluster. Only a static peer IP
-  # is known before genesis exists; a DHCP peer IP would close a dependency cycle.
-  genesis_rejoin_probe_address = var.control_plane_count > 1 && local.static_ips ? split("/", var.control_plane_ip_addresses[1])[0] : null
+  # probe runs, so the probe would never see the live cluster. It probes every other
+  # control-plane node, so one peer being down does not hide the live cluster. Only static
+  # peer IPs are known before genesis exists; a DHCP peer IP would close a dependency cycle.
+  genesis_rejoin_probe_addresses = var.control_plane_count > 1 && local.static_ips ? [for cidr in slice(var.control_plane_ip_addresses, 1, var.control_plane_count) : split("/", cidr)[0]] : []
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")
@@ -170,7 +171,8 @@ module "node_bootstrap" {
   cni                             = local.effective_cni
   cluster_token                   = random_password.server_token.result
   cluster_agent_token             = each.key == "0" ? random_password.agent_token.result : null
-  registration_address            = each.key == "0" ? local.genesis_rejoin_probe_address : local.registration_address
+  registration_address            = each.key == "0" ? null : local.registration_address
+  rejoin_probe_addresses          = each.key == "0" ? local.genesis_rejoin_probe_addresses : []
   extra_tls_sans                  = compact([local.wildcard_name, local.genesis_dns_name])
   trusted_ca_pem                  = var.trusted_ca_pem
   registry_mirror_url             = var.registry_mirror_url

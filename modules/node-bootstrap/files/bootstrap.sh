@@ -23,7 +23,7 @@
 # on the next line rather than half-configuring a node. An image NEWER than the
 # module needs no version check -- an older module ships its own rendered copy
 # of this file in write_files, which simply overwrites the baked one.
-BOOTSTRAP_CONTRACT=3
+BOOTSTRAP_CONTRACT=4
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
@@ -163,17 +163,27 @@ else
     # An additional control-plane node is always joining an existing cluster.
     SERVER_LINE="server: https://$REGISTRATION_ADDRESS:9345"
   fi
-  if [ "$NODE_ROLE" = "server-init" ] && [ -n "$REGISTRATION_ADDRESS" ]; then
+  if [ "$NODE_ROLE" = "server-init" ]; then
     # Rejoin detection. RKE2 has no --cluster-init flag: the first server is simply
     # the one whose config.yaml has no "server:" key. A REPLACED genesis node must
     # rejoin an already-healthy cluster rather than blindly re-initializing etcd,
-    # which would split-brain a live quorum. 200/401/403 all mean "the API server
-    # is up and answering"; anything else (including no answer at all) means there
-    # is no cluster to rejoin, so this really is genesis.
-    PROBE_CODE="$(curl -sk --max-time 10 -o /dev/null -w '%{http_code}' "https://$REGISTRATION_ADDRESS:6443/readyz" || true)"
-    case "$PROBE_CODE" in
-      200|401|403) SERVER_LINE="server: https://$REGISTRATION_ADDRESS:9345" ;;
-    esac
+    # which would split-brain a live quorum. Probe each address in turn and join
+    # through the first that answers, so one peer being down or replaced in the same
+    # apply does not hide the live cluster. 200/401/403 all mean "the API server is
+    # up and answering". If no address answers, there is no cluster to rejoin, so
+    # this really is genesis: a new cluster has no live peers to find.
+    for PROBE_ADDRESS in $REJOIN_PROBE_ADDRESSES; do
+      PROBE_CODE="$(curl -sk --connect-timeout 3 --max-time 10 -o /dev/null -w '%{http_code}' "https://$PROBE_ADDRESS:6443/readyz" || true)"
+      case "$PROBE_CODE" in
+        200|401|403)
+          SERVER_LINE="server: https://$PROBE_ADDRESS:9345"
+          break
+          ;;
+      esac
+    done
+    if [ -z "$SERVER_LINE" ] && [ -n "$REJOIN_PROBE_ADDRESSES" ]; then
+      echo "kube-compute: no rejoin probe address answered ($REJOIN_PROBE_ADDRESSES); initializing a new cluster" >&2
+    fi
   fi
   {
     if [ -n "$SERVER_LINE" ]; then echo "$SERVER_LINE"; fi

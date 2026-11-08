@@ -336,7 +336,14 @@ locals {
   # baked into the node image; this says which node.env contract it was written
   # against, and the program refuses to run against any other. Bump both
   # together whenever a key below is added, removed, or changes meaning.
-  node_env_contract = 3
+  node_env_contract = 4
+
+  # Where a server-init node looks for a live cluster before it starts etcd.
+  # Explicit addresses win; otherwise registration_address, as before.
+  rejoin_probe_addresses = (
+    length(var.rejoin_probe_addresses) > 0 ? var.rejoin_probe_addresses :
+    var.node_role == "server-init" && var.registration_address != null ? [var.registration_address] : []
+  )
 
   # The program itself, read only so this module can check it declares the same
   # contract number. It is never shipped from here -- the node image bakes it,
@@ -354,11 +361,14 @@ locals {
   # Every key is always defined (empty where a role does not use it) so the
   # program can run under `set -u`.
   node_config_values = {
-    KUBE_COMPUTE_CONTRACT         = tostring(local.node_env_contract)
-    NODE_ROLE                     = var.node_role
-    CNI                           = var.cni
-    CLUSTER_NAME                  = var.cluster_name
-    REGISTRATION_ADDRESS          = var.registration_address != null ? var.registration_address : ""
+    KUBE_COMPUTE_CONTRACT = tostring(local.node_env_contract)
+    NODE_ROLE             = var.node_role
+    CNI                   = var.cni
+    CLUSTER_NAME          = var.cluster_name
+    REGISTRATION_ADDRESS  = var.registration_address != null ? var.registration_address : ""
+    # Space-separated because the program word-splits it. Addresses are IPs or
+    # FQDNs, so none can contain one.
+    REJOIN_PROBE_ADDRESSES        = join(" ", local.rejoin_probe_addresses)
     TRUSTED_CA_ENABLED            = var.trusted_ca_pem != null ? "1" : "0"
     REGISTRY_MIRROR_URL           = var.registry_mirror_url != null ? var.registry_mirror_url : ""
     ISCSI_INITIATOR_ENABLED       = var.iscsi_initiator_enabled ? "1" : "0"
