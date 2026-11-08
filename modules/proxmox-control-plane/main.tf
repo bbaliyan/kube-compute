@@ -199,7 +199,7 @@ module "node_bootstrap" {
   dns_server_port               = each.key == "0" ? var.dns_server_port : 53
   dns_transport                 = each.key == "0" ? var.dns_transport : "udp"
   # Same list this module's own VM network config (network_data_dhcp above)
-  # uses — gives kubelet a resolv-conf with no search domain, avoiding a
+  # uses â€” gives kubelet a resolv-conf with no search domain, avoiding a
   # collision between the node's own hostname-derived search domain and a
   # wildcard cluster DNS record (see node-bootstrap's dns_servers variable).
   dns_servers        = var.dns_servers

@@ -449,8 +449,8 @@ resource "aws_instance" "control_plane" {
   # IMDSv2 token PUT completes its TCP handshake (proving pod<->host routing works) but the
   # token response never arrives ("Operation timed out ... 0 bytes received"). IMDSv2 caps
   # that response's TTL to hop_limit as an anti-SSRF control, and it's dropped one hop
-  # short — Cilium's veth + pod-netns routing costs 2 hops here, not the 1 hop AWS's generic
-  # guidance assumes. Mutable in place (not ForceNew) — no replacement needed to pick this up.
+  # short â€” Cilium's veth + pod-netns routing costs 2 hops here, not the 1 hop AWS's generic
+  # guidance assumes. Mutable in place (not ForceNew) â€” no replacement needed to pick this up.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
