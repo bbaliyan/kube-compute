@@ -5,5 +5,5 @@ delete module.control_plane.aws_vpc_security_group_egress_rule.etcd_all
 delete module.control_plane.aws_vpc_security_group_ingress_rule.etcd_peer
 update module.autoscaled_nodes["workers"].aws_autoscaling_group.node["r6a.large"]
 update module.autoscaled_nodes["workers"].aws_launch_template.node["r6a.large"]
-update module.control_plane.aws_instance.control_plane
+update module.control_plane.aws_instance.control_plane["0"]
 update module.static_nodes["platform"].aws_instance.node["1"]

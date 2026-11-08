@@ -4,6 +4,6 @@ create module.control_plane.terraform_data.subnet_choice[0]
 delete module.control_plane.aws_security_group.control_plane_etcd
 delete module.control_plane.aws_vpc_security_group_egress_rule.etcd_all
 delete module.control_plane.aws_vpc_security_group_ingress_rule.etcd_peer
-update module.control_plane.aws_instance.control_plane
-update module.control_plane.aws_instance.control_plane_additional["1"]
-update module.control_plane.aws_instance.control_plane_additional["2"]
+update module.control_plane.aws_instance.control_plane["0"]
+update module.control_plane.aws_instance.control_plane["1"]
+update module.control_plane.aws_instance.control_plane["2"]
