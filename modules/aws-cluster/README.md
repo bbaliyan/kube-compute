@@ -120,6 +120,12 @@ tofu apply -replace='module.<name>.module.control_plane.terraform_data.subnet_ch
 If the new choice is a different subnet, the apply replaces every node. You can
 also destroy the cluster and apply again.
 
+A cluster that an older release placed has no stored choice. The first plan after
+the upgrade makes the choice once, from the candidates, and stores it. If the
+cluster's own subnet is no longer the first candidate with room, that plan shows
+every node replaced. Before you apply, verify the plan. To keep the cluster where
+it is, pass its current subnet as `subnet_id` and remove `subnet_names`.
+
 Every node carries `kube-compute.io/node-group=<key>`: the static group's name, or
 the autoscaled role's, whatever the node's size. `node_taints` keeps other pods
 off; pods that belong there need a matching toleration.
