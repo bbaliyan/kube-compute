@@ -9,6 +9,7 @@ mock_provider "aws" {
 }
 
 variables {
+  os_image_ami_id           = "ami-0123456789abcdef0"
   cluster_name              = "bharat"
   aws_region                = "eu-west-1"
   registration_address      = "10.0.1.5"
@@ -150,9 +151,10 @@ run "x86_instance_type_resolves_x86_images" {
   }
 
   variables {
-    group_name    = "dedicated"
-    instance_type = "r5a.large"
-    os_image_name = "almalinux10-*-kube-image-v1.36.2-*"
+    group_name      = "dedicated"
+    instance_type   = "r5a.large"
+    os_image_ami_id = null
+    os_image_name   = "almalinux10-*-kube-image-v1.36.2-*"
   }
 
   assert {
@@ -194,4 +196,15 @@ run "a_nodes_name_says_which_cluster_it_belongs_to" {
     ])
     error_message = "a node carries its group and its cluster, so two clusters in one account are told apart in the console"
   }
+}
+
+run "an_image_is_required" {
+  command = plan
+  variables {
+    group_name      = "noimage"
+    instance_type   = "r5a.large"
+    os_image_ami_id = null
+    os_image_name   = null
+  }
+  expect_failures = [var.os_image_name]
 }

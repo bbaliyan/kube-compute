@@ -13,7 +13,6 @@ locals {
   effective_ami_id = coalesce(
     var.os_image_ami_id,
     try(one(data.aws_ami.by_name[*].id), null),
-    try(one(data.aws_ami.almalinux10[*].id), null),
   )
 
   availability_zone = data.aws_subnet.selected.availability_zone

@@ -33,27 +33,3 @@ data "aws_ami" "by_name" {
     values = ["available"]
   }
 }
-
-# Fallback when neither an ID nor a name is given. Owner 764336703387 is the
-# AlmaLinux OS Foundation's own AWS account.
-data "aws_ami" "almalinux10" {
-  count       = (var.os_image_ami_id == null && var.os_image_name == null) ? 1 : 0
-  most_recent = true
-  owners      = ["764336703387"]
-  filter {
-    name   = "name"
-    values = ["AlmaLinux OS 10*"]
-  }
-  filter {
-    name   = "architecture"
-    values = [local.ami_arch]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-}

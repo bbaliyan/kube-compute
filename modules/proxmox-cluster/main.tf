@@ -66,9 +66,6 @@ module "control_plane" {
   vm_cpu_type                       = var.vm_cpu_type
   pool_id                           = var.pool_id
   cpu_units                         = var.cpu_units
-  os_image_url                      = var.os_image_url
-  os_image_file_name                = var.os_image_file_name
-  os_image_file_id                  = var.os_image_file_id
   proxmox_template_vm_id            = var.proxmox_template_vm_id
   ssh_authorized_keys               = var.ssh_authorized_keys
   dns_servers                       = var.dns_servers
@@ -136,10 +133,7 @@ module "node_pools" {
   vm_cpu_type            = each.value.vm_cpu_type
   pool_id                = each.value.pool_id != null ? each.value.pool_id : var.pool_id
   cpu_units              = each.value.cpu_units != null ? each.value.cpu_units : var.cpu_units
-  os_image_url           = each.value.os_image_url
-  os_image_file_name     = each.value.os_image_file_name
-  os_image_file_id       = each.value.os_image_file_id
-  proxmox_template_vm_id = each.value.proxmox_template_vm_id
+  proxmox_template_vm_id = coalesce(each.value.proxmox_template_vm_id, var.proxmox_template_vm_id)
   worker_ip_addresses    = each.value.worker_ip_addresses
   vm_gateway             = each.value.vm_gateway != null ? each.value.vm_gateway : var.vm_gateway
   desired_count          = each.value.desired_count

@@ -67,20 +67,12 @@ overlaps with `proxmox-control-plane`'s for the same cluster.
 
 ### Booting from a kube-images template
 
-**A `proxmox_template_vm_id` template is now effectively required for a working
-worker.** `node-bootstrap`'s cloud-init payload no longer installs RKE2 — it only
-configures and starts it, assuming the binaries are already on disk from a
-kube-images-baked template. `os_image_url`/`os_image_file_id` (the stock-cloud-image
-path) still create a VM that validates/applies cleanly, but the worker fails at
-`systemctl enable --now rke2-agent.service` during first-boot cloud-init — `tofu apply`
-succeeds while the worker never actually joins. Same cause as
-`proxmox-control-plane`'s equivalent note (see that module's README) — no more live
-Ansible install step anywhere in `node-bootstrap`, on any provider.
-`os_image_url`/`os_image_file_id` remain valid Terraform-level inputs for a plain,
-non-RKE2 VM; only "boot a working RKE2 worker from a stock image" is gone.
+`proxmox_template_vm_id` is required. `node-bootstrap`'s cloud-init payload does not install RKE2: it
+only configures and starts it, assuming the binaries are already on disk. A stock cloud
+image has no RKE2, so the worker would fail at `systemctl enable --now rke2-agent.service`
+while `tofu apply` reported success.
 
-Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID instead of
-`os_image_url`/`os_image_file_id`. Workers are **full**-cloned from it, so they never
+Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID. Workers are **full**-cloned from it, so they never
 depend on the template surviving. The template installs both RKE2 units; this pool's
 cloud-init payload enables only `rke2-agent`. Bootstrap runs asynchronously on each
 worker after `tofu apply` returns — tail `/var/log/kube-compute-bootstrap.log` on the

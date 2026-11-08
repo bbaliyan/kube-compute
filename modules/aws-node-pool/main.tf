@@ -15,7 +15,6 @@ locals {
     for type in keys(var.instance_type_max_sizes) : type => coalesce(
       var.os_image_ami_id,
       try(data.aws_ami.by_name[type].id, null),
-      try(data.aws_ami.almalinux10[type].id, null),
     )
   }
 

@@ -11,9 +11,6 @@
 # They show only that the module still plans and applies with a changed input
 # and that the VM keeps its snippet reference and clone source.
 mock_provider "proxmox" {
-  mock_resource "proxmox_download_file" {
-    defaults = { id = "local:iso/bharat.img" }
-  }
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/bharat.yaml" }
   }

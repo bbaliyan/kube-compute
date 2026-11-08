@@ -1,8 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 mock_provider "proxmox" {
-  mock_resource "proxmox_download_file" {
-    defaults = { id = "local:iso/bharat.img" }
-  }
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/bharat.yaml" }
   }
@@ -28,8 +25,7 @@ run "cluster_ipset_created_and_referenced" {
     cluster_network_cidr       = "192.168.1.0/24"
     vm_gateway                 = "192.168.1.1"
     allowed_ingress_cidrs      = ["192.168.1.0/24"]
-    os_image_url               = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name         = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+    proxmox_template_vm_id     = 9000
     dns_server_address         = "192.168.1.53"
     tsig_key_name              = "kube-compute"
     tsig_key_secret            = "ZmFrZXNlY3JldA=="

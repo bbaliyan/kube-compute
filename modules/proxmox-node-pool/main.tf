@@ -74,24 +74,6 @@ locals {
   }
 }
 
-resource "proxmox_download_file" "os_image" {
-  count = var.os_image_url != null ? 1 : 0
-
-  content_type        = "import"
-  datastore_id        = var.iso_datastore_id
-  node_name           = var.proxmox_node
-  url                 = var.os_image_url
-  file_name           = coalesce(var.os_image_file_name, basename(var.os_image_url))
-  overwrite_unmanaged = false
-
-  lifecycle {
-    precondition {
-      condition     = var.os_image_file_name != null || !endswith(var.os_image_url, ".img")
-      error_message = "os_image_url ends in '.img' which Proxmox rejects as an import extension. Set os_image_file_name to a .qcow2 filename."
-    }
-  }
-}
-
 # The journal is persistent so that the log of a boot that hangs survives a reset.
 resource "proxmox_virtual_environment_file" "vendor_data" {
   content_type = "snippets"
@@ -102,7 +84,7 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
   source_raw {
     data = join("\n", concat(
       [
-        "#cloud-config", "packages:", "  - qemu-guest-agent",
+        "#cloud-config",
         "write_files:", "  - path: /etc/systemd/journald.conf.d/10-persistent.conf",
         "    content: |", "      [Journal]", "      Storage=persistent",
       ],
@@ -157,12 +139,9 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   # full = true is not optional: a linked clone stays dependent on the template
   # surviving, which breaks when kube-images' prune-images.sh deletes an old build.
-  dynamic "clone" {
-    for_each = var.proxmox_template_vm_id != null ? [var.proxmox_template_vm_id] : []
-    content {
-      vm_id = clone.value
-      full  = true
-    }
+  clone {
+    vm_id = var.proxmox_template_vm_id
+    full  = true
   }
 
   cpu {
@@ -177,15 +156,11 @@ resource "proxmox_virtual_environment_vm" "worker" {
 
   disk {
     datastore_id = var.disk_datastore_id
-    # Omitted when cloning: the clone already brings its own disk, and size /
-    # datastore_id above still override what it inherits.
-    import_from = var.proxmox_template_vm_id != null ? null : (var.os_image_url != null ? one(proxmox_download_file.os_image[*].id) : var.os_image_file_id)
-    file_id     = null
-    interface   = "scsi0"
-    size        = var.vm_disk_gb
-    discard     = "on"
-    iothread    = true
-    ssd         = true
+    interface    = "scsi0"
+    size         = var.vm_disk_gb
+    discard      = "on"
+    iothread     = true
+    ssd          = true
   }
 
   serial_device {}
@@ -215,14 +190,6 @@ resource "proxmox_virtual_environment_vm" "worker" {
     # rebuilds the whole pool. See the README for the rolling replacement.
     ignore_changes = [clone]
 
-    precondition {
-      condition = length(compact([
-        var.os_image_url != null ? "url" : "",
-        var.os_image_file_id != null ? "file" : "",
-        var.proxmox_template_vm_id != null ? "template" : "",
-      ])) == 1
-      error_message = "Set exactly one of os_image_url (download a stock cloud image), os_image_file_id (a stock image already on Proxmox storage), or proxmox_template_vm_id (full-clone a pre-baked kube-images VM template)."
-    }
     precondition {
       condition     = local.effective_registration_address != null
       error_message = "registration_address must be set explicitly when dns_server_address or cluster_domain is null (no DNS configured to self-compute the genesis address from)."

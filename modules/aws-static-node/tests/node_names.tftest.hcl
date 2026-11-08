@@ -6,6 +6,7 @@ mock_provider "aws" {
 }
 
 variables {
+  os_image_ami_id           = "ami-0123456789abcdef0"
   cluster_name              = "7c-demo"
   group_name                = "platform"
   aws_region                = "eu-west-1"
