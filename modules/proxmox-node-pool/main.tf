@@ -22,7 +22,7 @@ locals {
   # cloned from the same template applies that SAME hostname instead of its own
   # node_name. RKE2 registers by hostname, so all workers collided on one hostname;
   # only one could hold the registration, the rest looped forever on "Node password
-  # rejected, duplicate hostname" — confirmed on a real 3-worker Proxmox apply.
+  # rejected, duplicate hostname".
   fqdn_suffix = var.cluster_domain != null ? "${local.dns_name}.${var.cluster_domain}" : null
 
   # Proxmox-native delivery: the token is embedded verbatim into this pool's own
@@ -40,18 +40,8 @@ locals {
   )
 
   _dns_list = join(", ", var.dns_servers)
-  # "to: 0.0.0.0/0" not Netplan's "to: default": AlmaLinux 9's stock cloud-init doesn't
-  # parse "default" in a route's `to:` field — fails init-local and falls back to
-  # NetworkManager's DHCP profile instead of the static IP. See proxmox-control-plane's
-  # matching local for the full explanation.
-  #
-  # "eth0" as the ethernets key directly, not a "primary" alias + match: {name: "en*"}:
-  # AlmaLinux 9's kernel cmdline sets net.ifnames=0 biosdevname=0, so NICs are always
-  # legacy eth0/eth1, never predictable ens*/enp*. cloud-init's RHEL/NetworkManager
-  # renderer also ignores `match` entirely, writing the key verbatim as DEVICE= — so
-  # "primary" produced an unbindable connection left silently inactive. Not
-  # independently re-verified against AlmaLinux 10 (the template this module now
-  # targets) — see proxmox-control-plane's matching local.
+  # "to: 0.0.0.0/0", not Netplan's "to: default", and "eth0" as the ethernets key with
+  # no `match` block. See proxmox-control-plane's matching local for the reasons.
   network_data_static = { for i in range(var.desired_count) : tostring(i) => local.static_ips ? <<-EOT
     version: 2
     ethernets:
@@ -108,11 +98,8 @@ resource "proxmox_virtual_environment_file" "network_data" {
 }
 
 resource "proxmox_virtual_environment_vm" "worker" {
-  # Not for_each = module.node_bootstrap. Post-cutover, node_bootstrap never reads
-  # anything derived from this VM — a worker's registration_address/
-  # agent_token_fetch_command come from the caller, not its own IP — so there's no
-  # cycle to avoid. Kept as an independent index range since it's already a pure
-  # function of desired_count.
+  # An index range that is a pure function of desired_count. node_bootstrap reads
+  # nothing derived from this VM, so there is no cycle to avoid.
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
   name            = local.worker_names[each.key]
@@ -301,7 +288,7 @@ resource "proxmox_virtual_environment_firewall_options" "worker" {
   # ("could not find rule with signature ... during repositioning") trying to
   # reposition rules it remembers from the old VM against the new VM's
   # actually-empty ruleset. See proxmox-control-plane's similar lifecycle
-  # block for the full explanation; confirmed against a real apply.
+  # block for the full explanation.
   #
   # The trigger is this worker's own id: the id changes only on replacement,
   # so an in-place update or another worker's replacement leaves it alone.

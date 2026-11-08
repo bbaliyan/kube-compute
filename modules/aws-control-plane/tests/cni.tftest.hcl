@@ -12,21 +12,15 @@ variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
   os_image_ami_id        = "ami-0123456789abcdef0"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   aws_region             = "eu-west-1"
   instance_type          = "m7g.large"
   allowed_ingress_cidrs  = ["10.0.0.0/8"]
   subnet_id              = "subnet-abc"
 }
 
-# NOTE: the run blocks that used to live here (single_node_cni_defaults_to_default,
-# ha_cni_defaults_to_cilium, explicit_cni_overrides_single_node_default,
-# explicit_cni_overrides_ha_default) asserted on the `rendered_cloud_init`/
-# `rendered_cloud_init_additional` outputs. Those outputs no longer exist — this
-# module now hands `cni` to `node-bootstrap`, which renders it into config.yaml via
-# Ansible at real-apply time, not into a Terraform-visible string. There is currently
-# no automated test coverage for cni-default/override rendering; see rke2-ansible-bootstrap
-# Ticket 14's resolution notes for the follow-up this needs.
+# NOTE: this module hands `cni` to `node-bootstrap`, which renders it into a
+# base64 `write_files` entry. No test here asserts on the rendered result.
 
 run "invalid_cni_rejected" {
   command = plan

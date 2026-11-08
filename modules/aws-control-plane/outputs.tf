@@ -28,13 +28,13 @@ output "node_provider" {
 }
 
 output "node_control_ref" {
-  description = "Handle the control-plane verb-scripts use to reach the node out-of-band (kubeconfig fetch, break-glass shell). For AWS: the instance ID, targeted via 'aws ssm send-command'/'aws ssm start-session' in region aws_region. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that cloud-init (not Ansible) owns bootstrap, and this was always really just a node-addressing handle."
+  description = "Handle the control-plane verb-scripts use to reach the node out-of-band (kubeconfig fetch, break-glass shell). For AWS: the instance ID, targeted via 'aws ssm send-command'/'aws ssm start-session' in region aws_region."
   value       = aws_instance.control_plane["0"].id
 }
 
 # ---- DNS support: register this yourself if you didn't pass a hosted_zone_id ----
 output "wildcard_dns_name" {
-  description = "Wildcard hostname for cluster services (e.g. *.bharat.example.internal), or null when no cluster_domain was given. Point this at cluster_ip in your DNS of choice."
+  description = "Wildcard hostname for cluster services (e.g. *.example.example.internal), or null when no cluster_domain was given. Point this at cluster_ip in your DNS of choice."
   value       = local.wildcard_name
 }
 
@@ -92,12 +92,12 @@ output "control_plane_node_refs" {
 }
 
 output "cluster_security_group_id" {
-  description = "Self-referencing security group id shared by every cluster member. This module's own instances attach to it by id; a future aws-node-pool unit would depend on this module to attach its workers the same way."
+  description = "Self-referencing security group id shared by every cluster member. This module's own instances attach to it by id; an aws-node-pool unit depends on this module to attach its workers the same way."
   value       = aws_security_group.cluster.id
 }
 
 output "agent_token_ssm_parameter" {
-  description = "SSM Parameter Store name (SecureString) holding the agent join token. A future aws-node-pool unit's workers would fetch it at boot via their own instance IAM role — never embedded in user_data."
+  description = "SSM Parameter Store name (SecureString) holding the agent join token. An aws-node-pool unit's workers fetch it at boot via their own instance IAM role — never embedded in user_data."
   value       = aws_ssm_parameter.agent_token.name
 }
 

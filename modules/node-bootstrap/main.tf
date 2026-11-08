@@ -6,17 +6,11 @@
 # is per-cluster identity, secrets, and join logic — what can't be baked into
 # a shared image.
 locals {
-  # Single source of truth for the kube-platform pin, held directly here — this
-  # is node-bootstrap's only remaining consumer, so a separate component-versions
-  # module was pure indirection. NOT the gitops_platform_repo_url/_revision
-  # variables' own defaults: an explicit null/"" passed through a module call
-  # does NOT fall through to the callee's variable default the way an omitted
-  # argument would (that convenience is specific to optional() object-type
-  # attributes) — verified the hard way on a real apply; the regression test
-  # in tests/platform_pin.tftest.hcl locks it in. coalesce() is the fix, since
-  # it treats null and "" identically. Tracks kube-platform's protected `main`
-  # branch, not a pinned SHA — branch protection is the safeguard replacing
-  # the reproducibility a SHA pin would give.
+  # The kube-platform pin, held here and not in the gitops_platform_repo_url/_revision
+  # variable defaults: an explicit null or "" passed through a module call does not
+  # fall through to a variable default. coalesce() treats null and "" alike, and
+  # tests/platform_pin.tftest.hcl locks that in. The pin tracks kube-platform's
+  # protected `main` branch, not a SHA.
   pinned_platform_repo_url = "https://github.com/bbaliyan/kube-platform.git"
   pinned_platform_revision = "main"
 
@@ -41,8 +35,7 @@ locals {
   # no-self-registration path is unaffected.
   dns_self_register_zone = var.dns_self_register_zone != null && var.dns_self_register_zone != "" ? "${trimsuffix(var.dns_self_register_zone, ".")}." : ""
 
-  # nsupdate transport flags, derived exactly as the Ansible role derived them:
-  # -v forces TCP, -4/-6 pin the address family.
+  # nsupdate transport flags: -v forces TCP, -4/-6 pin the address family.
   nsupdate_flags = trimspace(join(" ", compact([
     startswith(var.dns_transport, "tcp") ? "-v" : "",
     endswith(var.dns_transport, "4") ? "-4" : "",
@@ -51,12 +44,10 @@ locals {
 
   is_server = contains(["server-init", "server-join"], var.node_role)
 
-  # Whether bootstrap.sh should apply the Cilium manifest kube-images already
-  # baked onto every template at /opt/kube-compute/manifests/, and whether it
-  # should download and apply kube-platform's Argo CD manifest — per-cluster
-  # runtime decisions (CNI choice, GitOps enablement). This module renders
-  # neither manifest: the live `helm template` render that used to happen here
-  # exceeded Proxmox's 1 MiB cicustom snippet cap on a real apply.
+  # Whether bootstrap.sh applies the Cilium manifest baked into the image at
+  # /opt/kube-compute/manifests/, and whether it downloads and applies
+  # kube-platform's Argo CD manifest. This module renders neither manifest: Argo CD
+  # is too big for Proxmox's 1 MiB cicustom snippet cap.
   render_cilium = var.cni == "cilium" && var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
@@ -282,14 +273,11 @@ locals {
   # same zone a wildcard cluster DNS record (*.<cluster>.<domain>) answers
   # for. With the pod's default ndots:5, a bare external hostname like
   # "github.com" gets that search suffix tried FIRST, silently resolving to
-  # the cluster's own wildcard IP instead of the real host — confirmed on a
-  # real cluster-1 apply: Argo CD's repo-server tried to git-clone github.com
-  # against the node's own IP over HTTPS and got connection refused. Pointing
-  # kubelet at a search-domain-free resolv.conf (var.dns_servers only, no
-  # `search` line) fixes every pod on the node, without touching the node's
-  # own OS resolv.conf (kept search-enabled for host-level convenience).
-  # Opt-in via var.dns_servers so a caller that doesn't pass it keeps the old
-  # behavior rather than erroring.
+  # the cluster's own wildcard IP instead of the real host, and a clone of
+  # github.com fails with connection refused. Pointing kubelet at a
+  # search-domain-free resolv.conf (var.dns_servers only, no `search` line) fixes
+  # every pod on the node, without touching the node's own OS resolv.conf.
+  # Used only when var.dns_servers is set.
   kubelet_resolv_conf_enabled = var.dns_servers != null && length(var.dns_servers) > 0
   kubelet_resolv_conf_path    = "/etc/rancher/rke2/resolv-conf-no-search.conf"
   kubelet_resolv_conf_content = join("\n", concat(
@@ -351,12 +339,9 @@ locals {
   # a bump on one side alone a failed plan instead of a failed boot.
   bootstrap_program = file("${path.module}/files/bootstrap.sh")
 
-  # Configuration for the baked bootstrap program, as data. These used to be
-  # templatefile() arguments, which rendered a per-node copy of a ~9.6 KB script
-  # into user data -- and a genesis node carried three of them, its own plus one
-  # inside each worker group's cloud-init in a bundle. That is what exceeded
-  # EC2's 16384-byte decoded user-data limit. The program is the image's business
-  # now; only these values are this module's.
+  # Configuration for the baked bootstrap program, as data. The program is the
+  # image's business; only these values are this module's. Shipping the program in
+  # user data would exceed EC2's 16384-byte decoded limit.
   #
   # Every key is always defined (empty where a role does not use it) so the
   # program can run under `set -u`.
@@ -412,9 +397,7 @@ locals {
   # role gets is this module's business, and it keeps the program free of any
   # label, taint or SAN logic.
   #
-  # Byte-for-byte what the heredocs in the old rendered script emitted, including
-  # the blank lines an empty block leaves behind -- inert in YAML, and worth more
-  # than the bytes as proof this change moved the payload without rewriting it.
+  # An empty block leaves a blank line behind. It is inert in YAML.
   config_static = var.node_role == "worker" ? join("\n", [
     local.node_label_block,
     local.node_taint_block,
@@ -450,8 +433,8 @@ locals {
   # yamlencode() rather than a text template. Cilium/Argo CD's own manifests
   # are NOT among these entries — kube-images bakes them directly onto the
   # template at /opt/kube-compute/manifests/, and bootstrap.sh reads them
-  # from there; embedding Argo CD's ~1.9 MB chart render here is exactly what
-  # used to exceed Proxmox's 1 MiB cicustom snippet cap.
+  # from there; embedding Argo CD's ~1.9 MB manifest here would exceed Proxmox's
+  # 1 MiB cicustom snippet cap.
   write_files = concat(
     [
       {
@@ -631,9 +614,8 @@ locals {
         [["/bin/sh", "-c", local.kubelet_reserved_script]],
         local.graceful_shutdown_enabled ? [["systemctl", "restart", "systemd-logind"]] : [],
         [
-          # The program is baked into the image, not written above. An image
-          # predating it would otherwise fail with cloud-init's own bare "No such
-          # file or directory" against a path this module used to write itself.
+          # The program is baked into the image, not written above. Without this test an
+          # image that lacks it fails with a bare "No such file or directory".
           ["/bin/sh", "-c", "test -x /opt/kube-compute/bootstrap.sh || { echo 'kube-compute: this image bakes no /opt/kube-compute/bootstrap.sh, which node.env contract ${local.node_env_contract} requires -- rebuild the node image from a ref that bakes it' >&2; exit 1; }"],
           ["/opt/kube-compute/bootstrap.sh"],
         ],

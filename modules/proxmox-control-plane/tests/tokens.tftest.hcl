@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
-    defaults = { id = "local:snippets/bharat.yaml" }
+    defaults = { id = "local:snippets/example.yaml" }
   }
   mock_resource "proxmox_virtual_environment_vm" {
     defaults = {
@@ -21,7 +21,7 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   variables {
     argocd_manifest_url        = "https://example.invalid/argocd-bootstrap.yaml"
     argocd_manifest_sha256     = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-    cluster_name               = "bharat"
+    cluster_name               = "example"
     proxmox_node               = "pve"
     vm_cores                   = 4
     vm_memory_mb               = 8192

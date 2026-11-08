@@ -19,11 +19,11 @@ override_data {
 
 variables {
   os_image_ami_id           = "ami-0123456789abcdef0"
-  cluster_name              = "bharat"
+  cluster_name              = "example"
   group_name                = "workers"
   aws_region                = "eu-west-1"
   registration_address      = "10.0.1.5"
-  agent_token_ssm_parameter = "/kube-compute/bharat/agent-token"
+  agent_token_ssm_parameter = "/kube-compute/example/agent-token"
   cluster_security_group_id = "sg-cluster123"
   subnet_id                 = "subnet-worker-a"
   instance_type_max_sizes   = { "t3a.large" = 3, "t3a.xlarge" = 1 }
@@ -73,7 +73,7 @@ run "cluster_autoscaler_can_discover_each_group_and_its_nodes_shape" {
     condition = alltrue([
       for key, value in {
         "k8s.io/cluster-autoscaler/enabled"                                              = "true"
-        "k8s.io/cluster-autoscaler/bharat"                                               = "owned"
+        "k8s.io/cluster-autoscaler/example"                                              = "owned"
         "k8s.io/cluster-autoscaler/node-template/label/workload"                         = "reserved"
         "k8s.io/cluster-autoscaler/node-template/label/kube-compute.io/node-group"       = "workers"
         "k8s.io/cluster-autoscaler/node-template/label/node.kubernetes.io/instance-type" = "t3a.xlarge"

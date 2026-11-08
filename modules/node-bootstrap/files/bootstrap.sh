@@ -9,10 +9,8 @@
 # THIS FILE IS BAKED INTO THE IMAGE, not delivered by cloud-init. It is a plain
 # program with no templating: every per-cluster value reaches it as data, in
 # node.env (configuration) and secrets.env (tokens), both written by cloud-init.
-# It used to be rendered per node by Terraform's templatefile() and shipped in
-# user data, which cost ~9.6 KB there and again inside every worker group's
-# cloud-init in a worker bundle. EC2 allows 16384 decoded bytes of user data for
-# everything a node boots with, and three copies of this program did not fit.
+# EC2 allows 16384 decoded bytes of user data, so the program is baked into the
+# image and does not travel in user data.
 # Baking it is also what the images already do with the Cilium render, for the
 # same reason on Proxmox, whose snippet cap is 1 MiB. Argo CD is not baked: this
 # script downloads kube-platform's published manifest on the first server.
@@ -57,8 +55,7 @@ wait_until() {
   done
 }
 
-# Own IP, discovered on the node itself — the same probe the Ansible role's
-# dns-self-register task used. RKE2 needs it for node-ip and (on a server) as
+# Own IP, discovered on the node itself. RKE2 needs it for node-ip and (on a server) as
 # the first tls-san entry.
 NODE_IP="$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')"
 if [ -z "$NODE_IP" ]; then
@@ -123,7 +120,7 @@ EOF
 fi
 
 if [ -n "$REGISTRY_MIRROR_URL" ]; then
-  # Advisory only, matching the Ansible role's uri check in spirit: a 200 or 401
+  # Advisory only: a 200 or 401
   # both mean "the mirror is answering". Non-fatal here because a first boot must
   # not be lost to a transiently unreachable mirror.
   MIRROR_CODE="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "$REGISTRY_MIRROR_URL/v2/" || true)"
@@ -194,8 +191,7 @@ else
   {
     if [ -n "$SERVER_LINE" ]; then echo "$SERVER_LINE"; fi
     echo "token: ${CLUSTER_TOKEN:-}"
-    # Empty on a server-join node, exactly as the Ansible template rendered it
-    # there (the env lookup produced ""); RKE2 tolerates the empty value and the
+    # Empty on a server-join node; RKE2 tolerates the empty value and the
     # genesis node's agent-token is the one that actually governs agent joins.
     echo "agent-token: ${CLUSTER_AGENT_TOKEN:-}"
     echo "node-ip: $NODE_IP"
@@ -320,7 +316,7 @@ if [ "$ARGOCD_NEEDED" = "1" ] && [ "$NODE_ROLE" = "server-init" ]; then
   # itself is up and its ClusterIP is actually routable yet. Applying Argo CD's
   # manifest immediately races its own pods (which resolve each other by
   # ClusterIP DNS, e.g. dex-server -> argocd-repo-server) against CoreDNS/
-  # Cilium's own startup: confirmed on a real apply, argocd-dex-server crashed
+  # Cilium's own startup: argocd-dex-server can crash
   # ("no route to host" dialing CoreDNS's ClusterIP) 22s after Cilium reported
   # Ready, because CoreDNS's own pod wasn't Ready yet. It self-heals via
   # Kubernetes' restart backoff, but that backoff is pure wasted time before
@@ -377,14 +373,13 @@ if [ "$ARGOCD_NEEDED" = "1" ] && [ "$NODE_ROLE" = "server-init" ]; then
     # argocd-application-controller has started reconciling yet. It's what
     # creates the built-in "default" AppProject on its own startup, and an
     # Application applied before that exists fails with a transient
-    # InvalidSpecError ("referencing project default which does not exist"),
-    # confirmed on a real apply.
+    # InvalidSpecError ("referencing project default which does not exist").
     #
     # The controller alone is not enough either: an Application whose first
     # comparison finds repo-server or redis not yet serving (redis waits on the
     # argocd-redis-secret-init Job, and the pods that need its Secret restart
     # once) reports sync status Unknown and is not compared again until the
-    # next reconciliation, which cost two idle minutes on a real apply. The
+    # next reconciliation, which costs about two idle minutes. The
     # workloads already exist at this point, so rollout status waits on their
     # pods rather than erroring on a missing resource.
     for workload in statefulset/argocd-application-controller deployment/argocd-repo-server deployment/argocd-redis; do

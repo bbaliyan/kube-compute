@@ -27,8 +27,7 @@ module "platform_nodes" {
 zero. Capacity a cluster must always have — the platform, above all — belongs
 here instead, for three reasons.
 
-**A stop schedule cannot target a group member.** These are development clusters
-that stop every evening. An autoscaling group's health check treats an instance
+**A stop schedule cannot target a group member.** An autoscaling group's health check treats an instance
 that is not in the running state as failed and replaces it, so an
 `ec2:StopInstances` call against a member is undone within minutes. The
 sanctioned way to stop a group is Standby or a desired capacity of zero: a
@@ -46,7 +45,7 @@ region.
 node name from the OS hostname. Every member of a group shares one launch
 template and therefore one rendered cloud-init, which is why `aws-node-pool`
 must pass `set_hostname = false` and let cloud-init's EC2 datasource invent a
-name. Here each node has its own render, so `bharat-dedicated-1` is the name
+name. Here each node has its own render, so `example-dedicated-1` is the name
 that shows up in `kubectl get nodes`.
 
 What is given up: nothing reacts to load, and nothing replaces a failed node.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
-    defaults = { id = "local:snippets/bharat.yaml" }
+    defaults = { id = "local:snippets/example.yaml" }
   }
   mock_resource "proxmox_virtual_environment_vm" {
     defaults = {
@@ -16,7 +16,7 @@ run "cluster_ipset_created_and_referenced" {
   variables {
     argocd_manifest_url        = "https://example.invalid/argocd-bootstrap.yaml"
     argocd_manifest_sha256     = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-    cluster_name               = "bharat"
+    cluster_name               = "example"
     proxmox_node               = "pve"
     vm_cores                   = 4
     vm_memory_mb               = 8192
@@ -34,11 +34,11 @@ run "cluster_ipset_created_and_referenced" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_firewall_ipset.cluster.name == "kube-compute-bharat-cluster"
+    condition     = proxmox_virtual_environment_firewall_ipset.cluster.name == "kube-compute-example-cluster"
     error_message = "cluster ipset must be named predictably so node pools can reference it by name"
   }
   assert {
-    condition     = alltrue([for r in proxmox_virtual_environment_firewall_rules.control_plane["0"].rule : true if strcontains(coalesce(r.source, ""), "kube-compute-bharat-cluster") || contains(var.allowed_ingress_cidrs, coalesce(r.source, ""))])
+    condition     = alltrue([for r in proxmox_virtual_environment_firewall_rules.control_plane["0"].rule : true if strcontains(coalesce(r.source, ""), "kube-compute-example-cluster") || contains(var.allowed_ingress_cidrs, coalesce(r.source, ""))])
     error_message = "every control-plane firewall rule's source must be the cluster ipset or an allowed ingress CIDR"
   }
   assert {

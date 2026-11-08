@@ -5,7 +5,7 @@
 # already gets here.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
-    defaults = { id = "local:snippets/bharat.yaml" }
+    defaults = { id = "local:snippets/example.yaml" }
   }
   mock_resource "proxmox_virtual_environment_vm" {
     defaults = {
@@ -18,7 +18,7 @@ mock_provider "proxmox" {
 variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   proxmox_node           = "pve"
   vm_cores               = 4
   vm_memory_mb           = 8192
@@ -46,7 +46,7 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
     genesis_apply_manifests = [
       {
         path    = "/opt/kube-compute/manifests/20-extra-manifest.yaml"
-        content = "kind: Cluster\nname: bharat-extra\n"
+        content = "kind: Cluster\nname: example-extra\n"
       }
     ]
   }
@@ -69,7 +69,7 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       f.encoding == "gz+b64" &&
-      f.content == base64gzip("kind: Cluster\nname: bharat-extra\n")
+      f.content == base64gzip("kind: Cluster\nname: example-extra\n")
       if f.path == "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     ])
     error_message = "the entry's content must be forwarded verbatim, unmodified by this module -- node-bootstrap writes a genesis manifest gz+b64, so byte equality against base64gzip is the check, HCL having no gunzip"

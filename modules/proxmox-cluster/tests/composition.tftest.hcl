@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
-    defaults = { id = "local:snippets/bharat.yaml" }
+    defaults = { id = "local:snippets/example.yaml" }
   }
   mock_resource "proxmox_virtual_environment_vm" {
     defaults = {
@@ -14,7 +14,7 @@ mock_provider "proxmox" {
 variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   proxmox_node           = "pve"
   vm_cores               = 4
   vm_memory_mb           = 8192
@@ -117,7 +117,7 @@ run "platform_pool_takes_the_platform_ingress_and_the_wildcard_record" {
     error_message = "the platform pool must take the ingress ports, leaving the control plane only the Kubernetes API"
   }
   assert {
-    condition     = toset(keys(module.node_pools["workers"].worker_node_refs)) == toset(["bharat-workers-0", "bharat-workers-1"])
+    condition     = toset(keys(module.node_pools["workers"].worker_node_refs)) == toset(["example-workers-0", "example-workers-1"])
     error_message = "each pool's workers must be named after the pool, or two pools collide on VM names and snippets"
   }
 }
@@ -203,7 +203,7 @@ run "cluster_dns_name_reaches_the_control_plane" {
     error_message = "cluster_dns_name must name the cluster in DNS: got ${output.cluster_fqdn}"
   }
   assert {
-    condition     = output.cluster_name == "bharat"
+    condition     = output.cluster_name == "example"
     error_message = "the cluster keeps its own identity whatever it is called in DNS"
   }
 }

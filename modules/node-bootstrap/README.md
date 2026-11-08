@@ -29,16 +29,12 @@ alone, or a MIME multipart/mixed document when shell-script parts run first:
 cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
 With no parts, `user_data` is the plain cloud-config.
 
-The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
-modules, the guest agent, **and the genesis Cilium manifest** — is
-expected to already be baked into the image the caller boots the VM from (a
-template built by kube-images). Argo CD is not baked; the first server downloads it
-(see below). This module only renders the per-cluster
-identity, secrets, and join logic that can't be baked into a shared image.
-`modules/proxmox-control-plane` and `modules/proxmox-node-pool` are the only
-callers currently wired for this — both accept an optional
-`proxmox_template_vm_id` to full-clone a pre-baked image, alongside their
-older stock-cloud-image paths.
+The image must already hold OS prep, the RKE2 binaries, the SELinux policy, the kernel
+modules, the guest agent, `bootstrap.sh` and the Cilium manifest. Build it with
+kube-images. The image does not hold Argo CD: the first server downloads it (see below).
+This module renders only the per-cluster identity, secrets and join logic.
+Every provider module calls it: `aws-control-plane`, `aws-static-node`, `aws-node-pool`,
+`proxmox-control-plane` and `proxmox-node-pool`.
 
 ## Cilium is baked, Argo CD is downloaded
 
@@ -66,28 +62,28 @@ kube-platform release, for example
 
 ### Upgrade order
 
-This change is breaking. The `node.env` contract moves from 2 to 5. Contracts 3 and 4 were never
-released. Contract 4 adds `REJOIN_PROBE_ADDRESSES`, the list of addresses a first server probes
-for a live cluster before it starts etcd (the `rejoin_probe_addresses` input). Contract 5
-changes `bootstrap.sh` only: `node.env` has no new key. A first server that finds a live cluster
-now becomes a joining server. It skips Cilium, the extra server manifests, Argo CD, the
+The `node.env` contract is 5. Contract 4 added `REJOIN_PROBE_ADDRESSES`: the addresses a
+first server probes for a live cluster before it starts etcd (the `rejoin_probe_addresses`
+input). Contract 5 changes `bootstrap.sh` only. A first server that finds a live cluster
+becomes a joining server. It skips Cilium, the extra server manifests, Argo CD, the
 Applications and `genesis_apply_manifests`.
 
-1. Rebuild the node image without the baked Argo CD manifest. The new image carries
-   the new `bootstrap.sh`.
-2. Move the module to the new major version and set the two inputs.
+1. Rebuild the node image without the baked Argo CD manifest. The new image carries the new `bootstrap.sh`.
+2. Move the module to the new major version.
+3. Set `argocd_manifest_url` and `argocd_manifest_sha256`.
 
 The first server removes the baked `cilium.yaml` from the RKE2 manifests directory after
 Cilium is Ready. RKE2 applies every file in that directory again on each start. Without
-the removal, a restart would put the older baked Cilium back after the platform upgraded
-it. Removing the file does not remove Cilium from the cluster. If Cilium is not Ready
-within about 6 minutes, the file stays and the log shows a warning. The first server removes the file even when GitOps is off, so a later server restart no longer applies the baked Cilium again.
+the removal, a restart would put the baked Cilium back after the platform upgraded it.
+Removing the file does not remove Cilium from the cluster. If Cilium is not Ready within
+about 6 minutes, the file stays and the log shows a warning. The first server removes the
+file even when GitOps is off.
 
-An image with the old module, or the new module with the old image, fails on the
-contract check at the first line of `bootstrap.sh`. Existing clusters do not change
-until a node is replaced.
+An image with the old module, or the new module with the old image, fails on the contract
+check at the first line of `bootstrap.sh`. Existing clusters do not change until a node is
+replaced.
 
-## Watching progress during a real apply
+## Watching progress
 
 Terraform/OpenTofu returns as soon as the cloud-init payload is attached to
 the VM — it has no way to know when (or whether) the node actually joins the
@@ -113,10 +109,8 @@ kubelet's resolv-conf pointer. Which blocks a role gets is decided here; the pro
 appends the fragment to the few lines only the node itself can produce (its own IP,
 the fetched agent token, the rejoin-probe result).
 
-**Why.** The program is almost entirely static, and a genesis node used to carry it
-once for itself and again inside every worker group's cloud-init, against EC2's
-16384-byte user-data limit. Shipping values instead of code keeps the payload small on
-every platform, with no per-platform side channel.
+**Why.** The program is almost entirely static. Shipping values instead of code keeps the
+payload small on every platform. EC2 limits user data to 16384 bytes.
 
 **The contract.** `node_env_contract` in `main.tf` and `BOOTSTRAP_CONTRACT` in
 `files/bootstrap.sh` are the two halves of one number. Bump both together when a key
@@ -128,10 +122,8 @@ is added, removed, or changes meaning. Three things enforce it:
   contract, so a stale image fails on its first line instead of half-configuring a
   node.
 
-An image newer than the module needs no check: an older module ships its own
-rendered copy of the program in `write_files`, which overwrites the baked one. The
-failing direction is a module newer than the image, and `runcmd` names it — it tests
-the program exists before running it and says what to rebuild.
+A module newer than the image fails with a clear message: `runcmd` tests that the
+program exists before it runs it and says what to rebuild.
 
 ## Genesis-apply manifests
 
@@ -150,7 +142,7 @@ A first server that finds a live cluster before it starts etcd does not apply th
 manifests. It joins the cluster as a joining server.
 
 The input is genesis-only (`server-init` only). It does not depend on
-`gitops_platform_enabled`. No module in this repo sets it today.
+`gitops_platform_enabled`. `proxmox-control-plane` and `proxmox-cluster` expose it as an input. The AWS modules do not.
 
 ## Workloads repo parameters on the `platform` Application
 
@@ -163,10 +155,6 @@ If `gitops_workloads_repo_url` is set, the `platform` Application gets three mor
 If `gitops_workloads_repo_url` is not set, the Application has none of them and renders as before. kube-platform treats a missing parameter as empty.
 
 The module writes the `platform` Application at first boot. An existing cluster gets these parameters only when its node is rebuilt. See "A change to the user data of a running node".
-
-## Upgrade note: the Argo CD Applications are built with `yamlencode`
-
-The module now renders the `platform` and `workloads` Applications with `yamlencode`. The decoded Applications are the same, but the text is not. So every genesis node that writes the `platform` Application gets new user data, with or without a workloads repo. See "A change to the user data of a running node" for what that does to the node.
 
 ## A change to the user data of a running node
 
@@ -202,10 +190,13 @@ registers the node by OS hostname. `set_hostname = false` omits both keys
 entirely — the only reason to do this is when the exact same rendered
 `cloud_init_user_data` is shared across multiple VMs that cannot each get
 their own render (e.g. every instance of an AWS Auto Scaling group, via one
-launch template). The VM platform's own per-instance
-metadata is relied on instead to supply a unique hostname — **this specific assumption is
-unverified against real hardware**, flagged explicitly as a first
-real-cluster check for any `set_hostname = false` caller.
+launch template). The platform's per-instance metadata then supplies a unique hostname.
+
+## DNS search domains
+
+Kubelet copies the search domains of the node's `/etc/resolv.conf` into every pod. Pods use `ndots:5`, so a name such as `github.com` tries each search suffix first. If a search domain has a wildcard record, the name resolves to that wildcard and not to the real host.
+
+If you set `dns_servers`, the module writes a kubelet `resolv.conf` with those servers and no `search` line. Every pod on the node then skips the search domains. If you do not set it, kubelet uses the node's own `/etc/resolv.conf`.
 
 ## `aws_provider_id`
 
@@ -272,45 +263,15 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 
 ## Interface notes
 
-- `ansible_playbook_path`, `invocation_mode`, `ansible_connection_vars`,
-  `on_node_bundle`, `on_node_secret_env`, `node_provider`, `bootstrap_id`,
-  `cilium_version`, `argocd_version`, and `cilium_operator_replicas` are all
-  gone. There is no playbook, no `null_resource`, no on-node bundle, no
-  provider branching, and no Helm render in this module — the two version
-  variables had no effect once kube-images took over the render (both are
-  baked into the template, resolved from kube-platform's
-  `platform-versions.yaml` at build time), and `cilium_operator_replicas` had
-  nowhere left to reach once the render was no longer per-cluster
-  (kube-platform's own `cilium-app.yaml` hardcodes `replicas: 1` and
-  overwrites any genesis-time value on Argo CD's first `selfHeal` anyway).
-- `cni` defaults to `"cilium"` (eBPF dataplane, no iptables/ipset/xtables
-  dependency — the only variant verified against AlmaLinux 10). When
-  `cni = "cilium"` on a genesis node, the module has `bootstrap.sh` apply the
-  Cilium manifest kube-images already baked onto the template, and sets
-  `disable: [rke2-cilium]` in `config.yaml` so RKE2's own built-in HelmChart
-  install of Cilium never runs alongside it. `"default"` remains selectable
-  only as an escape hatch for a consumer-supplied image/template that ships a
-  different CNI out of the box.
-- `cluster_token`/`cluster_agent_token`/`agent_token_fetch_command`/
-  `trusted_ca_pem`/`tsig_key_secret` are all `sensitive = true` and flow only
-  into the cloud-init payload's base64-encoded `write_files` (a 0600
-  `/opt/kube-compute/secrets.env`, sourced by the bootstrap script) — never
-  as plaintext Terraform state elsewhere, never over any inbound connection.
-  `server-join` receives `cluster_token` the same direct way `server-init`
-  does; only `worker` uses the fetch-command pattern, since a worker joins an
-  already-existing cluster and pulls its token from the provider's own
-  secret store instead.
-- `modules/aws-control-plane` and `modules/aws-node-pool` are also cut over to
-  this interface: both call this module with no
-  `node_provider`/`ansible_playbook_path`/`ansible_connection_vars` and attach
-  this module's `user_data` output via AWS's own `base64gzip(...)`
-  convention, with `ssm_agent_enabled = true` so the MIME multipart document
-  carries the SSM Agent script (see User data above). `aws-node-pool`'s ASG
-  launch template calls this module with `set_hostname = false` since every
-  pool member shares one rendered payload — same pattern as
-  the same.
-  `modules/azure-control-plane`/`modules/azure-node-pool` no longer exist as
-  working code — reduced to placeholders (their prior implementation called
-  this module's pre-cutover interface and was never validated against real
-  Azure infrastructure). A future Azure implementation should call this
-  module's current interface directly rather than resurrect the old one.
+- `cni` defaults to `"cilium"`. It is the only variant verified on AlmaLinux 10. On a
+  genesis node, `bootstrap.sh` applies the Cilium manifest baked into the image, and
+  `config.yaml` sets `disable: [rke2-cilium]` so RKE2's own Cilium chart never runs.
+  `"default"` is for a consumer-supplied image that ships a different CNI.
+- `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command`, `trusted_ca_pem` and
+  `tsig_key_secret` are `sensitive = true`. They reach the node only in the base64
+  `write_files` of the payload, such as the 0600 `/opt/kube-compute/secrets.env`.
+  `server-join` receives `cluster_token` the same way `server-init` does. Only `worker`
+  runs `agent_token_fetch_command`, to read the agent token from the provider's secret store.
+- `aws-node-pool` sets `set_hostname = false`, because every member of a pool shares one
+  rendered payload. The AWS modules set `ssm_agent_enabled = true`, so the MIME
+  multipart document carries the SSM Agent script. See "User data" above.

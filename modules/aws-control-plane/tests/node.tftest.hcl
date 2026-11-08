@@ -9,7 +9,7 @@ run "node_resources" {
   variables {
     argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
     argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-    cluster_name           = "bharat"
+    cluster_name           = "example"
     aws_region             = "eu-west-1"
     instance_type          = "m7g.large"
     allowed_ingress_cidrs  = ["10.0.0.0/8", "192.168.0.0/16"]

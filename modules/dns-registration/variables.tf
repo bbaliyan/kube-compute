@@ -12,7 +12,7 @@ variable "dns_zone" {
 }
 
 variable "record_name" {
-  description = "Record name, relative to dns_zone (e.g. 'api.cluster-3' for zone 'lan.' registers 'api.cluster-3.lan.')."
+  description = "Record name, relative to dns_zone (e.g. 'api.my-cluster' for zone 'example.test.' registers 'api.my-cluster.example.test.')."
   type        = string
 }
 

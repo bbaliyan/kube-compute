@@ -283,7 +283,7 @@ variable "cluster_dns_name" {
 }
 
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'homelab.local'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the HA registration/access endpoint — without it there is no single address that names every control-plane node."
+  description = "DNS suffix (e.g. 'cluster.example'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the HA registration/access endpoint — without it there is no single address that names every control-plane node."
   type        = string
   default     = null
 
@@ -309,7 +309,7 @@ variable "dns_server_port" {
 }
 
 variable "dns_transport" {
-  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp': a real apply against Technitium found 'tcp' fails with 'Error updating DNS record: EOF' (the connection drops mid-update) while 'udp' is the one transport actually proven end-to-end (the RFC2136 smoke test in kube-examples' technitium/README.md uses nsupdate's UDP default). A handful of IPv4 addresses in one A record set fits comfortably under UDP's message-size limit, so there's no capacity reason to prefer TCP here."
+  description = "Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Ignored when dns_server_address is null. Defaults to 'udp'. Some DNS servers drop a TCP update mid-way. A few IPv4 addresses in one A record set fit well under the UDP message-size limit."
   type        = string
   default     = "udp"
   validation {

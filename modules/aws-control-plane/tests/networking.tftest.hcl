@@ -21,7 +21,7 @@ variables {
 run "explicit_subnet_and_arm64" {
   command = plan
   variables {
-    cluster_name  = "bharat"
+    cluster_name  = "example"
     instance_type = "m7g.large"
     subnet_id     = "subnet-explicit123"
   }
@@ -134,7 +134,7 @@ run "subnet_name_and_subnet_names_are_mutually_exclusive" {
 run "default_vpc_fallback" {
   command = plan
   variables {
-    cluster_name  = "bharat"
+    cluster_name  = "example"
     instance_type = "m7g.large"
     # subnet_id omitted -> null -> default-VPC fallback
   }

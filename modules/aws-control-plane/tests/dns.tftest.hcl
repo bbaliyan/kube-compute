@@ -5,7 +5,7 @@ variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
   argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
   os_image_ami_id        = "ami-0123456789abcdef0"
-  cluster_name           = "bharat"
+  cluster_name           = "example"
   aws_region             = "eu-west-1"
   instance_type          = "m7g.large"
   allowed_ingress_cidrs  = ["10.0.0.0/8"]
@@ -23,15 +23,15 @@ run "record_when_zone_and_domain_set" {
     error_message = "wildcard record must be created when cluster_domain AND hosted_zone_id are set"
   }
   assert {
-    condition     = aws_route53_record.wildcard[0].name == "*.bharat.example.internal"
+    condition     = aws_route53_record.wildcard[0].name == "*.example.example.internal"
     error_message = "record must be the wildcard for the cluster FQDN suffix"
   }
   assert {
-    condition     = output.cluster_fqdn == "api.bharat.example.internal"
+    condition     = output.cluster_fqdn == "api.example.example.internal"
     error_message = "cluster_fqdn must be api.<cluster>.<domain> when a domain is set"
   }
   assert {
-    condition     = output.wildcard_dns_name == "*.bharat.example.internal"
+    condition     = output.wildcard_dns_name == "*.example.example.internal"
     error_message = "wildcard_dns_name output must expose the wildcard for client DNS registration"
   }
 }
@@ -47,7 +47,7 @@ run "no_record_without_zone_but_name_still_output" {
     error_message = "no record when hosted_zone_id is null"
   }
   assert {
-    condition     = output.wildcard_dns_name == "*.bharat.example.internal"
+    condition     = output.wildcard_dns_name == "*.example.example.internal"
     error_message = "wildcard_dns_name must still be output so the client can register it elsewhere"
   }
 }
