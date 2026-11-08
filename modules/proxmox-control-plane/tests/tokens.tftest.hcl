@@ -35,7 +35,7 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   }
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       strcontains(base64decode(f.content), "CLUSTER_TOKEN='${output.cluster_token}'") &&
       strcontains(base64decode(f.content), "CLUSTER_AGENT_TOKEN='${output.cluster_agent_token}'")
       if f.path == "/opt/kube-compute/secrets.env"
@@ -44,7 +44,7 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   }
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       f.permissions == "0600"
       if f.path == "/opt/kube-compute/secrets.env"
     ])
@@ -52,7 +52,7 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   }
   assert {
     condition = alltrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       !strcontains(base64decode(f.content), "ansible")
     ])
     error_message = "no part of the payload may reference Ansible — this module no longer runs any playbook against the node"

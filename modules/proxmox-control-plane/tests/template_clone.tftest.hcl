@@ -31,19 +31,19 @@ run "template_clone_is_always_a_full_clone" {
   }
 
   assert {
-    condition     = length(proxmox_virtual_environment_vm.control_plane.clone) == 1
+    condition     = length(proxmox_virtual_environment_vm.control_plane["0"].clone) == 1
     error_message = "a supplied proxmox_template_vm_id must produce exactly one clone block"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.clone[0].vm_id == 9000
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].clone[0].vm_id == 9000
     error_message = "the clone block must reference the supplied template VM ID"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.clone[0].full == true
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].clone[0].full == true
     error_message = "full must be true on every clone — a linked clone makes every node permanently depend on the kube-images template, which breaks the moment prune-images.sh deletes it"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.disk[0].import_from == null
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].disk[0].import_from == null
     error_message = "a cloned VM must not also import a stock image — the clone already brings its own disk"
   }
 }

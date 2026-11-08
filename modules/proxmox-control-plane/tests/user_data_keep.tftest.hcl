@@ -50,7 +50,7 @@ run "create" {
   command = apply
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.initialization[0].user_data_file_id == proxmox_virtual_environment_file.node_init.id
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].initialization[0].user_data_file_id == proxmox_virtual_environment_file.node_init["0"].id
     error_message = "the VM must reference the snippet"
   }
 }
@@ -65,7 +65,7 @@ run "keeps_the_vm_when_a_helm_parameter_changes" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.initialization[0].user_data_file_id == proxmox_virtual_environment_file.node_init.id && proxmox_virtual_environment_vm.control_plane.clone[0].vm_id == 9000
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].initialization[0].user_data_file_id == proxmox_virtual_environment_file.node_init["0"].id && proxmox_virtual_environment_vm.control_plane["0"].clone[0].vm_id == 9000
     error_message = "a user data change must leave the VM as it was"
   }
 }

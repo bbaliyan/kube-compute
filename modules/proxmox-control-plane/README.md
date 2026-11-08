@@ -30,7 +30,7 @@ A new `proxmox_template_vm_id` reaches only new VMs and VMs that you replace. An
 
 A replaced node gets a new disk. Delete its Kubernetes node first: RKE2 then removes its etcd member and accepts a new node with the same name.
 
-The firewall of an additional node does not follow its VM by itself, so replace it in the same apply. The firewall of the first node follows its VM.
+The firewall of each node follows its own VM. When a VM is replaced, its firewall is replaced in the same apply.
 
 Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
 
@@ -43,14 +43,7 @@ Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
 3. Select an additional node, for example key `"1"`, the second node.
 4. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
 5. Delete the node: `kubectl delete node <node>`.
-6. Replace the VM and its firewall:
-
-   ```sh
-   tofu apply \
-     -replace='proxmox_virtual_environment_vm.control_plane_additional["1"]' \
-     -replace='proxmox_virtual_environment_firewall_options.control_plane["1"]' \
-     -replace='proxmox_virtual_environment_firewall_rules.control_plane["1"]'
-   ```
+6. Replace the VM: `tofu apply -replace='proxmox_virtual_environment_vm.control_plane["1"]'`.
 
 7. Verify that the node is `Ready`: `kubectl get nodes`.
 8. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
@@ -59,7 +52,7 @@ Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
 > **Warning:** Replace the first node last, in its own apply. It rejoins through the second node, so the second node must be healthy.
 
 10. Drain the first node, and then delete it, as in steps 4 and 5.
-11. Replace the first node: `tofu apply -replace='proxmox_virtual_environment_vm.control_plane'`.
+11. Replace the first node: `tofu apply -replace='proxmox_virtual_environment_vm.control_plane["0"]'`.
 12. Do steps 7 and 8 again.
 13. Roll the workers. See the `proxmox-node-pool` README.
 
@@ -138,9 +131,10 @@ data only at the first boot, so the running node does not apply the change.
 
 To apply a change, replace the VM on purpose. The replaced VM boots with the current
 snippet. Use the steps of "Rolling to a new template", from step 3: they drain the
-node, replace an additional VM with its firewall, verify it, and replace the first VM
-last. The addresses are `module.<name>.proxmox_virtual_environment_vm.control_plane`
-and `module.<name>.proxmox_virtual_environment_vm.control_plane_additional["1"]`.
+node, replace an additional VM, verify it, and replace the first VM last. The
+addresses are `module.<name>.proxmox_virtual_environment_vm.control_plane["0"]` for
+the first VM and `module.<name>.proxmox_virtual_environment_vm.control_plane["1"]`
+for the second.
 Inside `proxmox-cluster`, put `module.control_plane.` before the resource type.
 
 > **Warning:** Replacing a single-node cluster loses the cluster.

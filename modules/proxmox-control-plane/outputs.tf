@@ -7,7 +7,7 @@ output "cluster_name" {
 
 output "instance_id" {
   description = "Provider-native node ID of the genesis control-plane VM."
-  value       = tostring(proxmox_virtual_environment_vm.control_plane.vm_id)
+  value       = tostring(proxmox_virtual_environment_vm.control_plane["0"].vm_id)
 }
 
 output "cluster_ip" {
@@ -32,7 +32,7 @@ output "node_provider" {
 
 output "node_control_ref" {
   description = "Genesis VM ID, for control-plane verb-scripts that need a single node reference. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that cloud-init (not Ansible) owns bootstrap."
-  value       = tostring(proxmox_virtual_environment_vm.control_plane.vm_id)
+  value       = tostring(proxmox_virtual_environment_vm.control_plane["0"].vm_id)
 }
 
 output "wildcard_dns_name" {
@@ -64,23 +64,14 @@ output "cluster_agent_token" {
 
 output "control_plane_node_refs" {
   description = "Map of control-plane node name -> {instance_id, ip, provider}."
-  value = merge(
-    {
-      (local.control_plane_names["0"]) = {
-        instance_id = tostring(proxmox_virtual_environment_vm.control_plane.vm_id)
-        ip          = local.cp_ips["0"]
-        provider    = "proxmox"
-      }
-    },
-    {
-      for k, vm in proxmox_virtual_environment_vm.control_plane_additional :
-      local.control_plane_names[k] => {
-        instance_id = tostring(vm.vm_id)
-        ip          = local.cp_ips[k]
-        provider    = "proxmox"
-      }
+  value = {
+    for k, vm in proxmox_virtual_environment_vm.control_plane :
+    local.control_plane_names[k] => {
+      instance_id = tostring(vm.vm_id)
+      ip          = local.cp_ips[k]
+      provider    = "proxmox"
     }
-  )
+  }
 }
 
 output "pool_id" {

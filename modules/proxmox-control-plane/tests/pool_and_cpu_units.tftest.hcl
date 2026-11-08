@@ -47,7 +47,7 @@ run "unset_means_no_pool_and_default_cpu_weight" {
   command = plan
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.pool_id == null
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].pool_id == null
     error_message = "genesis must not join a pool when pool_id is unset"
   }
   # The mock reports a computed units as 0, so unset is checked on the output
@@ -58,7 +58,7 @@ run "unset_means_no_pool_and_default_cpu_weight" {
   }
   assert {
     condition = alltrue([
-      for vm in proxmox_virtual_environment_vm.control_plane_additional : vm.pool_id == null
+      for vm in [for k, v in proxmox_virtual_environment_vm.control_plane : v if k != "0"] : vm.pool_id == null
     ])
     error_message = "additional control-plane VMs must have no pool when unset"
   }
@@ -72,16 +72,16 @@ run "set_applies_to_every_control_plane_vm" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.pool_id == "kube"
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].pool_id == "kube"
     error_message = "genesis must join the pool named by pool_id"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.cpu[0].units == 100
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].cpu[0].units == 100
     error_message = "genesis must carry cpu_units as its CPU weight"
   }
   assert {
     condition = alltrue([
-      for vm in proxmox_virtual_environment_vm.control_plane_additional : vm.pool_id == "kube" && vm.cpu[0].units == 100
+      for vm in [for k, v in proxmox_virtual_environment_vm.control_plane : v if k != "0"] : vm.pool_id == "kube" && vm.cpu[0].units == 100
     ])
     error_message = "additional control-plane VMs must join the pool and carry cpu_units"
   }

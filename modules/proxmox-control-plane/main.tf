@@ -12,29 +12,16 @@ locals {
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
 
-  # Join address for additional-CP joins (module.node_bootstrap_additional below). A
-  # single-target DNS name — distinct from cluster_fqdn's round-robin api.* record.
-  # Genesis self-registers this via node-bootstrap's dns_self_register_* inputs as
-  # soon as it knows its own IP, so it's a zero-dependency string when DNS is
-  # configured; falls back to genesis's raw IP (a real resource dependency) when
-  # dns_server_address is null.
-  genesis_dns_name = local.has_domain ? "genesis.${local.dns_name}.${trimsuffix(var.cluster_domain, ".")}" : null
-  # Deliberately NOT local.cp_ips["0"]: cp_ips is a merged map built from BOTH
-  # control_plane and control_plane_additional resources, so referencing it — even
-  # just the "0" key — makes OpenTofu's (resource-grained) dependency graph depend on
-  # the whole control_plane_additional resource. That closed a real cycle once
-  # node_bootstrap_additional's registration_address started depending on this value:
-  # control_plane_additional -> cp_ips -> registration_address ->
-  # node_bootstrap_additional -> node_init_additional -> control_plane_additional.
-  # genesis_ip reads only control_plane (never _additional), producing the same value
-  # without the cycle.
-  genesis_ip = local.static_ips ? split("/", var.control_plane_ip_addresses[0])[0] : try(
-    [for ip in flatten(proxmox_virtual_environment_vm.control_plane.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
-  )
-  registration_address = var.dns_server_address != null ? local.genesis_dns_name : local.genesis_ip
+  # Join address of every node but genesis. A single-target DNS name, distinct from
+  # cluster_fqdn's round-robin api.* record. Genesis self-registers it through
+  # node-bootstrap's dns_self_register_* inputs as soon as it knows its own IP. The
+  # precondition on the VMs requires dns_server_address when control_plane_count > 1,
+  # so this is a plain string with no dependency on any VM.
+  genesis_dns_name     = local.has_domain ? "genesis.${local.dns_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+  registration_address = local.genesis_dns_name
 
   # A replaced genesis node must probe a peer, not registration_address: that address
-  # is its own IP, and genesis rewrites the genesis DNS record to itself before the
+  # resolves to genesis itself, and genesis rewrites the genesis DNS record to itself before the
   # probe runs, so the probe would never see the live cluster. Only a static peer IP
   # is known before genesis exists; a DHCP peer IP would close a dependency cycle.
   genesis_rejoin_probe_address = var.control_plane_count > 1 && local.static_ips ? split("/", var.control_plane_ip_addresses[1])[0] : null
@@ -165,92 +152,68 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
   }
 }
 
+# Key "0" is genesis (server-init); every other key joins it (server-join). The
+# GitOps, manifest and DNS self-registration inputs reach genesis only. A joining
+# node gets each input's node-bootstrap default, so its render is the same as when
+# it had a module call of its own.
+#
+# node-bootstrap is a pure plan-time render, so there is no run to order against.
+# The node orders itself: genesis publishes its dns-self-register record early in
+# first boot, and a sibling that resolves registration_address before that lands is
+# absorbed by bootstrap.sh's join-race retry loop, like RKE2's own join retries.
 module "node_bootstrap" {
+  for_each = { for i in range(var.control_plane_count) : tostring(i) => i }
+
   source = "../node-bootstrap"
 
   cluster_name                    = var.cluster_name
-  node_name                       = local.control_plane_names["0"]
-  node_fqdn_label                 = "cp-0"
+  node_name                       = local.control_plane_names[each.key]
+  node_fqdn_label                 = "cp-${each.key}"
   cluster_fqdn                    = local.cluster_fqdn
   cluster_fqdn_suffix             = local.fqdn_suffix
-  node_role                       = "server-init"
+  node_role                       = each.key == "0" ? "server-init" : "server-join"
   control_plane_taint             = local.control_plane_taint
   cni                             = local.effective_cni
   cluster_token                   = random_password.server_token.result
-  cluster_agent_token             = random_password.agent_token.result
-  registration_address            = local.genesis_rejoin_probe_address
+  cluster_agent_token             = each.key == "0" ? random_password.agent_token.result : null
+  registration_address            = each.key == "0" ? local.genesis_rejoin_probe_address : local.registration_address
   extra_tls_sans                  = compact([local.wildcard_name, local.genesis_dns_name])
   trusted_ca_pem                  = var.trusted_ca_pem
   registry_mirror_url             = var.registry_mirror_url
-  gitops_platform_enabled         = var.gitops_platform_enabled
-  gitops_platform_repo_url        = var.gitops_platform_repo_url_override
-  gitops_platform_revision        = var.gitops_platform_revision_override
-  gitops_workloads_repo_url       = var.gitops_workloads_repo_url
-  gitops_workloads_revision       = var.gitops_workloads_revision
-  gitops_workloads_path           = var.gitops_workloads_path
-  workloads_extra_helm_parameters = var.workloads_extra_helm_parameters
-  workloads_helm_values_object    = var.workloads_helm_values_object
+  gitops_platform_enabled         = each.key == "0" ? var.gitops_platform_enabled : true
+  gitops_platform_repo_url        = each.key == "0" ? var.gitops_platform_repo_url_override : null
+  gitops_platform_revision        = each.key == "0" ? var.gitops_platform_revision_override : null
+  gitops_workloads_repo_url       = each.key == "0" ? var.gitops_workloads_repo_url : null
+  gitops_workloads_revision       = each.key == "0" ? var.gitops_workloads_revision : "main"
+  gitops_workloads_path           = each.key == "0" ? var.gitops_workloads_path : "."
+  workloads_extra_helm_parameters = each.key == "0" ? var.workloads_extra_helm_parameters : {}
+  workloads_helm_values_object    = each.key == "0" ? var.workloads_helm_values_object : null
   cert_mode                       = var.cert_mode
-  platform_extra_helm_parameters  = var.platform_extra_helm_parameters
-  platform_helm_values_object     = var.platform_helm_values_object
+  platform_extra_helm_parameters  = each.key == "0" ? var.platform_extra_helm_parameters : {}
+  platform_helm_values_object     = each.key == "0" ? var.platform_helm_values_object : null
   extra_tags                      = var.extra_tags
   iscsi_initiator_enabled         = true
+  boot_scripts                    = var.boot_scripts
 
-  genesis_apply_manifests = var.genesis_apply_manifests
-  extra_server_manifests  = var.extra_server_manifests
+  genesis_apply_manifests = each.key == "0" ? var.genesis_apply_manifests : []
+  extra_server_manifests  = each.key == "0" ? var.extra_server_manifests : {}
 
-  dns_self_register_zone        = var.dns_server_address != null ? local.dns_zone : null
-  dns_self_register_record_name = "genesis.${local.dns_name}"
-  dns_self_register_ttl         = var.dns_record_ttl
-  dns_server_address            = var.dns_server_address
-  dns_server_port               = var.dns_server_port
-  dns_transport                 = var.dns_transport
+  dns_self_register_zone        = each.key == "0" && var.dns_server_address != null ? local.dns_zone : null
+  dns_self_register_record_name = each.key == "0" ? "genesis.${local.dns_name}" : null
+  dns_self_register_ttl         = each.key == "0" ? var.dns_record_ttl : 30
+  dns_server_address            = each.key == "0" ? var.dns_server_address : null
+  dns_server_port               = each.key == "0" ? var.dns_server_port : 53
+  dns_transport                 = each.key == "0" ? var.dns_transport : "udp"
   # Same list this module's own VM network config (network_data_dhcp above)
-  # uses — gives kubelet a resolv-conf with no search domain, avoiding a
+  # uses � gives kubelet a resolv-conf with no search domain, avoiding a
   # collision between the node's own hostname-derived search domain and a
   # wildcard cluster DNS record (see node-bootstrap's dns_servers variable).
   dns_servers        = var.dns_servers
-  tsig_key_name      = var.tsig_key_name
-  tsig_key_algorithm = var.tsig_key_algorithm
-  tsig_key_secret    = var.tsig_key_secret
+  tsig_key_name      = each.key == "0" ? var.tsig_key_name : null
+  tsig_key_algorithm = each.key == "0" ? var.tsig_key_algorithm : "hmac-sha256"
+  tsig_key_secret    = each.key == "0" ? var.tsig_key_secret : null
   graceful_shutdown  = var.graceful_shutdown
   os_auto_updates    = var.os_auto_updates
-}
-
-# node-bootstrap no longer executes anything, so there's no run to order against —
-# this is a pure render, plan-time only. Ordering is now enforced by the node itself:
-# genesis publishes its dns-self-register record early in first boot, and a sibling
-# that resolves registration_address before that lands is absorbed by bootstrap.sh's
-# join-race retry loop, same as RKE2's own server/agent join retries.
-module "node_bootstrap_additional" {
-  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
-
-  source = "../node-bootstrap"
-
-  cluster_name        = var.cluster_name
-  node_name           = local.control_plane_names[each.key]
-  node_fqdn_label     = "cp-${each.key}"
-  cluster_fqdn        = local.cluster_fqdn
-  cluster_fqdn_suffix = local.fqdn_suffix
-  node_role           = "server-join"
-  control_plane_taint = local.control_plane_taint
-  cni                 = local.effective_cni
-  # local.registration_address: genesis's self-registered DNS name when DNS is
-  # configured, its raw IP otherwise — see the no-depends_on comment above for why
-  # this doesn't need an explicit Terraform dependency. Always a single target (no
-  # round-robin race — see cluster_fqdn's own doc).
-  registration_address    = local.registration_address
-  extra_tls_sans          = compact([local.wildcard_name, local.genesis_dns_name])
-  cluster_token           = random_password.server_token.result
-  trusted_ca_pem          = var.trusted_ca_pem
-  registry_mirror_url     = var.registry_mirror_url
-  dns_servers             = var.dns_servers
-  cert_mode               = var.cert_mode
-  extra_tags              = var.extra_tags
-  iscsi_initiator_enabled = true
-  graceful_shutdown       = var.graceful_shutdown
-  os_auto_updates         = var.os_auto_updates
-  # gitops_* intentionally omitted: Argo/platform bootstrap runs on the first server only.
 }
 
 # Subsumes the old hostname-only snippet — hostname is now one key inside
@@ -258,20 +221,7 @@ module "node_bootstrap_additional" {
 # write_files and the bootstrap runcmd, so the two can't drift. vendor_data (SSH keys +
 # qemu-guest-agent) and network_data are unrelated to RKE2 and unchanged.
 resource "proxmox_virtual_environment_file" "node_init" {
-  content_type = "snippets"
-  datastore_id = var.iso_datastore_id
-  node_name    = var.proxmox_node
-  upload_mode  = var.cloud_init_upload_mode
-  overwrite    = true
-
-  source_raw {
-    data      = local.node_init_data_genesis
-    file_name = "${var.cluster_name}-cp-0-node-init.yaml"
-  }
-}
-
-resource "proxmox_virtual_environment_file" "node_init_additional" {
-  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
+  for_each = { for i in range(var.control_plane_count) : tostring(i) => i }
 
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
@@ -280,7 +230,7 @@ resource "proxmox_virtual_environment_file" "node_init_additional" {
   overwrite    = true
 
   source_raw {
-    data      = local.node_init_data_additional[each.key]
+    data      = module.node_bootstrap[each.key].user_data
     file_name = "${var.cluster_name}-cp-${each.key}-node-init.yaml"
   }
 }
@@ -292,7 +242,7 @@ resource "proxmox_virtual_environment_file" "node_init_additional" {
 module "dns_registration" {
   source = "../dns-registration"
 
-  depends_on = [proxmox_virtual_environment_vm.control_plane, proxmox_virtual_environment_vm.control_plane_additional]
+  depends_on = [proxmox_virtual_environment_vm.control_plane]
 
   enabled            = local.dns_registration_enabled
   dns_zone           = coalesce(local.dns_zone, "invalid.")
@@ -313,7 +263,7 @@ module "dns_registration" {
 module "dns_registration_wildcard" {
   source = "../dns-registration"
 
-  depends_on = [proxmox_virtual_environment_vm.control_plane, proxmox_virtual_environment_vm.control_plane_additional]
+  depends_on = [proxmox_virtual_environment_vm.control_plane]
 
   enabled            = local.wildcard_registration_enabled
   dns_zone           = coalesce(local.dns_zone, "invalid.")
@@ -358,93 +308,11 @@ resource "proxmox_virtual_environment_file" "network_data_dhcp" {
   }
 }
 
+# One VM per control-plane node; key "0" is genesis. The other nodes no longer wait
+# for genesis to be created: a resource cannot depend on its own instances. They
+# join through genesis's DNS record and retry until it answers, as above.
 resource "proxmox_virtual_environment_vm" "control_plane" {
-  name            = local.control_plane_names["0"]
-  node_name       = var.proxmox_node
-  tags            = ["kube-compute", var.cluster_name, "control-plane"]
-  on_boot         = true
-  started         = true
-  stop_on_destroy = true
-  pool_id         = var.pool_id
-  tablet_device   = false
-  scsi_hardware   = "virtio-scsi-single"
-
-  agent {
-    enabled = true
-    timeout = "15m"
-    trim    = true
-  }
-
-  cpu {
-    cores = var.vm_cores
-    type  = var.vm_cpu_type
-    units = var.cpu_units
-  }
-
-  memory {
-    dedicated = var.vm_memory_mb
-  }
-
-  # full = true is not optional: a linked clone stays dependent on the template
-  # surviving, which breaks when kube-images' prune-images.sh deletes an old build.
-  clone {
-    vm_id = var.proxmox_template_vm_id
-    full  = true
-  }
-
-  disk {
-    datastore_id = var.disk_datastore_id
-    interface    = "scsi0"
-    size         = var.vm_disk_gb
-    discard      = "on"
-    iothread     = true
-    ssd          = true
-  }
-
-  serial_device {}
-
-  network_device {
-    bridge = var.network_bridge
-    model  = "virtio"
-    queues = var.vm_cores
-    # Proxmox only enforces this VM's firewall rules (below) on a NIC that
-    # opts in, and only with the datacenter firewall on (see the README).
-    firewall = true
-  }
-
-  operating_system {
-    type = "l26"
-  }
-
-  initialization {
-    datastore_id         = var.disk_datastore_id
-    user_data_file_id    = proxmox_virtual_environment_file.node_init.id
-    vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
-    network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data["0"].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
-  }
-
-  lifecycle {
-    # A new template reaches only new or replaced VMs, so one apply never
-    # rebuilds every control-plane node and etcd member. See the README for
-    # the rolling replacement.
-    ignore_changes = [clone]
-
-    precondition {
-      condition     = var.control_plane_count == 1 || var.dns_server_address != null
-      error_message = "dns_server_address is required when control_plane_count > 1 — multi-node clusters need it to self-register the genesis join address."
-    }
-  }
-}
-
-resource "proxmox_virtual_environment_vm" "control_plane_additional" {
-  # Deliberately NOT for_each = module.node_bootstrap_additional. Not a real cycle:
-  # node_bootstrap_additional's registration_address resolves through local.genesis_ip,
-  # which (per the comment above it) reads only control_plane, never
-  # control_plane_additional. (This resource still depends on
-  # module.node_bootstrap_additional transitively, via node_init_additional's
-  # user_data_file_id below.) for_each is keyed independently simply because this
-  # resource's index set is already a pure function of control_plane_count.
-  for_each = var.control_plane_count > 1 ? { for i in range(1, var.control_plane_count) : tostring(i) => i } : {}
+  for_each = { for i in range(var.control_plane_count) : tostring(i) => i }
 
   name            = local.control_plane_names[each.key]
   node_name       = var.proxmox_node
@@ -505,37 +373,35 @@ resource "proxmox_virtual_environment_vm" "control_plane_additional" {
 
   initialization {
     datastore_id        = var.disk_datastore_id
-    user_data_file_id   = proxmox_virtual_environment_file.node_init_additional[each.key].id
+    user_data_file_id   = proxmox_virtual_environment_file.node_init[each.key].id
     vendor_data_file_id = proxmox_virtual_environment_file.vendor_data.id
-    # Same static/DHCP branch as the primary control_plane resource above —
     # network_data_dhcp[0] content is identical for every control-plane node.
     network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data[each.key].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
   }
 
-  # Same reason as the genesis VM above.
   lifecycle {
+    # A new template reaches only new or replaced VMs, so one apply never
+    # rebuilds every control-plane node and etcd member. See the README for
+    # the rolling replacement.
     ignore_changes = [clone]
-  }
 
-  depends_on = [proxmox_virtual_environment_vm.control_plane]
+    precondition {
+      condition     = var.control_plane_count == 1 || var.dns_server_address != null
+      error_message = "dns_server_address is required when control_plane_count > 1 — multi-node clusters need it to self-register the genesis join address."
+    }
+  }
 }
 
 locals {
   # Resolved IP per control-plane VM, static or via guest agent — same pattern node-proxmox uses.
-  cp_ips = merge(
-    { "0" = local.genesis_ip },
-    {
-      for k, vm in proxmox_virtual_environment_vm.control_plane_additional :
-      k => local.static_ips ? split("/", var.control_plane_ip_addresses[tonumber(k)])[0] : try(
-        [for ip in flatten(vm.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
-      )
-    }
-  )
+  cp_ips = {
+    for k, vm in proxmox_virtual_environment_vm.control_plane :
+    k => local.static_ips ? split("/", var.control_plane_ip_addresses[tonumber(k)])[0] : try(
+      [for ip in flatten(vm.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
+    )
+  }
 
-  all_cp_vm_ids = merge(
-    { "0" = proxmox_virtual_environment_vm.control_plane.vm_id },
-    { for k, vm in proxmox_virtual_environment_vm.control_plane_additional : k => vm.vm_id }
-  )
+  all_cp_vm_ids = { for k, vm in proxmox_virtual_environment_vm.control_plane : k => vm.vm_id }
 }
 
 resource "proxmox_virtual_environment_firewall_options" "control_plane" {
@@ -563,20 +429,11 @@ resource "proxmox_virtual_environment_firewall_options" "control_plane" {
   # lifecycle tied to the VM it belongs to, avoiding the broken update path
   # entirely. Confirmed against a real apply (image rebuild -> template swap).
   #
-  # Deliberately only control_plane, not control_plane_additional: unlike
-  # depends_on, replace_triggered_by errors ("no change found for X") if the
-  # referenced resource has zero instances — confirmed on a real destroy,
-  # which still evaluates this even though it's not applying anything. On a
-  # single-control-plane cluster (control_plane_count = 1, this module's
-  # common case) control_plane_additional's for_each is always empty, so
-  # referencing it here breaks every plan/apply/destroy outright. Known gap:
-  # on an HA cluster, replacing only an additional CP node (not the genesis
-  # one) won't auto-recreate this shared resource — acceptable for now since
-  # the bug this fixes is far more common (any image/template rebuild) than
-  # replacing one specific additional CP node in isolation.
+  # The trigger is this node's own VM id: the id changes only on replacement,
+  # so an in-place update or another node's replacement leaves it alone.
   lifecycle {
     replace_triggered_by = [
-      proxmox_virtual_environment_vm.control_plane,
+      proxmox_virtual_environment_vm.control_plane[each.key].id,
     ]
   }
 }
@@ -587,11 +444,10 @@ resource "proxmox_virtual_environment_firewall_rules" "control_plane" {
   node_name = var.proxmox_node
   vm_id     = each.value
 
-  # See firewall_options.control_plane's identical lifecycle block above for
-  # why this is required, and why it's scoped to control_plane only.
+  # See firewall_options.control_plane's identical lifecycle block above.
   lifecycle {
     replace_triggered_by = [
-      proxmox_virtual_environment_vm.control_plane,
+      proxmox_virtual_environment_vm.control_plane[each.key].id,
     ]
   }
 
