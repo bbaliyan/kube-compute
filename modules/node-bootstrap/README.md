@@ -72,6 +72,12 @@ This change is breaking. The `node.env` contract moves from 2 to 3.
    the new `bootstrap.sh`.
 2. Move the module to the new major version and set the two inputs.
 
+The first server removes the baked `cilium.yaml` from the RKE2 manifests directory after
+Cilium is Ready. RKE2 applies every file in that directory again on each start. Without
+the removal, a restart would put the older baked Cilium back after the platform upgraded
+it. Removing the file does not remove Cilium from the cluster. If Cilium is not Ready
+within about 6 minutes, the file stays and the log shows a warning.
+
 An image with the old module, or the new module with the old image, fails on the
 contract check at the first line of `bootstrap.sh`. Existing clusters do not change
 until a node is replaced.

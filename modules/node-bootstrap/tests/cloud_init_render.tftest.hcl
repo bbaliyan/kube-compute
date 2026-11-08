@@ -79,6 +79,26 @@ run "server_init_payload_is_valid_cloud_config" {
     ])
     error_message = "every key node.env defines must be read by the baked program, or the two halves of the boot have drifted apart"
   }
+  # The baked cilium.yaml must not outlive the Cilium handoff to Argo CD: RKE2
+  # re-applies every server/manifests file on each start. The removal must come
+  # after the Cilium wait, inside the genesis-only branch, and appear once.
+  assert {
+    condition = (
+      length(split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", local.bootstrap_program)) == 2
+      && strcontains(split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", local.bootstrap_program)[0], "rollout status daemonset/cilium -n kube-system")
+    )
+    error_message = "bootstrap.sh must remove the baked cilium.yaml exactly once, after it waits for the Cilium DaemonSet"
+  }
+  assert {
+    condition = (
+      strcontains(local.bootstrap_program, "if [ \"$CNI\" = \"cilium\" ] && [ \"$NODE_ROLE\" = \"server-init\" ]; then\n  # RKE2 re-applies")
+      && !strcontains(
+        split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", split("if [ \"$CNI\" = \"cilium\" ] && [ \"$NODE_ROLE\" = \"server-init\" ]; then\n  # RKE2 re-applies", local.bootstrap_program)[1])[0],
+        "\nfi\n"
+      )
+    )
+    error_message = "the baked cilium.yaml must be removed only inside the cilium and server-init branch, never for a joining server or a worker"
+  }
   assert {
     condition     = strcontains(local.bootstrap_program, "BOOTSTRAP_CONTRACT=${local.node_env_contract}")
     error_message = "the baked program's contract number must match node_env_contract — the program refuses to run against any other, so a bump on one side alone fails every node's boot"
