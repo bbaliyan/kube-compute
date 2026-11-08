@@ -23,8 +23,7 @@ computes the same formula independently to reference the cluster ipset by name.
 On a multi-node cluster, the first node looks for a live cluster at boot, before it starts etcd. If a peer answers, a replaced first node joins through it instead of starting a new etcd cluster.
 
 - With static IPs, the first node probes the IP of every other control-plane node.
-- With DHCP and DNS registration (`cluster_domain` and `dns_server_address`), the first node probes the cluster name `api.<cluster>.<domain>`. It resolves the name, skips its own IP, and probes each IP that remains.
-- With DHCP and no DNS registration, no peer address is known before the first node exists, so there is no probe.
+- With DHCP, the first node probes the cluster name `api.<cluster>.<domain>`. It resolves the name, skips its own IP, and probes each IP that remains.
 
 This matches the AWS modules, where the first node probes `registration_address`.
 
