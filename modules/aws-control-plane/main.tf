@@ -67,7 +67,6 @@ locals {
   effective_ami_id = coalesce(
     var.os_image_ami_id,
     try(one(data.aws_ami.by_name[*].id), null),
-    try(one(data.aws_ami.almalinux10[*].id), null),
   )
 
   # VPC ID resolved from vpc_name, or null when vpc_name is not provided.

@@ -18,6 +18,7 @@ override_data {
 }
 
 variables {
+  os_image_ami_id           = "ami-0123456789abcdef0"
   cluster_name              = "bharat"
   group_name                = "workers"
   aws_region                = "eu-west-1"
@@ -118,7 +119,8 @@ run "os_image_name_resolves_for_each_instance_types_architecture" {
   }
 
   variables {
-    os_image_name = "almalinux10-*-kube-image-*"
+    os_image_ami_id = null
+    os_image_name   = "almalinux10-*-kube-image-*"
   }
 
   assert {
@@ -144,4 +146,13 @@ run "a_pools_names_say_which_cluster_it_belongs_to" {
     condition     = alltrue([for group in aws_autoscaling_group.node : startswith(group.name, "kube-compute-app-red-workers-")])
     error_message = "an Auto Scaling group's name is unique per account and region, so it has to carry the cluster"
   }
+}
+
+run "an_image_is_required" {
+  command = plan
+  variables {
+    os_image_ami_id = null
+    os_image_name   = null
+  }
+  expect_failures = [var.os_image_name]
 }

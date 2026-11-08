@@ -13,6 +13,7 @@ mock_provider "aws" {
 }
 
 variables {
+  os_image_ami_id       = "ami-0123456789abcdef0"
   cluster_name          = "pool"
   aws_region            = "eu-west-1"
   allowed_ingress_cidrs = ["10.0.0.0/8"]

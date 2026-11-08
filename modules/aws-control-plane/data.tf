@@ -96,32 +96,6 @@ data "aws_ami" "by_name" {
   }
 }
 
-# Latest AlmaLinux 10 for the derived arch — only when neither an explicit ID nor a name is given.
-# Owner 764336703387 is the AlmaLinux OS Foundation's AWS account (verified against the
-# AlmaLinux bug tracker and AlmaLinux/cloud-images repo); architecture isn't embedded in
-# the name (unlike AL2023's), so it's filtered separately below.
-data "aws_ami" "almalinux10" {
-  count       = (var.os_image_ami_id == null && var.os_image_name == null) ? 1 : 0
-  most_recent = true
-  owners      = ["764336703387"]
-  filter {
-    name   = "name"
-    values = ["AlmaLinux OS 10*"]
-  }
-  filter {
-    name   = "architecture"
-    values = [local.ami_arch]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-}
-
 # ---- HA mode: derive the module's VPC from the genesis node's own subnet, not the single-node
 # fallback (which is otherwise unused once control_plane_count > 1) ----
 data "aws_subnet" "control_plane_genesis" {

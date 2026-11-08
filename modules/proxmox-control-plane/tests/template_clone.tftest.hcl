@@ -2,12 +2,8 @@
 # Guards the kube-images template-clone path: cloning must always be a FULL
 # clone (a linked clone leaves every node depending on a template that
 # kube-images' own prune-images.sh will eventually delete), the disk must not
-# also try to import a stock image, and exactly one of the three image sources
-# may be set.
+# also try to import a stock image.
 mock_provider "proxmox" {
-  mock_resource "proxmox_download_file" {
-    defaults = { id = "local:iso/bharat.img" }
-  }
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/bharat.yaml" }
   }
@@ -32,8 +28,6 @@ run "template_clone_is_always_a_full_clone" {
   command = plan
   variables {
     proxmox_template_vm_id = 9000
-    os_image_url           = null
-    os_image_file_name     = null
   }
 
   assert {
@@ -52,88 +46,4 @@ run "template_clone_is_always_a_full_clone" {
     condition     = proxmox_virtual_environment_vm.control_plane.disk[0].import_from == null
     error_message = "a cloned VM must not also import a stock image — the clone already brings its own disk"
   }
-  assert {
-    condition     = length(proxmox_download_file.os_image) == 0
-    error_message = "the template path must not download a stock cloud image"
-  }
-}
-
-run "stock_image_path_still_creates_no_clone_block" {
-  command = plan
-  variables {
-    proxmox_template_vm_id = null
-    os_image_url           = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name     = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
-  }
-
-  assert {
-    condition     = length(proxmox_virtual_environment_vm.control_plane.clone) == 0
-    error_message = "the stock-image path must create no clone block — kube-images stays opt-in and kube-compute must keep working standalone"
-  }
-}
-
-run "all_three_image_sources_at_once_is_rejected" {
-  command = plan
-  variables {
-    proxmox_template_vm_id = 9000
-    os_image_url           = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name     = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
-    os_image_file_id       = "local:iso/stock.img"
-  }
-
-  expect_failures = [proxmox_virtual_environment_vm.control_plane]
-}
-
-run "no_image_source_at_all_is_rejected" {
-  command = plan
-  variables {
-    proxmox_template_vm_id = null
-    os_image_url           = null
-    os_image_file_name     = null
-  }
-
-  expect_failures = [proxmox_virtual_environment_vm.control_plane]
-}
-
-run "file_id_stock_image_path_creates_no_clone_block" {
-  command = plan
-  variables {
-    proxmox_template_vm_id = null
-    os_image_url           = null
-    os_image_file_name     = null
-    os_image_file_id       = "local:iso/almalinux-10.qcow2"
-  }
-
-  assert {
-    condition     = length(proxmox_virtual_environment_vm.control_plane.clone) == 0
-    error_message = "the os_image_file_id path must create no clone block — kube-images stays opt-in and kube-compute must keep working standalone"
-  }
-  assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.disk[0].import_from == "local:iso/almalinux-10.qcow2"
-    error_message = "os_image_file_id must be wired straight to the disk's import_from when it is the sole image source"
-  }
-}
-
-run "template_and_file_id_at_once_is_rejected" {
-  command = plan
-  variables {
-    proxmox_template_vm_id = 9000
-    os_image_url           = null
-    os_image_file_name     = null
-    os_image_file_id       = "local:iso/almalinux-10.qcow2"
-  }
-
-  expect_failures = [proxmox_virtual_environment_vm.control_plane]
-}
-
-run "url_and_file_id_at_once_is_rejected" {
-  command = plan
-  variables {
-    proxmox_template_vm_id = null
-    os_image_url           = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-    os_image_file_name     = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
-    os_image_file_id       = "local:iso/almalinux-10.qcow2"
-  }
-
-  expect_failures = [proxmox_virtual_environment_vm.control_plane]
 }

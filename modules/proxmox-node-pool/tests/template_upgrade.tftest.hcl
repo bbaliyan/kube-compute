@@ -7,9 +7,6 @@
 # replacement, or that a replaced worker joins the cluster again.
 # `tofu test -verbose` shows the planned actions.
 mock_provider "proxmox" {
-  mock_resource "proxmox_download_file" {
-    defaults = { id = "local:iso/bharat.img" }
-  }
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/bharat.yaml" }
   }
@@ -30,8 +27,6 @@ variables {
   desired_count          = 2
   registration_address   = "192.168.1.5"
   cluster_agent_token    = "agent-secret-abc123"
-  os_image_url           = null
-  os_image_file_name     = null
   proxmox_template_vm_id = 9000
 }
 

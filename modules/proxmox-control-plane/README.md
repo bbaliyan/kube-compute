@@ -114,21 +114,12 @@ orchestrator) should expect to need the host-side change.
 
 ### Booting from a kube-images template
 
-**A `proxmox_template_vm_id` template is now effectively required for a working
-cluster.** `node-bootstrap`'s cloud-init payload no longer installs RKE2 — it only
-configures and starts it, assuming the binaries are already on disk. That assumption
-only holds for a kube-images-baked template. Setting `os_image_url`/`os_image_file_id`
-alone (the plain stock-cloud-image path) still creates a VM and still
-validates/applies cleanly, but the node fails at
-`systemctl enable --now rke2-server.service` during first-boot cloud-init —
-`tofu apply` reports success while the cluster never actually comes up. Same cause on
-every provider (no more live Ansible install step anywhere in `node-bootstrap` — see
-`../node-bootstrap/README.md`). `os_image_url`/`os_image_file_id` remain valid
-Terraform-level inputs for a plain, non-RKE2 VM; only "boot a working RKE2 node from a
-stock image" is gone.
+`proxmox_template_vm_id` is required. `node-bootstrap`'s cloud-init payload does not install RKE2: it
+only configures and starts it, assuming the binaries are already on disk. A stock cloud
+image has no RKE2, so the node would fail at `systemctl enable --now rke2-server.service`
+while `tofu apply` reported success.
 
-Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID instead of
-`os_image_url`/`os_image_file_id`. Nodes are **full**-cloned from it, so they never
+Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID. Nodes are **full**-cloned from it, so they never
 depend on the template surviving. The template carries OS prep, the RKE2 binaries
 (both server and agent units — the role is chosen at launch), the SELinux policy, the
 kernel modules, and the guest agent; this module supplies only per-cluster identity,

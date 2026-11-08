@@ -180,28 +180,10 @@ variable "cpu_units" {
   }
 }
 
-variable "os_image_url" {
-  description = "URL of the OS cloud image to download to Proxmox storage. Must match the cloud_init_template OS family. Set exactly one of os_image_url or os_image_file_id."
-  type        = string
-  default     = null
-}
-
-variable "os_image_file_name" {
-  description = "Override for the filename stored on Proxmox when using os_image_url. Null = basename of os_image_url."
-  type        = string
-  default     = null
-}
-
-variable "os_image_file_id" {
-  description = "ID of an image already present on Proxmox storage, to share one downloaded image across many clusters. Set exactly one of os_image_url or os_image_file_id."
-  type        = string
-  default     = null
-}
-
 variable "proxmox_template_vm_id" {
-  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every control-plane node from, instead of booting a stock cloud image. The template already carries OS prep, the RKE2 binaries (both server and agent units — the role is chosen at launch), SELinux policy, kernel modules, and the guest agent, so a node reaches Ready in a fraction of the stock-image time. Null (the default) keeps the stock path via os_image_url/os_image_file_id — kube-images is opt-in and kube-compute works standalone without it. Set exactly one of os_image_url, os_image_file_id, or proxmox_template_vm_id. No compatibility validation is performed between this ID and what is actually baked in it: the template's own self-describing name (kube-image-<k8s_version>-<cilium_version>-<argocd_version>-<build-date>) is documentation, treated the same way a hand-picked stock image already is. A new value reaches only new VMs and VMs you replace on purpose: existing VMs keep their disks. See the README for the rolling replacement."
+  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every control-plane node from. The template carries OS prep, the RKE2 binaries (server and agent units; the role is chosen at launch), SELinux policy, kernel modules and the guest agent. No check compares this ID with what is baked into the template. A new value reaches only new VMs and VMs you replace on purpose: existing VMs keep their disks. See the README for the rolling replacement."
   type        = number
-  default     = null
+  nullable    = false
 }
 
 variable "ssh_authorized_keys" {

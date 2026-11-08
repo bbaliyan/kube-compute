@@ -17,15 +17,12 @@ returns as soon as the instance and its user-data exist.
 
 The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules, genesis Cilium/Argo
 CD manifests) is expected to already be baked into the AMI, via `kube-images`' `kube-node/packer/aws/`
-template. **`os_image_ami_id` is opt-in**: pass a kube-images-baked AMI id to get a fully working
-cluster. `os_image_name` is an alternative to `os_image_ami_id` — pass the AMI's name (e.g.
-kube-images' self-descriptive build name) instead of its ID, and the module resolves the ID
-itself via a data lookup scoped to your own account and the derived architecture; a pattern
-with the build date/suffix omitted (using EC2's `*`/`?` Name-filter wildcards) resolves to the
-most recent matching build. The default fallback — latest stock AlmaLinux 10, when both are
-left null — has **no RKE2 baked in**, so a node booted from it will not join a cluster; it
-exists only so the AMI lookup resolves to something for plan-time testing and as a base for
-your own bake. Mirrors `proxmox-control-plane`'s `proxmox_template_vm_id` convention.
+template. You must pass a kube-images-baked AMI with `os_image_ami_id`, or its name with
+`os_image_name`. If you pass neither, the plan fails. A stock image has no RKE2, so a node
+booted from it would never join. With `os_image_name`, the module resolves the ID itself
+via a data lookup scoped to your own account and the derived architecture. A pattern with
+the build date omitted (using EC2's `*`/`?` wildcards) resolves to the most recent
+matching build. This mirrors `proxmox-control-plane`'s `proxmox_template_vm_id`.
 
 ### Keeping user data under EC2's limit
 
@@ -187,8 +184,7 @@ endpoint at all.
 
 See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing
 is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `root_volume_type`.
-`os_image_ami_id`/`os_image_name` default to the latest stock AlmaLinux 10 for the derived
-architecture (no RKE2 baked in — see "Boot flow"). Join tokens and the cluster security group are **not** inputs — this
+`os_image_ami_id` or `os_image_name` is required (see "Boot flow"). Join tokens and the cluster security group are **not** inputs — this
 module generates and owns them directly (see "Join flow").
 
 ## Outputs

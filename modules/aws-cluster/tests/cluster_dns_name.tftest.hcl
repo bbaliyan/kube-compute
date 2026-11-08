@@ -7,6 +7,7 @@ mock_provider "aws" {
 }
 
 variables {
+  os_image_name         = "kube-image-*"
   cluster_name          = "app-red"
   aws_region            = "eu-west-1"
   allowed_ingress_cidrs = ["10.0.0.0/8"]

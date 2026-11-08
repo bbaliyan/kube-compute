@@ -12,6 +12,7 @@ run "node_resources" {
     instance_type         = "m7g.large"
     allowed_ingress_cidrs = ["10.0.0.0/8", "192.168.0.0/16"]
     subnet_id             = "subnet-abc"
+    os_image_ami_id       = "ami-0123456789abcdef0"
   }
 
   assert {

@@ -258,6 +258,11 @@ variable "os_image_name" {
   EOT
   type        = string
   default     = null
+
+  validation {
+    condition     = var.os_image_ami_id != null || var.os_image_name != null
+    error_message = "Set os_image_ami_id or os_image_name to a kube-images AMI. A stock image has no RKE2, so the node would never join."
+  }
 }
 
 variable "allowed_ingress_cidrs" {

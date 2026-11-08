@@ -94,28 +94,10 @@ variable "cpu_units" {
   }
 }
 
-variable "os_image_url" {
-  description = "URL of the OS cloud image to download. Set exactly one of os_image_url or os_image_file_id."
-  type        = string
-  default     = null
-}
-
-variable "os_image_file_name" {
-  description = "Override for the filename stored on Proxmox when using os_image_url."
-  type        = string
-  default     = null
-}
-
-variable "os_image_file_id" {
-  description = "ID of an image already present on Proxmox storage."
-  type        = string
-  default     = null
-}
-
 variable "proxmox_template_vm_id" {
-  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every worker from, instead of booting a stock cloud image. The template already carries OS prep, the RKE2 binaries (both the server and agent units — this pool enables only rke2-agent at launch), SELinux policy, kernel modules, and the guest agent. Null (the default) keeps the stock path via os_image_url/os_image_file_id — kube-images is opt-in. Set exactly one of os_image_url, os_image_file_id, or proxmox_template_vm_id. No compatibility validation is performed between this ID and what is actually baked in it. A new value reaches only new VMs and VMs you replace on purpose: existing VMs keep their disks. See the README for the rolling replacement."
+  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every worker from. The template carries OS prep, the RKE2 binaries (server and agent units; this pool enables only rke2-agent at launch), SELinux policy, kernel modules and the guest agent. No check compares this ID with what is baked into the template. A new value reaches only new VMs and VMs you replace on purpose: existing VMs keep their disks. See the README for the rolling replacement."
   type        = number
-  default     = null
+  nullable    = false
 }
 
 variable "ssh_authorized_keys" {

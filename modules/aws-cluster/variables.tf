@@ -238,15 +238,20 @@ variable "instance_type" {
 }
 
 variable "os_image_ami_id" {
-  description = "AMI ID for the control-plane node(s) — typically the output of kube-images' AWS Packer build. Tested with AlmaLinux 10 (RHEL-family — node-bootstrap uses dnf and update-ca-trust). Null = latest AlmaLinux 10 for the derived architecture via data lookup (a stock image with no RKE2 pre-baked — much slower first boot than a kube-images AMI, same tradeoff as Proxmox's proxmox_template_vm_id)."
+  description = "AMI ID of a kube-images build for the control-plane node(s). Set this or os_image_name. The image must have RKE2 baked in, and no check compares the AMI with what is baked in it."
   type        = string
   default     = null
 }
 
 variable "os_image_name" {
-  description = "AMI name for the control-plane node(s), e.g. kube-images' self-descriptive build name. Alternative to os_image_ami_id — resolved to an ID via a data lookup scoped to this account and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
+  description = "AMI name of a kube-images build for the control-plane node(s), e.g. its self-descriptive build name. Set this or os_image_ami_id. Resolved to an ID via a data lookup scoped to this account and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.os_image_ami_id != null || var.os_image_name != null
+    error_message = "Set os_image_ami_id or os_image_name to a kube-images AMI. A stock image has no RKE2, so the node would never join."
+  }
 }
 
 variable "allowed_ingress_cidrs" {

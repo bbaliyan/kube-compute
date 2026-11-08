@@ -11,6 +11,7 @@ mock_provider "aws" {
 }
 
 variables {
+  os_image_ami_id       = "ami-0123456789abcdef0"
   aws_region            = "eu-west-1"
   allowed_ingress_cidrs = ["10.0.0.0/8"]
 }
@@ -180,10 +181,11 @@ run "os_image_name_lookup" {
     values = { id = "ami-byname789" }
   }
   variables {
-    cluster_name  = "byname"
-    instance_type = "m7g.large"
-    subnet_id     = "subnet-x"
-    os_image_name = "almalinux10-arm64-kube-image-*"
+    cluster_name    = "byname"
+    instance_type   = "m7g.large"
+    subnet_id       = "subnet-x"
+    os_image_ami_id = null
+    os_image_name   = "almalinux10-arm64-kube-image-*"
   }
   assert {
     condition     = output.effective_ami_id == "ami-byname789"
@@ -220,4 +222,16 @@ run "storage_graviton_arm64" {
     condition     = output.node_arch == "arm64"
     error_message = "im4gn.large is Graviton-based; AWS API reports arm64"
   }
+}
+
+run "an_image_is_required" {
+  command = plan
+  variables {
+    cluster_name    = "noimage"
+    instance_type   = "m7g.large"
+    subnet_id       = "subnet-x"
+    os_image_ami_id = null
+    os_image_name   = null
+  }
+  expect_failures = [var.os_image_name]
 }

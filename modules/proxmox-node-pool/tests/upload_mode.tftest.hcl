@@ -2,9 +2,6 @@
 # cloud_init_upload_mode is optional. Unset must leave every snippet on the
 # provider default, as before it existed. Set to sftp it must reach every one.
 mock_provider "proxmox" {
-  mock_resource "proxmox_download_file" {
-    defaults = { id = "local:iso/bharat.img" }
-  }
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/bharat.yaml" }
   }
@@ -17,16 +14,15 @@ mock_provider "proxmox" {
 }
 
 variables {
-  cluster_name         = "bharat"
-  proxmox_node         = "pve"
-  vm_cores             = 2
-  vm_memory_mb         = 4096
-  vm_disk_gb           = 30
-  desired_count        = 2
-  registration_address = "192.168.1.5"
-  cluster_agent_token  = "agent-secret-abc123"
-  os_image_url         = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
-  os_image_file_name   = "ubuntu-26.04-server-cloudimg-amd64.qcow2"
+  cluster_name           = "bharat"
+  proxmox_node           = "pve"
+  vm_cores               = 2
+  vm_memory_mb           = 4096
+  vm_disk_gb             = 30
+  desired_count          = 2
+  registration_address   = "192.168.1.5"
+  cluster_agent_token    = "agent-secret-abc123"
+  proxmox_template_vm_id = 9000
 }
 
 run "unset_keeps_the_provider_default" {
