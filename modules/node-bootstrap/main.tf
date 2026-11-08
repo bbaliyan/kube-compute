@@ -336,7 +336,7 @@ locals {
   # baked into the node image; this says which node.env contract it was written
   # against, and the program refuses to run against any other. Bump both
   # together whenever a key below is added, removed, or changes meaning.
-  node_env_contract = 4
+  node_env_contract = 5
 
   # Where a server-init node looks for a live cluster before it starts etcd.
   # Explicit addresses win; otherwise registration_address, as before.
@@ -386,8 +386,9 @@ locals {
     ARGOCD_MANIFEST_SHA256        = local.render_argocd && var.argocd_manifest_sha256 != null ? var.argocd_manifest_sha256 : ""
     PLATFORM_APP_ENABLED          = local.platform_app_enabled ? "1" : "0"
     WORKLOADS_APP_ENABLED         = local.workloads_app_enabled ? "1" : "0"
-    # Space-separated because the program word-splits it. Every path is composed
-    # by this module under /opt/kube-compute/manifests, so none can contain one.
+    # Space-separated because the program word-splits it. The genesis_apply_manifests
+    # validation requires every path to sit under /opt/kube-compute/manifests with no
+    # whitespace, so none can contain a space.
     GENESIS_APPLY_MANIFESTS = join(" ", local.genesis_apply_manifest_paths)
   }
 

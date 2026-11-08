@@ -66,9 +66,12 @@ kube-platform release, for example
 
 ### Upgrade order
 
-This change is breaking. The `node.env` contract moves from 2 to 4. Contract 3 was never
+This change is breaking. The `node.env` contract moves from 2 to 5. Contracts 3 and 4 were never
 released. Contract 4 adds `REJOIN_PROBE_ADDRESSES`, the list of addresses a first server probes
-for a live cluster before it starts etcd (the `rejoin_probe_addresses` input).
+for a live cluster before it starts etcd (the `rejoin_probe_addresses` input). Contract 5
+changes `bootstrap.sh` only: `node.env` has no new key. A first server that finds a live cluster
+now becomes a joining server. It skips Cilium, the extra server manifests, Argo CD, the
+Applications and `genesis_apply_manifests`.
 
 1. Rebuild the node image without the baked Argo CD manifest. The new image carries
    the new `bootstrap.sh`.
@@ -136,6 +139,15 @@ the program exists before running it and says what to rebuild.
 writes each one verbatim under `/opt/kube-compute/manifests/` with `write_files`.
 `bootstrap.sh` then runs `kubectl apply -f` on each one in order. This module does not
 interpret `content` at all.
+
+Every `path` must be absolute, must name a file under `/opt/kube-compute/manifests/`,
+must not contain whitespace and must not contain a `..` segment. `bootstrap.sh` word-splits
+the list of paths, so a path with a space would break the apply. The plan fails with a
+message that names the rule. `proxmox-control-plane` and `proxmox-cluster` check the same
+rules on their own input.
+
+A first server that finds a live cluster before it starts etcd does not apply these
+manifests. It joins the cluster as a joining server.
 
 The input is genesis-only (`server-init` only). It does not depend on
 `gitops_platform_enabled`. No module in this repo sets it today.

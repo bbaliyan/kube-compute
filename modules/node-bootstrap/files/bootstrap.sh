@@ -23,7 +23,7 @@
 # on the next line rather than half-configuring a node. An image NEWER than the
 # module needs no version check -- an older module ships its own rendered copy
 # of this file in write_files, which simply overwrites the baked one.
-BOOTSTRAP_CONTRACT=4
+BOOTSTRAP_CONTRACT=5
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
@@ -171,12 +171,18 @@ else
     # through the first that answers, so one peer being down or replaced in the same
     # apply does not hide the live cluster. 200/401/403 all mean "the API server is
     # up and answering". If no address answers, there is no cluster to rejoin, so
-    # this really is genesis: a new cluster has no live peers to find.
+    # this really is genesis: a new cluster has no live peers to find. A probe that
+    # answers turns this node into a joining server (NODE_ROLE below).
     for PROBE_ADDRESS in $REJOIN_PROBE_ADDRESSES; do
       PROBE_CODE="$(curl -sk --connect-timeout 3 --max-time 10 -o /dev/null -w '%{http_code}' "https://$PROBE_ADDRESS:6443/readyz" || true)"
       case "$PROBE_CODE" in
         200|401|403)
           SERVER_LINE="server: https://$PROBE_ADDRESS:9345"
+          # The cluster already exists, so this node is a joining server from here
+          # on. The genesis-only steps below (Cilium, extra server manifests,
+          # Argo CD, the Applications, genesis_apply_manifests) all key on
+          # server-init and must not run against a live cluster.
+          NODE_ROLE=server-join
           break
           ;;
       esac
@@ -216,7 +222,7 @@ if [ "$NODE_ROLE" != "worker" ]; then
     # which would fight handing off to Argo CD.
     install -m 0600 "$KC/manifests/cilium.yaml" /var/lib/rancher/rke2/server/manifests/cilium.yaml
   fi
-  if [ -d "$KC/server-manifests" ]; then
+  if [ "$NODE_ROLE" = "server-init" ] && [ -d "$KC/server-manifests" ]; then
     for extra_manifest in "$KC/server-manifests/"*; do
       if [ -e "$extra_manifest" ]; then
         install -m 0600 "$extra_manifest" /var/lib/rancher/rke2/server/manifests/
@@ -308,7 +314,7 @@ if [ "$CNI" = "cilium" ] && [ "$NODE_ROLE" = "server-init" ]; then
   fi
 fi
 
-if [ "$ARGOCD_NEEDED" = "1" ]; then
+if [ "$ARGOCD_NEEDED" = "1" ] && [ "$NODE_ROLE" = "server-init" ]; then
   # ---- GitOps/Argo CD bootstrap: genesis only, after the node is Ready ----
   # Node Ready only means the CNI is minimally configured — not that CoreDNS
   # itself is up and its ClusterIP is actually routable yet. Applying Argo CD's
@@ -398,10 +404,14 @@ fi
 
 # The genesis-apply list is a generic mechanism: this script does not interpret
 # the content, it only applies the manifests in order.
-# Unquoted on purpose: this is a space-separated list that must word-split.
-# shellcheck disable=SC2086
-for manifest_path in $GENESIS_APPLY_MANIFESTS; do
-  wait_until "$manifest_path to apply" $KUBECTL apply -f "$manifest_path" || { $KUBECTL apply -f "$manifest_path"; exit 1; }
-done
+# A genesis node that rejoined an existing cluster is a joining server by now and
+# applies nothing. Unquoted on purpose: this is a space-separated list that must
+# word-split; the module guarantees no path contains whitespace.
+if [ "$NODE_ROLE" = "server-init" ]; then
+  # shellcheck disable=SC2086
+  for manifest_path in $GENESIS_APPLY_MANIFESTS; do
+    wait_until "$manifest_path to apply" $KUBECTL apply -f "$manifest_path" || { $KUBECTL apply -f "$manifest_path"; exit 1; }
+  done
+fi
 
 echo "kube-compute: bootstrap complete $(date -Is)"

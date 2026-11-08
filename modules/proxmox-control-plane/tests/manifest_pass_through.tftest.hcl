@@ -102,3 +102,65 @@ run "extra_server_manifests_thread_through_to_node_bootstrap" {
     error_message = "the entry's content must be forwarded verbatim, unmodified by this module"
   }
 }
+
+# The wrapper rejects the same bad paths node-bootstrap does, at the input.
+
+run "genesis_apply_manifests_rejects_whitespace_in_a_path" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/20 extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_relative_path" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "manifests/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_dotdot_segment" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/../../etc/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_path_outside_the_directory" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "/etc/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}

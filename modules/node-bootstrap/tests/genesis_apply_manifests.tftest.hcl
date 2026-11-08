@@ -170,3 +170,174 @@ run "set_hostname_false_omits_hostname_and_fqdn" {
     error_message = "set_hostname = false must omit fqdn entirely, even when cluster_fqdn_suffix is set"
   }
 }
+
+# Path validation: bootstrap.sh word-splits the list and the caller must not
+# be able to write outside the manifests directory.
+
+run "genesis_apply_manifests_accepts_a_nested_path" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/sub/20-extra.v1..2.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "KUBE_COMPUTE_CONTRACT='5'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "node.env must carry contract 5, the number bootstrap.sh bakes"
+  }
+}
+
+run "genesis_apply_manifests_rejects_whitespace_in_a_path" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/20 extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_tab_in_a_path" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/20\textra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_relative_path" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    genesis_apply_manifests = [
+      {
+        path    = "manifests/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_dotdot_segment" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/../../etc/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_path_outside_the_directory" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    genesis_apply_manifests = [
+      {
+        path    = "/etc/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_sibling_directory_with_the_same_prefix" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests-extra/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_the_directory_itself" {
+  command = plan
+
+  variables {
+    node_role                 = "server-init"
+    cluster_token             = "SUPERSECRETTOKEN123"
+    cluster_agent_token       = "SUPERSECRETAGENT456"
+    gitops_platform_enabled   = false
+    gitops_workloads_repo_url = null
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}

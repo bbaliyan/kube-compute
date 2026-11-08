@@ -52,3 +52,65 @@ run "genesis_apply_manifests_reach_the_control_plane" {
     error_message = "a genesis_apply_manifests entry set on this module must reach the control plane"
   }
 }
+
+# The wrapper rejects the same bad paths node-bootstrap does, at the input.
+
+run "genesis_apply_manifests_rejects_whitespace_in_a_path" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/20 extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_relative_path" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "manifests/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_dotdot_segment" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "/opt/kube-compute/manifests/../../etc/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
+
+run "genesis_apply_manifests_rejects_path_outside_the_directory" {
+  command = plan
+
+  variables {
+    genesis_apply_manifests = [
+      {
+        path    = "/etc/20-extra.yaml"
+        content = "kind: Cluster\n"
+      }
+    ]
+  }
+
+  expect_failures = [var.genesis_apply_manifests]
+}
