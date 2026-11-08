@@ -111,7 +111,7 @@ SM_DIR       := tests/state-migration
 SM_WORK      ?= /tmp/state-migration
 SM_OLD_REPO  ?= https://github.com/bbaliyan/terraform-aws-kube-compute.git
 SM_OLD_REF   ?= v0.9.0
-SM_CASES     ?= single multi
+SM_CASES     ?= single multi ha
 # A sed expression applied to the branch's root *.tf files, for the self-test.
 SM_NEW_SED   ?=
 export AWS_ACCESS_KEY_ID     ?= test

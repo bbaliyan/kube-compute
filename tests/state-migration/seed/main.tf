@@ -28,10 +28,12 @@ resource "aws_vpc" "example" {
 }
 
 resource "aws_subnet" "example" {
+  for_each = { a = 1, b = 2, c = 3 }
+
   vpc_id            = aws_vpc.example.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "eu-west-1a"
-  tags              = { Name = "example-subnet-a" }
+  cidr_block        = "10.0.${each.value}.0/24"
+  availability_zone = "eu-west-1${each.key}"
+  tags              = { Name = "example-subnet-${each.key}" }
 }
 
 resource "aws_route53_zone" "example" {
@@ -76,4 +78,16 @@ output "os_image_ami_id" {
 
 output "hosted_zone_id" {
   value = aws_route53_zone.example.zone_id
+}
+
+output "subnet_a" {
+  value = aws_subnet.example["a"].id
+}
+
+output "subnet_b" {
+  value = aws_subnet.example["b"].id
+}
+
+output "subnet_c" {
+  value = aws_subnet.example["c"].id
 }
