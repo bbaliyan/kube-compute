@@ -79,13 +79,13 @@ run "genesis_serves_the_join_name_and_vms_keep_the_cluster_name" {
 
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       strcontains(base64decode(f.content), "genesis.app.red.lan")
     ])
     error_message = "genesis must serve genesis.<cluster_dns_name>.<cluster_domain>, the name the other nodes join through"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.name == "app-red-cp-0"
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].name == "app-red-cp-0"
     error_message = "VM names must stay on cluster_name"
   }
 }
@@ -108,7 +108,7 @@ run "graceful_shutdown_reaches_every_control_plane_node" {
 
   assert {
     condition = alltrue([
-      for snippet in concat([proxmox_virtual_environment_file.node_init], values(proxmox_virtual_environment_file.node_init_additional)) :
+      for snippet in values(proxmox_virtual_environment_file.node_init) :
       anytrue([
         for f in yamldecode(snippet.source_raw[0].data).write_files :
         strcontains(base64decode(f.content), "shutdownGracePeriod: 300s")
@@ -137,7 +137,7 @@ run "graceful_shutdown_null_writes_no_drop_in" {
 
   assert {
     condition = alltrue([
-      for snippet in concat([proxmox_virtual_environment_file.node_init], values(proxmox_virtual_environment_file.node_init_additional)) :
+      for snippet in values(proxmox_virtual_environment_file.node_init) :
       !strcontains(snippet.source_raw[0].data, "10-graceful-shutdown.conf")
     ])
     error_message = "graceful_shutdown = null must leave the kubelet drop-in out"

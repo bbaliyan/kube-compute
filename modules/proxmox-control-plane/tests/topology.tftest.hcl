@@ -43,7 +43,7 @@ run "single_node_no_endpoint" {
   # is no longer expressible via a module output and was removed rather than
   # replaced.
   assert {
-    condition     = length(proxmox_virtual_environment_vm.control_plane_additional) == 0
+    condition     = length(proxmox_virtual_environment_vm.control_plane) == 1
     error_message = "control_plane_count = 1 must create no additional control-plane VMs"
   }
 }
@@ -76,7 +76,7 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
   }
 
   assert {
-    condition     = length(proxmox_virtual_environment_vm.control_plane_additional) == 2
+    condition     = length(proxmox_virtual_environment_vm.control_plane) == 3
     error_message = "control_plane_count = 3 must create exactly 2 additional control-plane VMs"
   }
   # NOTE: registration_address is no longer an output — Task 2 of this effort
@@ -87,16 +87,16 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
   # replaced.
   assert {
     condition = alltrue([
-      for k, v in proxmox_virtual_environment_file.node_init_additional :
-      yamldecode(v.source_raw[0].data).hostname != yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).hostname
+      for k, v in { for k, v in proxmox_virtual_environment_file.node_init : k => v if k != "0" } :
+      yamldecode(v.source_raw[0].data).hostname != yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).hostname
     ])
     error_message = "every additional control-plane node's cloud-init payload must set a hostname different from the genesis node's — rke2/kubelet default the registered Kubernetes node name to the OS hostname, so a collision makes every kubelet register as the same node, silently clobbering each other"
   }
   assert {
     condition = length(distinct([
-      for k, v in proxmox_virtual_environment_file.node_init_additional :
+      for k, v in { for k, v in proxmox_virtual_environment_file.node_init : k => v if k != "0" } :
       yamldecode(v.source_raw[0].data).hostname
-    ])) == length(proxmox_virtual_environment_file.node_init_additional)
+    ])) == length(proxmox_virtual_environment_file.node_init) - 1
     error_message = "additional control-plane nodes must each get a distinct hostname from one another too, not just from genesis"
   }
   assert {
@@ -122,7 +122,7 @@ run "ha_control_plane_over_dhcp" {
   }
 
   assert {
-    condition     = length(proxmox_virtual_environment_vm.control_plane_additional) == 2
+    condition     = length(proxmox_virtual_environment_vm.control_plane) == 3
     error_message = "control_plane_count = 3 over DHCP must still create exactly 2 additional control-plane VMs"
   }
 }
@@ -134,7 +134,7 @@ run "single_node_genesis_has_no_probe_address" {
 
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       strcontains(base64decode(f.content), "REGISTRATION_ADDRESS=''")
       if f.path == "/opt/kube-compute/node.env"
     ])
@@ -157,7 +157,7 @@ run "ha_genesis_probes_a_static_peer" {
 
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       strcontains(base64decode(f.content), "REGISTRATION_ADDRESS='192.168.1.11'")
       if f.path == "/opt/kube-compute/node.env"
     ])
@@ -165,7 +165,7 @@ run "ha_genesis_probes_a_static_peer" {
   }
   assert {
     condition = alltrue([
-      for k, v in proxmox_virtual_environment_file.node_init_additional : anytrue([
+      for k, v in { for k, v in proxmox_virtual_environment_file.node_init : k => v if k != "0" } : anytrue([
         for f in yamldecode(v.source_raw[0].data).write_files :
         strcontains(base64decode(f.content), "REGISTRATION_ADDRESS='genesis.bharat.example.com'")
         if f.path == "/opt/kube-compute/node.env"
@@ -188,7 +188,7 @@ run "ha_genesis_over_dhcp_has_no_probe_address" {
 
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       strcontains(base64decode(f.content), "REGISTRATION_ADDRESS=''")
       if f.path == "/opt/kube-compute/node.env"
     ])

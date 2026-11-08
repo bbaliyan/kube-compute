@@ -49,8 +49,8 @@ run "unset_keeps_the_provider_default" {
   assert {
     condition = alltrue([
       proxmox_virtual_environment_file.vendor_data.upload_mode == null,
-      proxmox_virtual_environment_file.node_init.upload_mode == null,
-      alltrue([for f in proxmox_virtual_environment_file.node_init_additional : f.upload_mode == null]),
+      proxmox_virtual_environment_file.node_init["0"].upload_mode == null,
+      alltrue([for f in [for k, v in proxmox_virtual_environment_file.node_init : v if k != "0"] : f.upload_mode == null]),
       alltrue([for f in proxmox_virtual_environment_file.network_data : f.upload_mode == null]),
     ])
     error_message = "upload_mode must stay null on every snippet when cloud_init_upload_mode is unset"
@@ -70,9 +70,9 @@ run "sftp_reaches_every_static_snippet" {
   assert {
     condition = alltrue([
       proxmox_virtual_environment_file.vendor_data.upload_mode == "sftp",
-      proxmox_virtual_environment_file.node_init.upload_mode == "sftp",
-      length(proxmox_virtual_environment_file.node_init_additional) == 2,
-      alltrue([for f in proxmox_virtual_environment_file.node_init_additional : f.upload_mode == "sftp"]),
+      proxmox_virtual_environment_file.node_init["0"].upload_mode == "sftp",
+      length(proxmox_virtual_environment_file.node_init) == 3,
+      alltrue([for f in [for k, v in proxmox_virtual_environment_file.node_init : v if k != "0"] : f.upload_mode == "sftp"]),
       length(proxmox_virtual_environment_file.network_data) == 3,
       alltrue([for f in proxmox_virtual_environment_file.network_data : f.upload_mode == "sftp"]),
     ])
@@ -102,7 +102,7 @@ run "stream_is_accepted" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_file.node_init.upload_mode == "stream"
+    condition     = proxmox_virtual_environment_file.node_init["0"].upload_mode == "stream"
     error_message = "stream must be accepted and passed through"
   }
 }

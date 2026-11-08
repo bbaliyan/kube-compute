@@ -30,7 +30,7 @@ run "defaults_produce_no_genesis_apply_content" {
 
   assert {
     condition = !contains(
-      [for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path],
+      [for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files : f.path],
       "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     )
     error_message = "genesis_apply_manifests defaults to empty — nothing extra should be written"
@@ -51,7 +51,7 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
 
   assert {
     condition = contains(
-      [for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path],
+      [for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files : f.path],
       "/opt/kube-compute/manifests/20-extra-manifest.yaml"
     )
     error_message = "a genesis_apply_manifests entry passed to this module must reach its own genesis node_bootstrap call's write_files"
@@ -59,13 +59,13 @@ run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
   assert {
     condition = output.genesis_apply_manifest_paths == ["/opt/kube-compute/manifests/20-extra-manifest.yaml"] && alltrue([
       for p in output.genesis_apply_manifest_paths :
-      contains([for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path], p)
+      contains([for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files : f.path], p)
     ])
     error_message = "genesis_apply_manifest_paths must list exactly the manifests written to the genesis node"
   }
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       f.encoding == "gz+b64" &&
       f.content == base64gzip("kind: Cluster\nname: bharat-extra\n")
       if f.path == "/opt/kube-compute/manifests/20-extra-manifest.yaml"
@@ -85,14 +85,14 @@ run "extra_server_manifests_thread_through_to_node_bootstrap" {
 
   assert {
     condition = contains(
-      [for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files : f.path],
+      [for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files : f.path],
       "/opt/kube-compute/server-manifests/20-coredns-lan-forward.yaml"
     )
     error_message = "an extra_server_manifests entry passed to this module must reach its own genesis node_bootstrap call's write_files"
   }
   assert {
     condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init.source_raw[0].data).write_files :
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       strcontains(base64decode(f.content), "kind: HelmChartConfig") &&
       strcontains(base64decode(f.content), "name: rke2-coredns")
       if f.path == "/opt/kube-compute/server-manifests/20-coredns-lan-forward.yaml"

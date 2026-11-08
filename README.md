@@ -30,6 +30,7 @@ Each provider has one cluster module that composes the others. Use it when you w
 | Provider | `modules/proxmox-control-plane` | The control-plane VM(s) on Proxmox, with the join tokens and the cluster firewall group. |
 | Provider | `modules/proxmox-node-pool` | A pool of fixed worker VMs on Proxmox, named `<cluster>-<pool>-<n>`. |
 | Shared | `modules/node-bootstrap` | Renders the boot configuration (`#cloud-config`) for one node, for a role the caller has already chosen: `server-init`, `server-join` or `worker`. It produces a string and creates no resource. It expects the RKE2 binaries to be baked into the node image from [`kube-images`](https://github.com/bbaliyan/kube-images). |
+| Shared | `modules/proxmox-vendor-data` | Renders the cloud-init vendor data that every Proxmox VM shares: a persistent journal, the SSH keys, the guest agent and the serial console. It produces a string and creates no resource. |
 | Shared | `modules/dns-registration` | Publishes an A record set to an RFC2136 DNS server with a TSIG-signed dynamic update. Proxmox uses it because its DNS server is external. AWS creates its Route 53 records with `aws_route53_record`, because Route 53 does not accept RFC2136 updates. |
 | Placeholder | `modules/azure-control-plane`, `modules/azure-node-pool` | Not implemented. Azure is a target provider, and each directory holds only a README. |
 

@@ -41,8 +41,8 @@ run "cluster_ipset_created_and_referenced" {
   }
   assert {
     condition = alltrue(concat(
-      [proxmox_virtual_environment_vm.control_plane.network_device[0].firewall],
-      [for vm in proxmox_virtual_environment_vm.control_plane_additional : vm.network_device[0].firewall],
+      [proxmox_virtual_environment_vm.control_plane["0"].network_device[0].firewall],
+      [for vm in [for k, v in proxmox_virtual_environment_vm.control_plane : v if k != "0"] : vm.network_device[0].firewall],
     ))
     error_message = "every control-plane NIC must enable the firewall, or Proxmox never enforces the rules above"
   }

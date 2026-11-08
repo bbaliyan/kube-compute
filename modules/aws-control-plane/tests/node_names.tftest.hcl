@@ -25,8 +25,8 @@ run "a_cluster_name_may_start_with_a_digit_and_keeps_the_old_node_name" {
   command = plan
 
   assert {
-    condition     = aws_instance.control_plane.tags.Name == "cp-7c-demo-1"
-    error_message = "got ${aws_instance.control_plane.tags.Name}"
+    condition     = aws_instance.control_plane["0"].tags.Name == "cp-7c-demo-1"
+    error_message = "got ${aws_instance.control_plane["0"].tags.Name}"
   }
 }
 
@@ -38,12 +38,12 @@ run "the_template_gives_the_zone_and_number" {
   }
 
   assert {
-    condition     = aws_instance.control_plane.tags.Name == "demo-c-cp01"
-    error_message = "got ${aws_instance.control_plane.tags.Name}"
+    condition     = aws_instance.control_plane["0"].tags.Name == "demo-c-cp01"
+    error_message = "got ${aws_instance.control_plane["0"].tags.Name}"
   }
   assert {
-    condition     = aws_instance.control_plane.root_block_device[0].tags.Name == "demo-c-cp01-root"
-    error_message = "got ${aws_instance.control_plane.root_block_device[0].tags.Name}"
+    condition     = aws_instance.control_plane["0"].root_block_device[0].tags.Name == "demo-c-cp01-root"
+    error_message = "got ${aws_instance.control_plane["0"].root_block_device[0].tags.Name}"
   }
 }
 
@@ -61,16 +61,16 @@ run "each_ha_node_gets_its_own_zone_and_number" {
   }
 
   assert {
-    condition     = aws_instance.control_plane.tags.Name == "demo-a-cp01"
-    error_message = "got ${aws_instance.control_plane.tags.Name}"
+    condition     = aws_instance.control_plane["0"].tags.Name == "demo-a-cp01"
+    error_message = "got ${aws_instance.control_plane["0"].tags.Name}"
   }
   assert {
-    condition     = aws_instance.control_plane_additional["1"].tags.Name == "demo-b-cp02"
-    error_message = "got ${aws_instance.control_plane_additional["1"].tags.Name}"
+    condition     = aws_instance.control_plane["1"].tags.Name == "demo-b-cp02"
+    error_message = "got ${aws_instance.control_plane["1"].tags.Name}"
   }
   assert {
-    condition     = aws_instance.control_plane_additional["2"].tags.Name == "demo-c-cp03"
-    error_message = "got ${aws_instance.control_plane_additional["2"].tags.Name}"
+    condition     = aws_instance.control_plane["2"].tags.Name == "demo-c-cp03"
+    error_message = "got ${aws_instance.control_plane["2"].tags.Name}"
   }
 }
 
@@ -83,7 +83,7 @@ run "boot_scripts_make_the_user_data_bigger" {
   }
 
   assert {
-    condition     = length(aws_instance.control_plane.user_data_base64) > 0
+    condition     = length(aws_instance.control_plane["0"].user_data_base64) > 0
     error_message = "the node must still get its user data"
   }
 }
