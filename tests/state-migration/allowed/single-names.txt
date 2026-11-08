@@ -1,0 +1,7 @@
+# Intended since v0.9.0: the etcd security group is gone, and a subnet_names cluster keeps its subnet choice in state.
+# Updates are in place: an instance drops the etcd security group and sets user_data_replace_on_change; the scaling groups and launch templates follow the same change.
+create module.control_plane.terraform_data.subnet_choice[0]
+delete module.control_plane.aws_security_group.control_plane_etcd
+delete module.control_plane.aws_vpc_security_group_egress_rule.etcd_all
+delete module.control_plane.aws_vpc_security_group_ingress_rule.etcd_peer
+update module.control_plane.aws_instance.control_plane["0"]

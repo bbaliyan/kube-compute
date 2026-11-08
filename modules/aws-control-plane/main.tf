@@ -107,7 +107,18 @@ locals {
   # HA mode derives VPC from the control-plane subnets themselves, not the single-node
   # fallback (unused once control_plane_count > 1) — avoids creating SGs/the NLB target
   # group in a different VPC than where instances actually launch.
-  module_vpc_id = var.control_plane_count > 1 ? data.aws_subnet.control_plane_genesis[0].vpc_id : data.aws_subnet.selected.vpc_id
+  #
+  # For a subnet_names cluster the VPC comes from the candidate lookup that holds the chosen
+  # subnet, not from data.aws_subnet.selected. That data source reads the choice resource, so
+  # on the first plan after an upgrade it waits for the apply, the VPC is unknown, and the
+  # security groups would be replaced. The candidates do not wait.
+  chosen_candidate_vpc_ids = [for s in data.aws_subnet.by_name : s.vpc_id if s.id == local.named_subnet_id]
+  chosen_candidate_azs     = [for s in data.aws_subnet.by_name : s.availability_zone if s.id == local.named_subnet_id]
+  module_vpc_id = (
+    var.control_plane_count > 1 ? data.aws_subnet.control_plane_genesis[0].vpc_id
+    : length(local.chosen_candidate_vpc_ids) > 0 ? local.chosen_candidate_vpc_ids[0]
+    : data.aws_subnet.selected.vpc_id
+  )
 
   # Null when control_plane_count = 1. Otherwise depends on endpoint_mode: NLB DNS name
   # (loadbalancer, default), shared Route53 record (dns), or static_registration_address (static).
@@ -522,6 +533,7 @@ locals {
     for i in range(var.control_plane_count) : tostring(i) => (
       var.control_plane_count > 1 && length(local.distinct_control_plane_azs) > 0
       ? local.distinct_control_plane_azs[i % length(local.distinct_control_plane_azs)]
+      : length(local.chosen_candidate_azs) > 0 ? local.chosen_candidate_azs[0]
       : data.aws_subnet.selected.availability_zone
     )
   }
