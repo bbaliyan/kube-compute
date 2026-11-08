@@ -1,0 +1,5 @@
+# Intended since v0.9.0: the subnet choice is kept in state, and the etcd security group is gone.
+create module.control_plane.terraform_data.subnet_choice[0]
+delete module.control_plane.aws_security_group.control_plane_etcd
+delete module.control_plane.aws_vpc_security_group_egress_rule.etcd_all
+delete module.control_plane.aws_vpc_security_group_ingress_rule.etcd_peer

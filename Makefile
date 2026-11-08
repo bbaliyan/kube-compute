@@ -102,3 +102,63 @@ mirror-%:
 	git init -q /tmp/split-$*
 	scripts/release-split.sh $* /tmp/split-$* $(CURDIR)
 	$(MAKE) validate-tree TREE=/tmp/split-$*
+
+# state-migration applies the released AWS module to an AWS emulator, then
+# plans this branch on the same state. It fails if the plan creates, deletes
+# or replaces a resource that tests/state-migration/allowed/<case>.txt does
+# not list. EMULATOR (moto or fakecloud) names the emulator. It must already run
+# at AWS_ENDPOINT_URL; tests/state-migration/emulator.sh starts it.
+EMULATOR     ?= moto
+SM_DIR       := tests/state-migration
+SM_WORK      ?= /tmp/state-migration
+SM_OLD_REPO  ?= https://github.com/bbaliyan/terraform-aws-kube-compute.git
+SM_OLD_REF   ?= v0.9.0
+SM_CASES     ?= single-ids single-names multi-ids multi-names arm ha
+# A sed expression applied to the branch's root *.tf files, for the self-test.
+SM_NEW_SED   ?=
+# Prefix of a step whose wall time the log shows.
+sm_time = TIMEFORMAT='state-migration: $(1) took %0Rs'; time
+export AWS_ENDPOINT_URL      ?= $(shell $(CURDIR)/$(SM_DIR)/emulator.sh $(EMULATOR) endpoint)
+export AWS_ACCESS_KEY_ID     ?= test
+export AWS_SECRET_ACCESS_KEY ?= test
+
+.PHONY: state-migration state-migration-seed state-migration-selftest
+
+state-migration: $(SM_CASES:%=state-migration/%)
+
+state-migration-seed:
+	@echo "state-migration: emulator $(EMULATOR) at $$AWS_ENDPOINT_URL"
+	rm -rf $(SM_WORK) && mkdir -p $(SM_WORK)
+	cp -r $(SM_DIR)/seed $(SM_WORK)/seed
+	$(call sm_time,seed init) tofu -chdir=$(SM_WORK)/seed init -input=false >/dev/null
+	$(call sm_time,seed apply) tofu -chdir=$(SM_WORK)/seed apply -input=false -auto-approve -parallelism=30 >$(SM_WORK)/seed/apply.log
+	tofu -chdir=$(SM_WORK)/seed output -json | jq -r 'to_entries[] | "s|@\(.key)@|\(.value.value)|g"' >$(SM_WORK)/seed.sed
+	$(call sm_time,clone) git clone -q --depth 1 --branch $(SM_OLD_REF) $(SM_OLD_REPO) $(SM_WORK)/old
+	git init -q $(SM_WORK)/new
+	scripts/release-split.sh aws $(SM_WORK)/new $(CURDIR)
+
+state-migration/%: state-migration-seed
+	rm -rf $(SM_WORK)/$*
+	for side in old new; do \
+	  mkdir -p $(SM_WORK)/$*/$$side; \
+	  cp -r $(SM_WORK)/$$side/. $(SM_WORK)/$*/$$side/; rm -rf $(SM_WORK)/$*/$$side/.git; \
+	  cp $(SM_DIR)/root/*.tf $(SM_WORK)/$*/$$side/; \
+	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/common.auto.tfvars >$(SM_WORK)/$*/$$side/common.auto.tfvars; \
+	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/$*.tfvars >$(SM_WORK)/$*/$$side/terraform.tfvars; \
+	  $(if $(SM_NEW_SED),[ $$side = old ] || sed -i -e '$(SM_NEW_SED)' $(SM_WORK)/$*/new/*.tf;) \
+	  $(call sm_time,$* $$side init) tofu -chdir=$(SM_WORK)/$*/$$side init -input=false -backend-config=path=$(SM_WORK)/$*/terraform.tfstate >$(SM_WORK)/$*/$$side-init.log; \
+	done
+	$(call sm_time,$* old apply) tofu -chdir=$(SM_WORK)/$*/old apply -input=false -auto-approve -parallelism=30 >$(SM_WORK)/$*/apply.log
+	$(call sm_time,$* new plan) tofu -chdir=$(SM_WORK)/$*/new plan -input=false -refresh=false -parallelism=30 -out=$(SM_WORK)/$*/plan >$(SM_WORK)/$*/plan.log
+	$(call sm_time,$* show) tofu -chdir=$(SM_WORK)/$*/new show -json $(SM_WORK)/$*/plan | jq -r -f $(SM_DIR)/changes.jq | sort >$(SM_WORK)/$*/changes.txt
+	@echo "state-migration/$*: $(SM_OLD_REF) -> this branch"; cat $(SM_WORK)/$*/changes.txt
+	@{ grep -E '^(create|delete|replace) ' $(SM_WORK)/$*/changes.txt || true; } \
+	  | { grep -vxF -f $(SM_DIR)/allowed/$*.txt || true; } | sed 's/^/unexpected: /' | { ! grep . >&2; }
+
+# Renames the control-plane module without a moved block. The check must fail.
+state-migration-selftest:
+	! $(MAKE) state-migration/single-ids SM_WORK=$(SM_WORK)-selftest \
+	  SM_NEW_SED='s/module "control_plane"/module "control_plane_renamed"/; s/module\.control_plane\./module.control_plane_renamed./g' \
+	  2>&1 | tee $(SM_WORK)-selftest.log
+	grep -q '^unexpected: delete module\.control_plane\.aws_instance\.' $(SM_WORK)-selftest.log
+	@echo "state-migration-selftest: the check failed on a rename without a moved block, as it must"
