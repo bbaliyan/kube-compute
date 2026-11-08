@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/bbaliyan/kube-devenv:0.13.1",
+  "image": "ghcr.io/bbaliyan/kube-devenv:0.14.0",
   "name": "kube-compute",
 
   "initializeCommand": "mkdir -p ~/.aws ~/.kube ~/.config/age",
