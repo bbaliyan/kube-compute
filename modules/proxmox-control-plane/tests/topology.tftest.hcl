@@ -231,12 +231,16 @@ run "ha_genesis_over_dhcp_with_dns_probes_the_cluster_name" {
   }
 }
 
-run "ha_genesis_over_dhcp_without_dns_server_has_no_probe_address" {
+# A multi-node cluster always has a DNS server, but with no domain nothing publishes
+# the cluster name, so there is nothing to probe.
+run "ha_genesis_over_dhcp_without_domain_has_no_probe_address" {
   command = apply
   variables {
     control_plane_count  = 3
-    cluster_domain       = "example.com"
     cluster_network_cidr = "192.168.1.0/24"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
   }
 
   assert {
@@ -245,7 +249,7 @@ run "ha_genesis_over_dhcp_without_dns_server_has_no_probe_address" {
       strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES=''")
       if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "over DHCP with no DNS server, no name is published, so genesis must carry no probe address"
+    error_message = "over DHCP with no cluster domain, no name is published, so genesis must carry no probe address"
   }
 }
 
