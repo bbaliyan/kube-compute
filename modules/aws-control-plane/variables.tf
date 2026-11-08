@@ -54,9 +54,9 @@ variable "gitops_platform_revision_override" {
 }
 
 variable "argocd_manifest_url" {
-  description = "URL of the Argo CD bootstrap manifest that kube-platform publishes with each release (argocd-bootstrap.yaml). The first server downloads it at first boot. Required while a platform or workloads Application is enabled."
+  description = "URL of the Argo CD bootstrap manifest that kube-platform publishes with each release (argocd-bootstrap.yaml). The first server downloads it at first boot. Defaults to a pinned kube-platform release; see the node-bootstrap README to move to a newer one."
   type        = string
-  default     = null
+  default     = "https://github.com/bbaliyan/kube-platform/releases/download/stable-20261108/argocd-bootstrap.yaml"
 
   validation {
     condition     = var.argocd_manifest_url == null || startswith(coalesce(var.argocd_manifest_url, "x"), "https://")
@@ -65,9 +65,9 @@ variable "argocd_manifest_url" {
 }
 
 variable "argocd_manifest_sha256" {
-  description = "Lowercase hex sha256 of the file at argocd_manifest_url. bootstrap.sh refuses to apply a download that does not match."
+  description = "Lowercase hex sha256 of the file at argocd_manifest_url. It must match the URL: change both together. bootstrap.sh refuses to apply a download that does not match."
   type        = string
-  default     = null
+  default     = "e18c81805a4d299e93003c16662b889a05e075cc969a11098e54a4dabceb234d"
 
   validation {
     condition     = var.argocd_manifest_sha256 == null || can(regex("^[0-9a-f]{64}$", coalesce(var.argocd_manifest_sha256, "")))

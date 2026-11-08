@@ -54,11 +54,32 @@ payload (Proxmox allows 1 MiB). So the first server downloads it at first boot:
 Each failure stops the boot and is written to `/var/log/kube-compute-bootstrap.log`.
 The node needs a route to the URL at first boot.
 
-`argocd_manifest_url` and `argocd_manifest_sha256` have no default. They are required
-on the first server while a platform or workloads Application is enabled, and the plan
-fails without them. The hash must be 64 lowercase hex characters. Take both from a
-kube-platform release, for example
-`https://github.com/bbaliyan/kube-platform/releases/download/<tag>/argocd-bootstrap.yaml`.
+#### Default Argo CD manifest
+
+`argocd_manifest_url` and `argocd_manifest_sha256` have a default. It is the
+`argocd-bootstrap.yaml` of kube-platform release `stable-20261108`. A cluster needs no
+extra input. The hash must be 64 lowercase hex characters, and the URL must start with
+`https://`. The URL and the hash must always be changed together.
+
+The bootstrap Argo CD does not need to be current. After the first sync, Argo CD
+upgrades itself from the platform. The pin only sets the version that starts the cluster.
+
+To move to a newer platform release:
+
+1. Choose the release tag, for example `stable-20261108`.
+2. Download `argocd-bootstrap.yaml` from that release.
+3. Run `gh attestation verify argocd-bootstrap.yaml --repo bbaliyan/kube-platform`. This verifies where the file came from.
+4. Download the `argocd-bootstrap.yaml.sha256` asset from the same release.
+5. Set `argocd_manifest_url` to the release asset URL: `https://github.com/bbaliyan/kube-platform/releases/download/<tag>/argocd-bootstrap.yaml`.
+6. Set `argocd_manifest_sha256` to the first field of the `.sha256` file.
+
+A custom URL needs its own hash. If you change only one of the two, the first boot
+fails the hash comparison.
+
+Renovate does not update this pin, because it cannot compute the matching hash. Change
+the defaults by hand, in `node-bootstrap` and in each module that repeats them
+(`aws-control-plane`, `proxmox-control-plane`, `aws-cluster`, `proxmox-cluster`), when
+a newer bootstrap is needed.
 
 ### Upgrade order
 
@@ -70,7 +91,7 @@ Applications and `genesis_apply_manifests`.
 
 1. Rebuild the node image without the baked Argo CD manifest. The new image carries the new `bootstrap.sh`.
 2. Move the module to the new major version.
-3. Set `argocd_manifest_url` and `argocd_manifest_sha256`.
+3. Keep the default `argocd_manifest_url` and `argocd_manifest_sha256`, or set your own.
 
 The first server removes the baked `cilium.yaml` from the RKE2 manifests directory after
 Cilium is Ready. RKE2 applies every file in that directory again on each start. Without

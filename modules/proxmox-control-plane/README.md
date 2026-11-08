@@ -120,9 +120,7 @@ secrets, and join logic, as a cloud-init payload rendered by `node-bootstrap`.
 Bootstrap runs asynchronously after `tofu apply` returns — tail
 `/var/log/kube-compute-bootstrap.log` on the node to watch it.
 
-The first control-plane node downloads Argo CD at first boot. Set `argocd_manifest_url`
-and `argocd_manifest_sha256` to a kube-platform release's `argocd-bootstrap.yaml` and
-its sha256. Both are required while a platform or workloads Application is enabled.
+The first control-plane node downloads Argo CD at first boot. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` default to a pinned kube-platform release, so no extra input is needed. See [`node-bootstrap`](../node-bootstrap/README.md) to move to a newer release.
 The template must not bake Argo CD, and it must bake the matching `bootstrap.sh`:
 rebuild the template first, then move to this version. See
 [`node-bootstrap`](../node-bootstrap/README.md) for the upgrade order.
