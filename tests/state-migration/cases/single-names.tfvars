@@ -7,3 +7,5 @@ os_image_ami_id = "@os_image_ami_id@"
 # The VPC and the subnet belong to someone else. The case finds them by name.
 vpc_name     = "example-vpc"
 subnet_names = ["example-subnet-a"]
+
+control_plane_node_name_template = "example-k8{number}"

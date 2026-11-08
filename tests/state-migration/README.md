@@ -12,7 +12,7 @@ A good upgrade plan has only moves.
 4. For each case, both trees get `root/emulator.tf` and the case inputs, as Terragrunt would add them.
 5. The released tree is applied. The branch tree is planned on that state.
 6. `changes.jq` lists each move, update, create, delete and replace.
-7. The check fails on a create, delete or replace that `allowed/<case>.txt` does not list.
+7. The check fails on an update, create, delete or replace that `allowed/<case>.txt` does not list. Each case lists its own changes, so a regression in one shape fails that case.
 
 ## Cases
 
@@ -23,9 +23,12 @@ A good upgrade plan has only moves.
 | `multi-ids`, `multi-names` | A dedicated control plane, a static node group and an autoscaled node group, with the same two network inputs |
 | `arm` | A dedicated control plane on `m7g.large` (arm64), static groups on arm64 and x86_64, autoscaled pools on arm64 and x86_64. Subnet by ID |
 | `ha` | Three control-plane nodes in three zones, with `endpoint_mode = "static"` |
+| `names-zone` | One node. The subnet comes from `subnet_names` and the node name holds `{zone}`, so the zone must be known at plan time |
+| `names-full` | Two candidates in one VPC. The first has no free address, so the cluster must go to the second |
+| `names-vpcs` | Two candidates in different VPCs, with no `vpc_name` |
 | `ha-nlb` | As `ha`, behind an internal load balancer. Not in the default set: the provider waits about 65 seconds for the load balancer |
 
-The `*-names` cases fail on a branch that replaces the security groups when the subnet comes from `subnet_names`. This is intended: it is the finding in bbaliyan/cloud-hub#244, and the `*-ids` cases show that it does not happen with IDs.
+The `*-names` cases pass on this branch: the security groups stay when the subnet comes from `subnet_names` (bbaliyan/cloud-hub#244). A branch that takes the VPC from the lookup that waits for the subnet choice replaces them, and these cases then fail.
 
 All inputs are synthetic.
 
@@ -44,16 +47,18 @@ The cases and the seed are the same for both.
 2. Run the check in the kube-devenv image, on the host network:
 
    ```sh
-   make -j3 -k state-migration EMULATOR=moto
+   make -j9 -k state-migration EMULATOR=moto
    ```
 
-   `-j3` runs the cases at the same time. They share the seed and the emulator, and each has its own state file.
+   `-j9` runs the cases at the same time. They share the seed and the emulator, and each has its own state file.
    To run one case, set `SM_CASES`, for example `SM_CASES=ha-nlb`.
 
 3. Read the result in `/tmp/state-migration/<case>/changes.txt`.
 
 The emulator must be empty: the seed creates resources by name.
-Restart the emulator before each run. `emulator.sh start` does this.
+Restart the emulator before each run. `emulator.sh start` does this. The check stops if the emulator is not empty.
+If another program holds the port, `emulator.sh` stops with an error after 30 seconds. Set `SM_EMULATOR_PORT` (also a make variable) to use another port.
+The check sets its own AWS environment for every `tofu` call: dummy credentials and an endpoint on 127.0.0.1. It drops `AWS_PROFILE`, `AWS_SESSION_TOKEN` and every other `AWS_*` variable of the caller.
 
 ## Emulators
 

@@ -23,7 +23,10 @@ endpoint) echo "http://127.0.0.1:$SM_EMULATOR_PORT" ;;
 stop)
   # Stop every known emulator: another one can hold the port.
   for file in "$here"/emulators/*.sh; do (source "$file"; emulator_stop) || true; done
-  while port_open; do sleep 0.5; done
+  for _ in $(seq 60); do port_open || exit 0; sleep 0.5; done
+  echo "emulator.sh: port $SM_EMULATOR_PORT is still in use after 30 seconds. Another program holds it." >&2
+  echo "Find it with: ss -ltnp 'sport = :$SM_EMULATOR_PORT'. Or set SM_EMULATOR_PORT to a free port." >&2
+  exit 1
   ;;
 start)
   "$0" "$name" stop

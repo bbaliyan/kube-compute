@@ -36,6 +36,32 @@ resource "aws_subnet" "example" {
   tags              = { Name = "example-subnet-${each.key}" }
 }
 
+# A subnet with no free address: 16 addresses, 5 reserved by AWS, 11 taken by network interfaces.
+resource "aws_subnet" "full" {
+  vpc_id            = aws_vpc.example.id
+  cidr_block        = "10.0.9.0/28"
+  availability_zone = "eu-west-1a"
+  tags              = { Name = "example-subnet-full" }
+}
+
+resource "aws_network_interface" "full" {
+  count     = 11
+  subnet_id = aws_subnet.full.id
+}
+
+# A second VPC with its own subnet.
+resource "aws_vpc" "other" {
+  cidr_block = "10.1.0.0/16"
+  tags       = { Name = "example-other-vpc" }
+}
+
+resource "aws_subnet" "other" {
+  vpc_id            = aws_vpc.other.id
+  cidr_block        = "10.1.1.0/24"
+  availability_zone = "eu-west-1a"
+  tags              = { Name = "example-other-subnet" }
+}
+
 resource "aws_route53_zone" "example" {
   name = "example.internal"
 

@@ -11,5 +11,3 @@ cert_mode             = "byo"
 trusted_ca_in_image   = true
 power_schedule        = { stop_time = "20:00", timezone = "Europe/Dublin" }
 extra_tags            = { "cost-centre" = "example" }
-
-control_plane_node_name_template = "example-k8{number}"

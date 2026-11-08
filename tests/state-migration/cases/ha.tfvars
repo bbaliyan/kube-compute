@@ -16,3 +16,5 @@ control_plane_subnets = {
 
 vpc_name     = "example-vpc"
 subnet_names = ["example-subnet-a"]
+
+control_plane_node_name_template = "example-k8{number}"

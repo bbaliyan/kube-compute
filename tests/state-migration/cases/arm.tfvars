@@ -43,3 +43,5 @@ autoscaled_nodes = {
 
 # The VPC and the subnet exist. The case passes the subnet by ID.
 subnet_id = "@subnet_a@"
+
+control_plane_node_name_template = "example-k8{number}"
