@@ -20,6 +20,8 @@ A good upgrade plan has only moves.
 |---|---|
 | `single` | One `all_in_one` node |
 | `multi` | A dedicated control plane, a static node group and an autoscaled node group |
+| `ha` | Three control-plane nodes in three zones, with `endpoint_mode = "static"` |
+| `ha-nlb` | As `ha`, behind an internal load balancer. Not in the default set: the provider waits about 65 seconds for the load balancer |
 
 All inputs are synthetic.
 
@@ -29,8 +31,11 @@ All inputs are synthetic.
 2. Run the check in the kube-devenv image, on the host network:
 
    ```sh
-   AWS_ENDPOINT_URL=http://127.0.0.1:4566 make state-migration
+   AWS_ENDPOINT_URL=http://127.0.0.1:4566 make -j3 -k state-migration
    ```
+
+   `-j3` runs the cases at the same time. They share the seed and the emulator, and each has its own state file.
+   To run one case, set `SM_CASES`, for example `SM_CASES=ha-nlb`.
 
 3. Read the result in `/tmp/state-migration/<case>/changes.txt`.
 
@@ -42,3 +47,10 @@ Restart the emulator before each run.
 - The cases pass `os_image_ami_id` and `hosted_zone_id`. Emulators do not store the AMI architecture or the private flag of a zone, so the lookups by name find nothing.
 - No node boots. The emulator stores the instances only.
 - The emulator does not enforce AWS limits such as the user data size.
+- Most of the run is the provider waiting for resources to become ready, not work. The log shows the time of each step.
+
+## Self-test
+
+`make state-migration-selftest` renames the control-plane module without a `moved` block.
+It passes only if the check fails and lists the deleted nodes.
+Restart the emulator before you run it.

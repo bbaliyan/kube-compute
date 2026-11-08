@@ -114,6 +114,8 @@ SM_OLD_REF   ?= v0.9.0
 SM_CASES     ?= single multi ha
 # A sed expression applied to the branch's root *.tf files, for the self-test.
 SM_NEW_SED   ?=
+# Prefix of a step whose wall time the log shows.
+sm_time = TIMEFORMAT='state-migration: $(1) took %0Rs'; time
 export AWS_ACCESS_KEY_ID     ?= test
 export AWS_SECRET_ACCESS_KEY ?= test
 
@@ -125,10 +127,10 @@ state-migration-seed:
 	@test -n "$${AWS_ENDPOINT_URL:-}" || { echo "state-migration: set AWS_ENDPOINT_URL to the emulator" >&2; exit 1; }
 	rm -rf $(SM_WORK) && mkdir -p $(SM_WORK)
 	cp -r $(SM_DIR)/seed $(SM_WORK)/seed
-	tofu -chdir=$(SM_WORK)/seed init -input=false >/dev/null
-	tofu -chdir=$(SM_WORK)/seed apply -input=false -auto-approve >$(SM_WORK)/seed/apply.log
+	$(call sm_time,seed init) tofu -chdir=$(SM_WORK)/seed init -input=false >/dev/null
+	$(call sm_time,seed apply) tofu -chdir=$(SM_WORK)/seed apply -input=false -auto-approve -parallelism=30 >$(SM_WORK)/seed/apply.log
 	tofu -chdir=$(SM_WORK)/seed output -json | jq -r 'to_entries[] | "s|@\(.key)@|\(.value.value)|g"' >$(SM_WORK)/seed.sed
-	git clone -q --depth 1 --branch $(SM_OLD_REF) $(SM_OLD_REPO) $(SM_WORK)/old
+	$(call sm_time,clone) git clone -q --depth 1 --branch $(SM_OLD_REF) $(SM_OLD_REPO) $(SM_WORK)/old
 	git init -q $(SM_WORK)/new
 	scripts/release-split.sh aws $(SM_WORK)/new $(CURDIR)
 
@@ -141,11 +143,11 @@ state-migration/%: state-migration-seed
 	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/common.auto.tfvars >$(SM_WORK)/$*/$$side/common.auto.tfvars; \
 	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/$*.tfvars >$(SM_WORK)/$*/$$side/terraform.tfvars; \
 	  $(if $(SM_NEW_SED),[ $$side = old ] || sed -i -e '$(SM_NEW_SED)' $(SM_WORK)/$*/new/*.tf;) \
-	  tofu -chdir=$(SM_WORK)/$*/$$side init -input=false -backend-config=path=$(SM_WORK)/$*/terraform.tfstate >$(SM_WORK)/$*/$$side-init.log; \
+	  $(call sm_time,$* $$side init) tofu -chdir=$(SM_WORK)/$*/$$side init -input=false -backend-config=path=$(SM_WORK)/$*/terraform.tfstate >$(SM_WORK)/$*/$$side-init.log; \
 	done
-	tofu -chdir=$(SM_WORK)/$*/old apply -input=false -auto-approve >$(SM_WORK)/$*/apply.log
-	tofu -chdir=$(SM_WORK)/$*/new plan -input=false -out=$(SM_WORK)/$*/plan >$(SM_WORK)/$*/plan.log
-	tofu -chdir=$(SM_WORK)/$*/new show -json $(SM_WORK)/$*/plan | jq -r -f $(SM_DIR)/changes.jq | sort >$(SM_WORK)/$*/changes.txt
+	$(call sm_time,$* old apply) tofu -chdir=$(SM_WORK)/$*/old apply -input=false -auto-approve -parallelism=30 >$(SM_WORK)/$*/apply.log
+	$(call sm_time,$* new plan) tofu -chdir=$(SM_WORK)/$*/new plan -input=false -refresh=false -parallelism=30 -out=$(SM_WORK)/$*/plan >$(SM_WORK)/$*/plan.log
+	$(call sm_time,$* show) tofu -chdir=$(SM_WORK)/$*/new show -json $(SM_WORK)/$*/plan | jq -r -f $(SM_DIR)/changes.jq | sort >$(SM_WORK)/$*/changes.txt
 	@echo "state-migration/$*: $(SM_OLD_REF) -> this branch"; cat $(SM_WORK)/$*/changes.txt
 	@{ grep -E '^(create|delete|replace) ' $(SM_WORK)/$*/changes.txt || true; } \
 	  | { grep -vxF -f $(SM_DIR)/allowed/$*.txt || true; } | sed 's/^/unexpected: /' | { ! grep . >&2; }

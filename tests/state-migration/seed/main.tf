@@ -44,15 +44,6 @@ resource "aws_route53_zone" "example" {
   }
 }
 
-resource "aws_ebs_volume" "image" {
-  availability_zone = "eu-west-1a"
-  size              = 8
-}
-
-resource "aws_ebs_snapshot" "image" {
-  volume_id = aws_ebs_volume.image.id
-}
-
 resource "aws_ami" "kube_node" {
   for_each = toset(["x86_64", "arm64"])
 
@@ -64,7 +55,6 @@ resource "aws_ami" "kube_node" {
 
   ebs_block_device {
     device_name = "/dev/xvda"
-    snapshot_id = aws_ebs_snapshot.image.id
     volume_size = 8
   }
 }
