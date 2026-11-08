@@ -139,6 +139,28 @@ variable "gitops_platform_enabled" {
   default     = true
 }
 
+variable "argocd_manifest_url" {
+  description = "URL of the Argo CD bootstrap manifest that kube-platform publishes with each release (argocd-bootstrap.yaml). The first server downloads it at first boot. Required when a platform or workloads Application is enabled; unused otherwise. Only meaningful for node_role = server-init."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.argocd_manifest_url == null || startswith(coalesce(var.argocd_manifest_url, "x"), "https://")
+    error_message = "argocd_manifest_url must start with https://."
+  }
+}
+
+variable "argocd_manifest_sha256" {
+  description = "Lowercase hex sha256 of the file at argocd_manifest_url. bootstrap.sh refuses to apply a download that does not match."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.argocd_manifest_sha256 == null || can(regex("^[0-9a-f]{64}$", coalesce(var.argocd_manifest_sha256, "")))
+    error_message = "argocd_manifest_sha256 must be 64 lowercase hex characters."
+  }
+}
+
 variable "gitops_platform_repo_url" {
   description = "Argo CD platform Application source repo (kube-platform or a fork). Null/\"\" (the default) falls back to local.pinned_platform_repo_url — see that local for why the pin lives there rather than as this variable's default. Only takes effect when gitops_platform_enabled is true, and only meaningful for node_role = server-init."
   type        = string

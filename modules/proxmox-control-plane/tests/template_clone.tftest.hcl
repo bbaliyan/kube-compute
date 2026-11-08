@@ -16,12 +16,14 @@ mock_provider "proxmox" {
 }
 
 variables {
-  cluster_name          = "bharat"
-  proxmox_node          = "pve"
-  vm_cores              = 4
-  vm_memory_mb          = 8192
-  vm_disk_gb            = 50
-  allowed_ingress_cidrs = ["192.168.1.0/24"]
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "bharat"
+  proxmox_node           = "pve"
+  vm_cores               = 4
+  vm_memory_mb           = 8192
+  vm_disk_gb             = 50
+  allowed_ingress_cidrs  = ["192.168.1.0/24"]
 }
 
 run "template_clone_is_always_a_full_clone" {

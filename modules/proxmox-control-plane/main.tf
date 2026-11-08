@@ -177,6 +177,8 @@ module "node_bootstrap" {
   gitops_platform_enabled         = each.key == "0" ? var.gitops_platform_enabled : true
   gitops_platform_repo_url        = each.key == "0" ? var.gitops_platform_repo_url_override : null
   gitops_platform_revision        = each.key == "0" ? var.gitops_platform_revision_override : null
+  argocd_manifest_url             = each.key == "0" ? var.argocd_manifest_url : null
+  argocd_manifest_sha256          = each.key == "0" ? var.argocd_manifest_sha256 : null
   gitops_workloads_repo_url       = each.key == "0" ? var.gitops_workloads_repo_url : null
   gitops_workloads_revision       = each.key == "0" ? var.gitops_workloads_revision : "main"
   gitops_workloads_path           = each.key == "0" ? var.gitops_workloads_path : "."

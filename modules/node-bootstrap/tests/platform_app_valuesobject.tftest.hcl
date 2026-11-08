@@ -5,8 +5,10 @@
 # Application ("unknown field spec.sources[0].helm.billing-code").
 
 variables {
-  cluster_name = "test"
-  node_name    = "test-cp-0"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
 }
 
 run "platform_app_valuesobject_nests_every_line_correctly" {

@@ -12,8 +12,10 @@
 # handed, plus that it references every key node.env defines.
 
 variables {
-  cluster_name = "test"
-  node_name    = "test-cp-0"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
 }
 
 run "server_init_payload_is_valid_cloud_config" {

@@ -51,13 +51,12 @@ locals {
 
   is_server = contains(["server-init", "server-join"], var.node_role)
 
-  # Whether bootstrap.sh should apply the Cilium/Argo CD manifests kube-images
-  # already baked onto every template at /opt/kube-compute/manifests/ — a
-  # per-cluster runtime decision (CNI choice, GitOps enablement), independent
-  # of whether the files exist on disk (they always do). This module renders
-  # neither: the live `helm template` render that used to happen here exceeded
-  # Proxmox's 1 MiB cicustom snippet cap on a real apply — see kube-images'
-  # kube-node/packer/proxmox/build.sh and helm-values/ for where the render moved.
+  # Whether bootstrap.sh should apply the Cilium manifest kube-images already
+  # baked onto every template at /opt/kube-compute/manifests/, and whether it
+  # should download and apply kube-platform's Argo CD manifest — per-cluster
+  # runtime decisions (CNI choice, GitOps enablement). This module renders
+  # neither manifest: the live `helm template` render that used to happen here
+  # exceeded Proxmox's 1 MiB cicustom snippet cap on a real apply.
   render_cilium = var.cni == "cilium" && var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
@@ -337,7 +336,7 @@ locals {
   # baked into the node image; this says which node.env contract it was written
   # against, and the program refuses to run against any other. Bump both
   # together whenever a key below is added, removed, or changes meaning.
-  node_env_contract = 2
+  node_env_contract = 3
 
   # The program itself, read only so this module can check it declares the same
   # contract number. It is never shipped from here -- the node image bakes it,
@@ -373,6 +372,8 @@ locals {
     TSIG_KEY_NAME                 = var.tsig_key_name != null ? var.tsig_key_name : ""
     TSIG_KEY_ALGORITHM            = var.tsig_key_algorithm
     ARGOCD_NEEDED                 = local.render_argocd ? "1" : "0"
+    ARGOCD_MANIFEST_URL           = local.render_argocd && var.argocd_manifest_url != null ? var.argocd_manifest_url : ""
+    ARGOCD_MANIFEST_SHA256        = local.render_argocd && var.argocd_manifest_sha256 != null ? var.argocd_manifest_sha256 : ""
     PLATFORM_APP_ENABLED          = local.platform_app_enabled ? "1" : "0"
     WORKLOADS_APP_ENABLED         = local.workloads_app_enabled ? "1" : "0"
     # Space-separated because the program word-splits it. Every path is composed

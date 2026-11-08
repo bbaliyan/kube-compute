@@ -13,8 +13,9 @@
 # user data, which cost ~9.6 KB there and again inside every worker group's
 # cloud-init in a worker bundle. EC2 allows 16384 decoded bytes of user data for
 # everything a node boots with, and three copies of this program did not fit.
-# Baking it is also what the images already do with the Cilium and Argo CD
-# renders, for the same reason on Proxmox, whose snippet cap is 1 MiB.
+# Baking it is also what the images already do with the Cilium render, for the
+# same reason on Proxmox, whose snippet cap is 1 MiB. Argo CD is not baked: this
+# script downloads kube-platform's published manifest on the first server.
 #
 # The contract between this file and the module that writes node.env is the
 # integer below. Bump it whenever a key is added, removed, or changes meaning,
@@ -22,7 +23,7 @@
 # on the next line rather than half-configuring a node. An image NEWER than the
 # module needs no version check -- an older module ships its own rendered copy
 # of this file in write_files, which simply overwrites the baked one.
-BOOTSTRAP_CONTRACT=2
+BOOTSTRAP_CONTRACT=3
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
@@ -310,10 +311,21 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
   else
     echo "kube-compute: CoreDNS Ready $(date -Is)"
   fi
+  # The Argo CD manifest is published by kube-platform and pinned by URL and
+  # sha256. Every failure here is fatal: a node without Argo CD never syncs.
+  ARGOCD_MANIFEST="$(mktemp)"
+  curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 120 \
+    -o "$ARGOCD_MANIFEST" "$ARGOCD_MANIFEST_URL"
+  if ! echo "$ARGOCD_MANIFEST_SHA256  $ARGOCD_MANIFEST" | sha256sum -c - >/dev/null; then
+    echo "kube-compute: $ARGOCD_MANIFEST_URL does not match sha256 $ARGOCD_MANIFEST_SHA256" >&2
+    exit 1
+  fi
   # --server-side is required: a client-side apply stores the previous config in
   # a last-applied-configuration annotation, and Argo CD's applicationsets CRD
-  # exceeds Kubernetes' 262144-byte annotation limit.
-  $KUBECTL apply --server-side -f "$KC/manifests/00-argocd.yaml"
+  # exceeds Kubernetes' 262144-byte annotation limit. --force-conflicts takes
+  # ownership of fields from an earlier partial apply on a retried boot.
+  $KUBECTL apply --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
+  rm -f "$ARGOCD_MANIFEST"
   # NOT a health wait — only blocks until the API server serves the Application
   # type (avoids a "no matches for kind Application" race). Deliberately does not
   # wait for argocd-server to roll out: on a tainted control plane, or before a

@@ -20,6 +20,8 @@ override_data {
 }
 
 variables {
+  argocd_manifest_url         = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256      = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
   os_image_ami_id             = "ami-0123456789abcdef0"
   cluster_name                = "demo"
   aws_region                  = "eu-west-1"
@@ -40,17 +42,17 @@ run "user_data_is_unchanged" {
   command = apply
 
   assert {
-    condition     = sha256(aws_instance.control_plane["0"].user_data_base64) == "f9a823911065021f95bd23ade0b6d4014f681d041c5446466c5f1b2f2792c3ab"
+    condition     = sha256(aws_instance.control_plane["0"].user_data_base64) == "aa64b0a82b561d3af69ed2964c949125048f9acc5ebb7bd44aecd21403fad191"
     error_message = "the genesis user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane["0"].user_data_base64)), "?")}"
   }
 
   assert {
-    condition     = sha256(aws_instance.control_plane["1"].user_data_base64) == "1bed637c65eae1f86befd0915603ec15730654e962ceb25b453873b24c232823"
+    condition     = sha256(aws_instance.control_plane["1"].user_data_base64) == "86a7735114ff734f529d248a45d553bd633cd97e11684ff3889eca58bf37ef8f"
     error_message = "the second node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane["1"].user_data_base64)), "?")}"
   }
 
   assert {
-    condition     = sha256(aws_instance.control_plane["2"].user_data_base64) == "78149a0357cbb3113575c719c261e03cb44f1bc81810539d3193f9d79346fd91"
+    condition     = sha256(aws_instance.control_plane["2"].user_data_base64) == "0e6a4f85a656e2cd15f70d045925e413fd4f4cf118923e7c02d66a0f4167951c"
     error_message = "the third node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane["2"].user_data_base64)), "?")}"
   }
 }

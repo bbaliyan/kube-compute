@@ -52,6 +52,28 @@ variable "gitops_platform_revision_override" {
   default     = null
 }
 
+variable "argocd_manifest_url" {
+  description = "URL of the Argo CD bootstrap manifest that kube-platform publishes with each release (argocd-bootstrap.yaml). The first server downloads it at first boot. Required while a platform or workloads Application is enabled."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.argocd_manifest_url == null || startswith(coalesce(var.argocd_manifest_url, "x"), "https://")
+    error_message = "argocd_manifest_url must start with https://."
+  }
+}
+
+variable "argocd_manifest_sha256" {
+  description = "Lowercase hex sha256 of the file at argocd_manifest_url. bootstrap.sh refuses to apply a download that does not match."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.argocd_manifest_sha256 == null || can(regex("^[0-9a-f]{64}$", coalesce(var.argocd_manifest_sha256, "")))
+    error_message = "argocd_manifest_sha256 must be 64 lowercase hex characters."
+  }
+}
+
 variable "gitops_workloads_repo_url" {
   description = "Optional user-defined workloads Application source repo, independent of the platform Application (no shared ordering). Null (the default) = no workloads Application."
   type        = string

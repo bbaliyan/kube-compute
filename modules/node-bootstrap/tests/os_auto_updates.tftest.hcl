@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 variables {
-  cluster_name = "test"
-  node_name    = "test-cp-0"
-  node_role    = "server-init"
+  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
+  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
+  cluster_name           = "test"
+  node_name              = "test-cp-0"
+  node_role              = "server-init"
 }
 
 run "the_default_enables_dnf_automatic_after_bootstrap" {
