@@ -120,7 +120,7 @@ run "the_zone_comes_from_the_chosen_candidate" {
   }
 
   assert {
-    condition     = aws_instance.control_plane.tags["Name"] == "demo-b-cp01"
+    condition     = aws_instance.control_plane["0"].tags["Name"] == "demo-b-cp01"
     error_message = "the node name must take its zone from the chosen candidate, not from the lookup that waits for the choice"
   }
 }
