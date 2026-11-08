@@ -20,9 +20,9 @@ computes the same formula independently to reference the cluster ipset by name.
 
 ## Replacing the first control-plane node
 
-On a multi-node cluster with static IPs, the first node probes the second node's IP at boot. If the cluster answers, a replaced first node rejoins it instead of starting a new etcd cluster. With DHCP, no peer IP is known before the first node exists, so there is no probe. Use `control_plane_ip_addresses` on a multi-node cluster.
+On a multi-node cluster with static IPs, the first node probes the IP of every other control-plane node at boot, in order. If one answers, a replaced first node rejoins through it instead of starting a new etcd cluster. With DHCP, no peer IP is known before the first node exists, so there is no probe. Use `control_plane_ip_addresses` on a multi-node cluster.
 
-The probe checks only the second node. Replace the first node only while the second node is healthy, and never in the same apply as the second node. Any HTTPS service that answers at the peer IP can start a join attempt, so the peer IP must belong to the second control-plane node only.
+If no peer answers, the first node starts a new cluster. Do not replace the first node in the same apply as every other control-plane node. Any HTTPS service that answers at a peer IP can start a join attempt, so each peer IP must belong to a control-plane node only.
 
 ## Rolling to a new template
 

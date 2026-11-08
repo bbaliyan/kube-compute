@@ -68,6 +68,12 @@ variable "registration_address" {
   default     = null
 }
 
+variable "rejoin_probe_addresses" {
+  description = "IPs or FQDNs a server-init node probes, in order, before it starts etcd. The node joins the cluster of the first address that answers and initializes a new cluster only if none does. Use it when registration_address points back at the node itself. Empty (the default) means the node probes registration_address, if set. Only meaningful for node_role = server-init."
+  type        = list(string)
+  default     = []
+}
+
 variable "agent_token_fetch_command" {
   description = "Shell command that prints the rke2 agent join token to stdout when run on the node (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store). Required for node_role worker; ignored otherwise. Sensitive: some providers' fetch commands embed the raw token in the command string itself rather than fetching it out-of-band (e.g. Proxmox's node-pool module passes a literal `echo '<token>'`), so this is treated as sensitive uniformly and written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
   type        = string

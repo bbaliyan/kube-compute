@@ -391,3 +391,23 @@ run "registry_mirror_pins_containerd_tls_to_the_trusted_ca" {
     error_message = "trusted_ca_pem must be written to the OS trust anchors directory"
   }
 }
+
+# The AWS path: a server-init node with only registration_address set probes that
+# one address, exactly as before the probe list existed.
+run "server_init_probes_registration_address_by_default" {
+  command = apply
+  variables {
+    node_role            = "server-init"
+    registration_address = "nlb.example.com"
+    cluster_token        = "t"
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='nlb.example.com'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "a server-init node with no explicit probe list must probe registration_address"
+  }
+}

@@ -69,14 +69,14 @@ required) and gives joining nodes a stable `registration_address`:
 
 On a multi-node cluster, the first control-plane node probes the live cluster at boot. If the
 cluster answers, the node joins it. If not, the node initializes a new cluster. On AWS it probes
-`registration_address`. On Proxmox it probes the second control-plane node's static IP, because
-its own join address points back at itself. A Proxmox cluster whose control-plane nodes use DHCP
-has no address to probe, so a replaced first node initializes a new cluster.
+`registration_address`. On Proxmox it probes the static IP of every other control-plane node, in
+order, because its own join address points back at itself. It joins through the first one that
+answers. A Proxmox cluster whose control-plane nodes use DHCP has no address to probe, so a
+replaced first node initializes a new cluster.
 
-On Proxmox the probe checks only the second control-plane node. Replace the first node only while
-the second node is healthy, and never in the same apply as the second node. Any HTTPS service
-that answers at the peer IP can start a join attempt, so the peer IP must belong to the second
-control-plane node only.
+If no probed address answers, the node initializes a new cluster. So do not replace the first
+node in the same apply as every other control-plane node. Any HTTPS service that answers at a
+peer IP can start a join attempt, so each peer IP must belong to a control-plane node only.
 
 On Proxmox a new `proxmox_template_vm_id` reaches only new VMs and VMs that you replace, so one
 apply never rebuilds every node. Replace the nodes one at a time: the additional control-plane
