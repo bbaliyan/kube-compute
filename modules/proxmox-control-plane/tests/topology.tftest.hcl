@@ -257,9 +257,9 @@ run "ha_genesis_with_static_ips_keeps_peer_ips_even_with_dns" {
     vm_gateway                 = "192.168.1.1"
     cluster_domain             = "example.com"
     cluster_network_cidr       = "192.168.1.0/24"
-    dns_server_address   = "192.168.1.53"
-    tsig_key_name        = "kube-compute"
-    tsig_key_secret      = "ZmFrZXNlY3JldA=="
+    dns_server_address         = "192.168.1.53"
+    tsig_key_name              = "kube-compute"
+    tsig_key_secret            = "ZmFrZXNlY3JldA=="
   }
 
   assert {
