@@ -66,6 +66,10 @@ output "os_image_ami_id" {
   value = aws_ami.kube_node["x86_64"].id
 }
 
+output "os_image_ami_id_arm64" {
+  value = aws_ami.kube_node["arm64"].id
+}
+
 output "hosted_zone_id" {
   value = aws_route53_zone.example.zone_id
 }

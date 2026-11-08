@@ -4,6 +4,7 @@
 cluster_name        = "example-ha-nlb"
 cluster_type        = "dedicated_control_plane"
 instance_type       = "t3a.large"
+os_image_ami_id = "@os_image_ami_id@"
 control_plane_count = 3
 endpoint_mode       = "loadbalancer"
 
@@ -12,3 +13,6 @@ control_plane_subnets = {
   "eu-west-1b" = "@subnet_b@"
   "eu-west-1c" = "@subnet_c@"
 }
+
+vpc_name     = "example-vpc"
+subnet_names = ["example-subnet-a"]

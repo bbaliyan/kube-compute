@@ -1,11 +1,8 @@
 # Inputs every case shares. Synthetic values in the shape a real consumer uses.
 # @name@ becomes the seed output of that name.
 aws_region            = "eu-west-1"
-vpc_name              = "example-vpc"
-subnet_names          = ["example-subnet-a"]
 cluster_domain        = "example.internal"
 hosted_zone_id        = "@hosted_zone_id@"
-os_image_ami_id       = "@os_image_ami_id@"
 root_volume_size_gb   = 20
 root_volume_type      = "gp3"
 ingress_ports         = [80, 443, 6443]

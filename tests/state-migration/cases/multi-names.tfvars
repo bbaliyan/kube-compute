@@ -2,6 +2,7 @@
 cluster_name  = "example-multi"
 cluster_type  = "dedicated_control_plane"
 instance_type = "t4g.large"
+os_image_ami_id = "@os_image_ami_id@"
 
 static_nodes = {
   platform = {
@@ -23,3 +24,7 @@ autoscaled_nodes = {
     root_volume_size_gb = 40
   }
 }
+
+# The VPC and the subnet belong to someone else. The case finds them by name.
+vpc_name     = "example-vpc"
+subnet_names = ["example-subnet-a"]

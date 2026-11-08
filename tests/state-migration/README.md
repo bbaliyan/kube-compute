@@ -18,10 +18,14 @@ A good upgrade plan has only moves.
 
 | Case | Shape |
 |---|---|
-| `single` | One `all_in_one` node |
-| `multi` | A dedicated control plane, a static node group and an autoscaled node group |
+| `single-ids` | One `all_in_one` node. The subnet is passed by ID (`subnet_id`) |
+| `single-names` | As `single-ids`. The VPC and the subnet belong to someone else and are found by name (`vpc_name`, `subnet_names`) |
+| `multi-ids`, `multi-names` | A dedicated control plane, a static node group and an autoscaled node group, with the same two network inputs |
+| `arm` | A dedicated control plane on `m7g.large` (arm64), static groups on arm64 and x86_64, autoscaled pools on arm64 and x86_64. Subnet by ID |
 | `ha` | Three control-plane nodes in three zones, with `endpoint_mode = "static"` |
 | `ha-nlb` | As `ha`, behind an internal load balancer. Not in the default set: the provider waits about 65 seconds for the load balancer |
+
+The `*-names` cases fail on a branch that replaces the security groups when the subnet comes from `subnet_names`. This is intended: it is the finding in bbaliyan/cloud-hub#244, and the `*-ids` cases show that it does not happen with IDs.
 
 All inputs are synthetic.
 
@@ -56,10 +60,11 @@ Restart the emulator before each run. `emulator.sh start` does this.
 | Emulator | Status |
 |---|---|
 | moto 5.2.5 | Runs every case. |
-| fakecloud 0.51.0 (`FAKECLOUD_EC2_BACKEND=none`, EC2 is metadata only) | Fails in every case at `data.aws_ec2_instance_type`. Its `DescribeInstanceTypes` returns a fixed list of 9 x86_64 types, ignores the `instance-type` filter, and lists no arm64 type. Later steps are not yet reached. |
+| fakecloud 0.51.0 (`FAKECLOUD_EC2_BACKEND=none`, EC2 is metadata only) | Fails in every case at `data.aws_ec2_instance_type` (verified directly with `describe-instance-types` and with the provider). Its `DescribeInstanceTypes` returns a fixed list of 9 x86_64 types, ignores the `instance-type` filter, and lists no arm64 type. Later steps are not yet reached. |
 
 ## Limits
 
+- Architecture. The node architecture comes from `data.aws_ec2_instance_type`, so the `arm` case exercises that on moto. The AMI lookup by name, with its `architecture` filter, is NOT exercised on moto, because moto does not store the AMI architecture. The cases give each group the seed AMI of its own architecture instead. On fakecloud nothing about architecture is exercised, because the instance-type lookup fails first.
 - The cases pass `os_image_ami_id` and `hosted_zone_id`. Emulators do not store the AMI architecture or the private flag of a zone, so the lookups by name find nothing.
 - No node boots. The emulator stores the instances only.
 - The emulator does not enforce AWS limits such as the user data size.
@@ -70,3 +75,4 @@ Restart the emulator before each run. `emulator.sh start` does this.
 `make state-migration-selftest` renames the control-plane module without a `moved` block.
 It passes only if the check fails and lists the deleted nodes.
 Restart the emulator before you run it.
+It uses `single-ids`.

@@ -113,7 +113,7 @@ SM_DIR       := tests/state-migration
 SM_WORK      ?= /tmp/state-migration
 SM_OLD_REPO  ?= https://github.com/bbaliyan/terraform-aws-kube-compute.git
 SM_OLD_REF   ?= v0.9.0
-SM_CASES     ?= single multi ha
+SM_CASES     ?= single-ids single-names multi-ids multi-names arm ha
 # A sed expression applied to the branch's root *.tf files, for the self-test.
 SM_NEW_SED   ?=
 # Prefix of a step whose wall time the log shows.
@@ -157,7 +157,7 @@ state-migration/%: state-migration-seed
 
 # Renames the control-plane module without a moved block. The check must fail.
 state-migration-selftest:
-	! $(MAKE) state-migration/single SM_WORK=$(SM_WORK)-selftest \
+	! $(MAKE) state-migration/single-ids SM_WORK=$(SM_WORK)-selftest \
 	  SM_NEW_SED='s/module "control_plane"/module "control_plane_renamed"/; s/module\.control_plane\./module.control_plane_renamed./g' \
 	  2>&1 | tee $(SM_WORK)-selftest.log
 	grep -q '^unexpected: delete module\.control_plane\.aws_instance\.' $(SM_WORK)-selftest.log
