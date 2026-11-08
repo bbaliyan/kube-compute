@@ -28,7 +28,7 @@ variable "node_fqdn_label" {
 }
 
 variable "set_hostname" {
-  description = "Whether this node's cloud-init sets an explicit hostname/fqdn. true (the default) writes hostname: <node_name> into cloud-config, required because RKE2/kubelet registers the node by OS hostname and every Terraform-provisioned node gets a distinct node_name. false omits hostname/fqdn entirely, relying on the VM platform's own per-instance metadata (e.g. a NoCloud datasource's local-hostname) to supply a unique hostname — needed when the SAME rendered cloud-init is shared across multiple VMs, e.g. the instances of an AWS Auto Scaling group (aws-node-pool sets this false). Unverified for the false case: that the VM platform's metadata actually provides a usable per-VM hostname when cloud-config doesn't set one — real-hardware check required before trusting this in production."
+  description = "Whether cloud-init sets hostname and fqdn from node_name. true (the default) is required for a node with its own render, because RKE2 registers the node by OS hostname. false omits both keys, for a render shared by several VMs such as an Auto Scaling group. The platform metadata then supplies the hostname."
   type        = bool
   default     = true
 }
@@ -88,7 +88,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'cilium' (the default — eBPF dataplane via kube-proxy replacement, no iptables/ipset/xtables dependency) or 'default' (whatever this distro's template installs out of the box — Canal/flannel+Calico). 'default' is not viable on AlmaLinux 10 (this project's only supported OS): its kernel dropped the legacy br_netfilter/xt_conntrack/xt_comment modules flannel and Felix's iptables dataplane both require. Kept as an escape hatch for a consumer-supplied image/template shipping a different CNI. Sets config.yaml's cni:/disable-kube-proxy: flags, and when 'cilium' on a genesis node, disables RKE2's own built-in HelmChart install of Cilium (disable: [rke2-cilium]) so bootstrap.sh's own apply of the kube-images-baked manifest never races it."
+  description = "CNI to install: 'cilium' (the default) or 'default' (the CNI the image ships, Canal). 'default' is not viable on AlmaLinux 10, whose kernel lacks the modules Canal needs. 'cilium' sets disable: [rke2-cilium] on a genesis node so the baked manifest is the only Cilium install."
   type        = string
   default     = "cilium"
   validation {
@@ -288,7 +288,7 @@ variable "dns_server_port" {
 }
 
 variable "dns_servers" {
-  description = "Upstream DNS resolver IPs (not this node's RFC2136 update target above — its ordinary pod/kubelet resolvers, e.g. the same list a caller already passes its own VM's network config). Null/empty (the default) skips writing a kubelet resolv-conf override, leaving kubelet's default ClusterFirst DNS policy in place: every pod inherits the node's own /etc/resolv.conf search domains. prefer_fqdn_over_hostname below already stops this node's own hostname from contributing a dangerous search entry, but the node can still pick up other search domains this module has no control over (e.g. a DHCP-provided domain) — if any of those turn out to be wildcarded, the same failure mode recurs: with the pod default ndots:5, a bare external hostname like \"github.com\" gets every search suffix tried before the bare name, so a wildcard match anywhere in that list silently resolves it to something inside that zone instead of the real host, breaking GitOps/external fetches from inside the cluster. Set this to give kubelet a resolv.conf with no search domain at all, closing that off regardless of where a dangerous search domain might come from."
+  description = "Resolver IPs for kubelet and pods, for example the list your VM network config uses. Null or empty (the default) leaves kubelet on the node's own /etc/resolv.conf. A list writes a kubelet resolv.conf with no search domain. See the README, section \"DNS search domains\"."
   type        = list(string)
   default     = null
 }

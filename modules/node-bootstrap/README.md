@@ -192,6 +192,12 @@ entirely — the only reason to do this is when the exact same rendered
 their own render (e.g. every instance of an AWS Auto Scaling group, via one
 launch template). The platform's per-instance metadata then supplies a unique hostname.
 
+## DNS search domains
+
+Kubelet copies the search domains of the node's `/etc/resolv.conf` into every pod. Pods use `ndots:5`, so a name such as `github.com` tries each search suffix first. If a search domain has a wildcard record, the name resolves to that wildcard and not to the real host.
+
+If you set `dns_servers`, the module writes a kubelet `resolv.conf` with those servers and no `search` line. Every pod on the node then skips the search domains. If you do not set it, kubelet uses the node's own `/etc/resolv.conf`.
+
 ## `aws_provider_id`
 
 Registers the node with providerID `aws:///<zone>/<instance-id>` and labels it
