@@ -137,6 +137,8 @@ This is a breaking change. Upgrade in this order:
 
 A new AMI with the old module, or the reverse, fails at the first line of `bootstrap.sh`.
 
+After Cilium is Ready, the first server removes the baked Cilium file even when GitOps is off, so a later server restart no longer applies it again.
+
 ## Platform node
 
 `platform_node_group` names the static group that runs the platform stack:

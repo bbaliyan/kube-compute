@@ -338,7 +338,8 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
   # The Argo CD manifest is published by kube-platform and pinned by URL and
   # sha256. Every failure here is fatal: a node without Argo CD never syncs.
   ARGOCD_MANIFEST="$(mktemp)"
-  curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 120 \
+  trap 'rm -f "$ARGOCD_MANIFEST"' EXIT
+  curl -fsSL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 120 \
     -o "$ARGOCD_MANIFEST" "$ARGOCD_MANIFEST_URL"
   if ! echo "$ARGOCD_MANIFEST_SHA256  $ARGOCD_MANIFEST" | sha256sum -c - >/dev/null; then
     echo "kube-compute: $ARGOCD_MANIFEST_URL does not match sha256 $ARGOCD_MANIFEST_SHA256" >&2
@@ -349,7 +350,6 @@ if [ "$ARGOCD_NEEDED" = "1" ]; then
   # exceeds Kubernetes' 262144-byte annotation limit. --force-conflicts takes
   # ownership of fields from an earlier partial apply on a retried boot.
   $KUBECTL apply --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
-  rm -f "$ARGOCD_MANIFEST"
   # NOT a health wait — only blocks until the API server serves the Application
   # type (avoids a "no matches for kind Application" race). Deliberately does not
   # wait for argocd-server to roll out: on a tainted control plane, or before a

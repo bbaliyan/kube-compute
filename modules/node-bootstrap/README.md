@@ -76,7 +76,7 @@ The first server removes the baked `cilium.yaml` from the RKE2 manifests directo
 Cilium is Ready. RKE2 applies every file in that directory again on each start. Without
 the removal, a restart would put the older baked Cilium back after the platform upgraded
 it. Removing the file does not remove Cilium from the cluster. If Cilium is not Ready
-within about 6 minutes, the file stays and the log shows a warning.
+within about 6 minutes, the file stays and the log shows a warning. The first server removes the file even when GitOps is off, so a later server restart no longer applies the baked Cilium again.
 
 An image with the old module, or the new module with the old image, fails on the
 contract check at the first line of `bootstrap.sh`. Existing clusters do not change

@@ -34,6 +34,8 @@ first boot and checks its sha256. Take both from a kube-platform release's
 
 A new template with the old module, or the reverse, fails at the first line of `bootstrap.sh`.
 
+After Cilium is Ready, the first server removes the baked Cilium file even when GitOps is off, so a later server restart no longer applies it again.
+
 `genesis_apply_manifests` is optional. It is a list of `{path, content}` manifests that the first control-plane node applies once, at bootstrap. Unset, nothing extra is applied.
 
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
