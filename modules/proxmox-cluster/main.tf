@@ -38,8 +38,6 @@ resource "terraform_data" "cluster_network_cidr_set_for_multi_node" {
 module "control_plane" {
   source = "../proxmox-control-plane"
 
-  ssh_private_key_file              = var.ssh_private_key_file
-  ssh_user                          = var.ssh_user
   cluster_name                      = var.cluster_name
   trusted_ca_pem                    = var.trusted_ca_pem
   registry_mirror_url               = var.registry_mirror_url
@@ -68,7 +66,6 @@ module "control_plane" {
   vm_cpu_type                       = var.vm_cpu_type
   pool_id                           = var.pool_id
   cpu_units                         = var.cpu_units
-  node_arch                         = var.node_arch
   os_image_url                      = var.os_image_url
   os_image_file_name                = var.os_image_file_name
   os_image_file_id                  = var.os_image_file_id

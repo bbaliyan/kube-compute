@@ -1,19 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ---- Day-2 guest-access credentials (node-bootstrap never connects to the node —
-# these exist for operator tooling) ----
-variable "ssh_private_key_file" {
-  description = "Path to the SSH private key for guest access (the public half must be in ssh_authorized_keys). Matches kube-devenv's kube-shell/kube-status default key."
-  type        = string
-  default     = "~/.ssh/id_ed25519_kube_cluster"
-}
-
-variable "ssh_user" {
-  description = "SSH user for guest access. Matches kube-devenv's kube-shell/kube-status default user for the AlmaLinux 10 image."
-  type        = string
-  default     = "almalinux"
-}
-
 variable "cluster_name" {
   description = "Cluster identity. Used in VM names, tags, FQDN, and the kubeconfig SAN. Lowercase, starts with a letter."
   type        = string
@@ -191,16 +177,6 @@ variable "cpu_units" {
   validation {
     condition     = var.cpu_units == null ? true : var.cpu_units >= 1 && var.cpu_units <= 262144
     error_message = "cpu_units must be between 1 and 262144, the range Proxmox accepts."
-  }
-}
-
-variable "node_arch" {
-  description = "CPU architecture of the control-plane VMs ('x86_64' or 'arm64'). Declared explicitly — Proxmox has no API equivalent of AWS's instance-type architecture lookup."
-  type        = string
-  default     = "x86_64"
-  validation {
-    condition     = contains(["x86_64", "arm64"], var.node_arch)
-    error_message = "node_arch must be 'x86_64' or 'arm64'."
   }
 }
 

@@ -45,24 +45,9 @@ output "wildcard_registration_enabled" {
   value       = local.wildcard_registration_enabled
 }
 
-output "node_arch" {
-  description = "CPU architecture as declared by the operator."
-  value       = var.node_arch
-}
-
 output "proxmox_node" {
   description = "Proxmox node every control-plane VM runs on."
   value       = var.proxmox_node
-}
-
-output "ssh_user" {
-  description = "SSH user for guest access (ops tooling connecting to the node directly) — node-bootstrap itself never connects to the node at all; this account exists for day-2 tooling only."
-  value       = var.ssh_user
-}
-
-output "ssh_private_key_file" {
-  description = "Path to the SSH private key for guest access, for the same day-2 tooling. Not marked sensitive: a path, not the key material itself."
-  value       = var.ssh_private_key_file
 }
 
 output "cluster_token" {
