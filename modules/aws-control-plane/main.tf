@@ -149,6 +149,7 @@ locals {
   # on the first plan after an upgrade it waits for the apply, the VPC is unknown, and the
   # security groups would be replaced. The candidates do not wait.
   chosen_candidate_vpc_ids = [for s in data.aws_subnet.by_name : s.vpc_id if s.id == local.named_subnet_id]
+  chosen_candidate_azs     = [for s in data.aws_subnet.by_name : s.availability_zone if s.id == local.named_subnet_id]
   module_vpc_id = (
     var.control_plane_count > 1 ? data.aws_subnet.control_plane_genesis[0].vpc_id
     : length(local.chosen_candidate_vpc_ids) > 0 ? local.chosen_candidate_vpc_ids[0]
@@ -617,6 +618,7 @@ locals {
     for i in range(var.control_plane_count) : tostring(i) => (
       var.control_plane_count > 1 && length(local.distinct_control_plane_azs) > 0
       ? local.distinct_control_plane_azs[i % length(local.distinct_control_plane_azs)]
+      : length(local.chosen_candidate_azs) > 0 ? local.chosen_candidate_azs[0]
       : data.aws_subnet.selected.availability_zone
     )
   }
