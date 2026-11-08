@@ -140,9 +140,9 @@ state-migration/%: state-migration-seed
 	  cp $(SM_DIR)/root/*.tf $(SM_WORK)/$*/$$side/; \
 	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/common.auto.tfvars >$(SM_WORK)/$*/$$side/common.auto.tfvars; \
 	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/$*.tfvars >$(SM_WORK)/$*/$$side/terraform.tfvars; \
+	  $(if $(SM_NEW_SED),[ $$side = old ] || sed -i -e '$(SM_NEW_SED)' $(SM_WORK)/$*/new/*.tf;) \
 	  tofu -chdir=$(SM_WORK)/$*/$$side init -input=false -backend-config=path=$(SM_WORK)/$*/terraform.tfstate >$(SM_WORK)/$*/$$side-init.log; \
 	done
-	$(if $(SM_NEW_SED),sed -i -e '$(SM_NEW_SED)' $(SM_WORK)/$*/new/*.tf)
 	tofu -chdir=$(SM_WORK)/$*/old apply -input=false -auto-approve >$(SM_WORK)/$*/apply.log
 	tofu -chdir=$(SM_WORK)/$*/new plan -input=false -out=$(SM_WORK)/$*/plan >$(SM_WORK)/$*/plan.log
 	tofu -chdir=$(SM_WORK)/$*/new show -json $(SM_WORK)/$*/plan | jq -r -f $(SM_DIR)/changes.jq | sort >$(SM_WORK)/$*/changes.txt
