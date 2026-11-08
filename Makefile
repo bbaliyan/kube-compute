@@ -106,7 +106,9 @@ mirror-%:
 # state-migration applies the released AWS module to an AWS emulator, then
 # plans this branch on the same state. It fails if the plan creates, deletes
 # or replaces a resource that tests/state-migration/allowed/<case>.txt does
-# not list. The emulator must already run at AWS_ENDPOINT_URL.
+# not list. EMULATOR (moto or fakecloud) names the emulator. It must already run
+# at AWS_ENDPOINT_URL; tests/state-migration/emulator.sh starts it.
+EMULATOR     ?= moto
 SM_DIR       := tests/state-migration
 SM_WORK      ?= /tmp/state-migration
 SM_OLD_REPO  ?= https://github.com/bbaliyan/terraform-aws-kube-compute.git
@@ -116,6 +118,7 @@ SM_CASES     ?= single multi ha
 SM_NEW_SED   ?=
 # Prefix of a step whose wall time the log shows.
 sm_time = TIMEFORMAT='state-migration: $(1) took %0Rs'; time
+export AWS_ENDPOINT_URL      ?= $(shell $(CURDIR)/$(SM_DIR)/emulator.sh $(EMULATOR) endpoint)
 export AWS_ACCESS_KEY_ID     ?= test
 export AWS_SECRET_ACCESS_KEY ?= test
 
@@ -124,7 +127,7 @@ export AWS_SECRET_ACCESS_KEY ?= test
 state-migration: $(SM_CASES:%=state-migration/%)
 
 state-migration-seed:
-	@test -n "$${AWS_ENDPOINT_URL:-}" || { echo "state-migration: set AWS_ENDPOINT_URL to the emulator" >&2; exit 1; }
+	@echo "state-migration: emulator $(EMULATOR) at $$AWS_ENDPOINT_URL"
 	rm -rf $(SM_WORK) && mkdir -p $(SM_WORK)
 	cp -r $(SM_DIR)/seed $(SM_WORK)/seed
 	$(call sm_time,seed init) tofu -chdir=$(SM_WORK)/seed init -input=false >/dev/null

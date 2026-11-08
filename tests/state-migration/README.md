@@ -27,11 +27,20 @@ All inputs are synthetic.
 
 ## Run it
 
-1. Start an empty AWS emulator on port 4566, for example `moto_server -p 4566` with `MOTO_IAM_LOAD_MANAGED_POLICIES=true`.
+`EMULATOR` picks the AWS emulator: `moto` (default) or `fakecloud`.
+`tests/state-migration/emulator.sh <emulator> start|stop|endpoint` holds the binary, the port and the environment of each emulator, one file per emulator in `emulators/`.
+The cases and the seed are the same for both.
+
+1. Start an empty emulator where it is installed. Set `SM_MOTO_BIN` or `SM_FAKECLOUD_BIN` if the binary is not on the `PATH`:
+
+   ```sh
+   tests/state-migration/emulator.sh moto start
+   ```
+
 2. Run the check in the kube-devenv image, on the host network:
 
    ```sh
-   AWS_ENDPOINT_URL=http://127.0.0.1:4566 make -j3 -k state-migration
+   make -j3 -k state-migration EMULATOR=moto
    ```
 
    `-j3` runs the cases at the same time. They share the seed and the emulator, and each has its own state file.
@@ -40,7 +49,14 @@ All inputs are synthetic.
 3. Read the result in `/tmp/state-migration/<case>/changes.txt`.
 
 The emulator must be empty: the seed creates resources by name.
-Restart the emulator before each run.
+Restart the emulator before each run. `emulator.sh start` does this.
+
+## Emulators
+
+| Emulator | Status |
+|---|---|
+| moto 5.2.5 | Runs every case. |
+| fakecloud 0.51.0 (`FAKECLOUD_EC2_BACKEND=none`, EC2 is metadata only) | Fails in every case at `data.aws_ec2_instance_type`. Its `DescribeInstanceTypes` returns a fixed list of 9 x86_64 types, ignores the `instance-type` filter, and lists no arm64 type. Later steps are not yet reached. |
 
 ## Limits
 
