@@ -143,7 +143,7 @@ To apply a change to a node, replace that node on purpose with `tofu apply -repl
 
 > **Warning:** Replacing a single-node cluster loses the cluster. Replace one control-plane node at a time, and the first node last, in its own apply.
 
-1. Find the address of the node with `tofu state list`. Examples: `module.<name>.module.control_plane.aws_instance.control_plane_additional["1"]`, `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`, `module.<name>.module.control_plane.proxmox_virtual_environment_vm.control_plane_additional["1"]`.
+1. Find the address of the node with `tofu state list`. Examples: `module.<name>.module.control_plane.aws_instance.control_plane["1"]`, `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`, `module.<name>.module.control_plane.proxmox_virtual_environment_vm.control_plane["1"]`.
 2. Drain the node: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
 3. Delete the Kubernetes node: `kubectl delete node <node>`.
 4. Run `tofu apply -replace='<address>'`.
