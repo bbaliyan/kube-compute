@@ -9,12 +9,25 @@ stays in the provider modules.
 
 This module executes nothing and creates no resources of its own. There is no
 `null_resource`, no `local-exec`, no connection of any kind to the node, no
-Ansible, and no `data.external` Helm render at plan time. Its single
-meaningful output is `cloud_init_user_data` — a complete cloud-init document
-(hostname, RKE2 `config.yaml`/`registries.yaml`/trusted-CA/manifest payloads
-as base64 `write_files`, and a `runcmd` that invokes an on-node bootstrap
-script). The caller attaches that output to its VM as user-data; this module
-has no resource to `depends_on`.
+Ansible, and no `data.external` Helm render at plan time. `cloud_init_user_data`
+is a complete cloud-init document (hostname, RKE2
+`config.yaml`/`registries.yaml`/trusted-CA/manifest payloads as base64
+`write_files`, and a `runcmd` that invokes an on-node bootstrap script). The
+caller attaches the `user_data` output to its VM; this module has no resource
+to `depends_on`.
+
+## User data
+
+`user_data` is the final user data of the node. It is `cloud_init_user_data`
+alone, or a MIME multipart/mixed document when shell-script parts run first:
+
+- `ssm_agent_enabled = true` adds a part that starts the AWS SSM Agent. The AWS
+  modules set it.
+- Each entry of `boot_scripts` becomes a part. The script sees `CLUSTER_NAME`,
+  `NODE_ROLE` (`control-plane` or `worker`) and `NODE_NAME`.
+
+cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
+With no parts, `user_data` is the plain cloud-config.
 
 The heavy half of bootstrap — OS prep, RKE2 binaries, SELinux policy, kernel
 modules, the guest agent, **and the genesis Cilium/Argo CD manifests** — is
@@ -249,10 +262,9 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 - `modules/aws-control-plane` and `modules/aws-node-pool` are also cut over to
   this interface: both call this module with no
   `node_provider`/`ansible_playbook_path`/`ansible_connection_vars` and attach
-  `cloud_init_user_data` via AWS's own `user_data_base64 = base64gzip(...)`
-  convention, combined via a cloud-init MIME multipart document with a small
-  AWS-only SSM-agent-enable script (see those modules' own `main.tf`/README
-  for why the MIME combine lives there, not here). `aws-node-pool`'s ASG
+  this module's `user_data` output via AWS's own `base64gzip(...)`
+  convention, with `ssm_agent_enabled = true` so the MIME multipart document
+  carries the SSM Agent script (see User data above). `aws-node-pool`'s ASG
   launch template calls this module with `set_hostname = false` since every
   pool member shares one rendered payload — same pattern as
   the same.

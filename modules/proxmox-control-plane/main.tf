@@ -128,7 +128,12 @@ resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
   }
 }
 
-# The journal is persistent so that the log of a boot that hangs survives a reset.
+module "vendor_data" {
+  source = "../proxmox-vendor-data"
+
+  ssh_authorized_keys = var.ssh_authorized_keys
+}
+
 resource "proxmox_virtual_environment_file" "vendor_data" {
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
@@ -136,18 +141,7 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
   upload_mode  = var.cloud_init_upload_mode
 
   source_raw {
-    data = join("\n", concat(
-      [
-        "#cloud-config",
-        "write_files:", "  - path: /etc/systemd/journald.conf.d/10-persistent.conf",
-        "    content: |", "      [Journal]", "      Storage=persistent",
-      ],
-      var.ssh_authorized_keys != null ? concat(
-        ["ssh_authorized_keys:"],
-        [for k in var.ssh_authorized_keys : "  - ${trimspace(k)}"]
-      ) : [],
-      ["runcmd:", "  - systemctl restart systemd-journald", "  - journalctl --flush", "  - systemctl enable --now qemu-guest-agent", "  - systemctl enable --now serial-getty@ttyS0.service", ""]
-    ))
+    data      = module.vendor_data.data
     file_name = "${var.cluster_name}-vendor-data.yaml"
   }
 }
