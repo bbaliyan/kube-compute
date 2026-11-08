@@ -78,9 +78,8 @@ Each VM gets a Proxmox firewall that drops inbound traffic except:
 - `ingress_ports` (TCP) from `allowed_ingress_cidrs`, on the platform pool,
   or on every pool when there is none.
 
-There's also an etcd rule (2379-2380) for control-plane nodes, but the first
-rule already admits the whole subnet, so etcd, its plain-HTTP metrics (2381),
-SSH and every other port stay open to `cluster_network_cidr`.
+The rule admits the whole subnet, so etcd (2379-2380), its plain-HTTP metrics (2381),
+SSH and every other port are open to every member of `cluster_network_cidr`.
 
 Proxmox enforces it only when **the datacenter firewall is enabled**
 (Datacenter → Firewall → Options). kube-compute doesn't manage that setting.

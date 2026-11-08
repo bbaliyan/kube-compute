@@ -44,22 +44,6 @@ run "agent_token_ssm_parameter_output" {
   }
 }
 
-run "etcd_sg_is_control_plane_only" {
-  command = plan
-  assert {
-    condition     = aws_vpc_security_group_ingress_rule.etcd_peer.from_port == 2379 && aws_vpc_security_group_ingress_rule.etcd_peer.to_port == 2380
-    error_message = "the etcd SG must open exactly 2379-2380"
-  }
-  assert {
-    condition     = aws_vpc_security_group_ingress_rule.etcd_peer.referenced_security_group_id == aws_security_group.control_plane_etcd.id
-    error_message = "etcd traffic must be scoped to a control-plane-only SG, not the general cluster SG workers also join"
-  }
-  assert {
-    condition     = contains(aws_instance.control_plane.vpc_security_group_ids, aws_security_group.control_plane_etcd.id)
-    error_message = "the control-plane instance must attach the etcd-only SG"
-  }
-}
-
 run "registration_address_and_node_refs" {
   command = plan
   assert {

@@ -13,8 +13,8 @@ module's own `node-bootstrap` calls (server-init and server-join alike);
 Terraform-level dependency between the two sibling modules — only a value passed
 through at that layer.
 
-Similarly, the cluster-wide and etcd-peer firewall ipset names
-(`kube-compute-<cluster_name>-cluster` / `-etcd`) are a plain deterministic-string
+Similarly, the cluster-wide firewall ipset name
+(`kube-compute-<cluster_name>-cluster`) is a plain deterministic-string
 convention computed locally from `cluster_name`, not a shared output. `proxmox-node-pool`
 computes the same formula independently to reference the cluster ipset by name.
 
