@@ -42,7 +42,7 @@ variables {
 
 run "single_node_is_created_from_the_template" {
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.clone[0].vm_id == 9000
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].clone[0].vm_id == 9000
     error_message = "a new node must be cloned from the configured template"
   }
 }
@@ -53,7 +53,7 @@ run "new_template_keeps_the_single_node" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.clone[0].vm_id == 9000
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].clone[0].vm_id == 9000
     error_message = "a new template must not replace the existing node: one apply would rebuild the cluster"
   }
 }
@@ -63,11 +63,11 @@ run "replace_moves_the_single_node_to_the_new_template" {
     proxmox_template_vm_id = 9001
   }
   plan_options {
-    replace = [proxmox_virtual_environment_vm.control_plane]
+    replace = [proxmox_virtual_environment_vm.control_plane["0"]]
   }
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.clone[0].vm_id == 9001
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].clone[0].vm_id == 9001
     error_message = "a node replaced on purpose must be cloned from the new template"
   }
 }
@@ -86,11 +86,11 @@ run "new_control_plane_nodes_use_the_new_template" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.clone[0].vm_id == 9001
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].clone[0].vm_id == 9001
     error_message = "the existing first node must keep its template when the cluster grows"
   }
   assert {
-    condition     = alltrue([for vm in proxmox_virtual_environment_vm.control_plane_additional : vm.clone[0].vm_id == 9002])
+    condition     = alltrue([for vm in [for k, v in proxmox_virtual_environment_vm.control_plane : v if k != "0"] : vm.clone[0].vm_id == 9002])
     error_message = "new control-plane nodes must be cloned from the configured template"
   }
 }
@@ -109,22 +109,22 @@ run "replacing_one_additional_node_moves_only_that_node" {
   }
   plan_options {
     replace = [
-      proxmox_virtual_environment_vm.control_plane_additional["1"],
+      proxmox_virtual_environment_vm.control_plane["1"],
       proxmox_virtual_environment_firewall_options.control_plane["1"],
       proxmox_virtual_environment_firewall_rules.control_plane["1"],
     ]
   }
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane_additional["1"].clone[0].vm_id == 9003
+    condition     = proxmox_virtual_environment_vm.control_plane["1"].clone[0].vm_id == 9003
     error_message = "the replaced node must be cloned from the new template"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane_additional["2"].clone[0].vm_id == 9002
+    condition     = proxmox_virtual_environment_vm.control_plane["2"].clone[0].vm_id == 9002
     error_message = "a node that was not replaced must keep its template"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.clone[0].vm_id == 9001
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].clone[0].vm_id == 9001
     error_message = "the first node must keep its template while another node is replaced"
   }
 }

@@ -33,11 +33,11 @@ run "unset_template_keeps_the_names" {
   command = plan
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.name == "app-red-cp-0"
-    error_message = "unset, the first VM must keep its name: got ${proxmox_virtual_environment_vm.control_plane.name}"
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].name == "app-red-cp-0"
+    error_message = "unset, the first VM must keep its name: got ${proxmox_virtual_environment_vm.control_plane["0"].name}"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane_additional["2"].name == "app-red-cp-2"
+    condition     = proxmox_virtual_environment_vm.control_plane["2"].name == "app-red-cp-2"
     error_message = "unset, the other VMs must keep their names"
   }
   assert {
@@ -54,11 +54,11 @@ run "template_names_every_node" {
   }
 
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane.name == "cp-red-01"
-    error_message = "the first VM must take number 01: got ${proxmox_virtual_environment_vm.control_plane.name}"
+    condition     = proxmox_virtual_environment_vm.control_plane["0"].name == "cp-red-01"
+    error_message = "the first VM must take number 01: got ${proxmox_virtual_environment_vm.control_plane["0"].name}"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane_additional["2"].name == "cp-red-03"
+    condition     = proxmox_virtual_environment_vm.control_plane["2"].name == "cp-red-03"
     error_message = "the third VM must take number 03"
   }
   assert {
@@ -103,7 +103,7 @@ run "no_boot_scripts_leaves_plain_cloud_config" {
 
   assert {
     condition = alltrue([
-      for snippet in concat([proxmox_virtual_environment_file.node_init], values(proxmox_virtual_environment_file.node_init_additional)) :
+      for snippet in values(proxmox_virtual_environment_file.node_init) :
       startswith(snippet.source_raw[0].data, "#cloud-config")
     ])
     error_message = "with no boot_scripts the snippet must stay a plain cloud-config"
@@ -129,7 +129,7 @@ run "boot_scripts_run_first_on_every_node_with_its_name" {
 
   assert {
     condition = alltrue([
-      for snippet in concat([proxmox_virtual_environment_file.node_init], values(proxmox_virtual_environment_file.node_init_additional)) :
+      for snippet in values(proxmox_virtual_environment_file.node_init) :
       startswith(snippet.source_raw[0].data, "Content-Type: multipart/mixed")
       && length(regexall("(?m)^echo (one|two)$", snippet.source_raw[0].data)) == 2
       && strcontains(snippet.source_raw[0].data, "Content-Type: text/cloud-config")
@@ -137,15 +137,15 @@ run "boot_scripts_run_first_on_every_node_with_its_name" {
     error_message = "every node must get both scripts ahead of its cloud-config"
   }
   assert {
-    condition     = strcontains(proxmox_virtual_environment_file.node_init_additional["1"].source_raw[0].data, "NODE_NAME='cp-red-02'")
+    condition     = strcontains(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data, "NODE_NAME='cp-red-02'")
     error_message = "a script must see the node's own name"
   }
   assert {
-    condition     = strcontains(proxmox_virtual_environment_file.node_init.source_raw[0].data, "NODE_ROLE='control-plane'")
+    condition     = strcontains(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data, "NODE_ROLE='control-plane'")
     error_message = "a script must see the control-plane role"
   }
   assert {
-    condition     = index(split("\n", proxmox_virtual_environment_file.node_init.source_raw[0].data), "echo one") < index(split("\n", proxmox_virtual_environment_file.node_init.source_raw[0].data), "echo two")
+    condition     = index(split("\n", proxmox_virtual_environment_file.node_init["0"].source_raw[0].data), "echo one") < index(split("\n", proxmox_virtual_environment_file.node_init["0"].source_raw[0].data), "echo two")
     error_message = "scripts must run in the order given"
   }
 }

@@ -349,3 +349,15 @@ variable "os_auto_updates" {
   type        = bool
   default     = true
 }
+
+variable "boot_scripts" {
+  description = "Bash scripts run at the node's first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (control-plane or worker) and NODE_NAME in its environment. They travel as MIME shell-script parts of user_data. Empty (the default) runs none."
+  type        = list(string)
+  default     = []
+}
+
+variable "ssm_agent_enabled" {
+  description = "Whether user_data starts with a shell-script part that enables the AWS SSM Agent. Only meaningful on AWS. When true, user_data is always a MIME multipart document."
+  type        = bool
+  default     = false
+}

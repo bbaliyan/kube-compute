@@ -10,8 +10,8 @@ cluster.
 This module runs **no live Ansible** at `apply` time. It renders `node-bootstrap`'s
 `#cloud-config` payload (node identity, join tokens, registries/CA, GitOps Application
 manifests — see `modules/node-bootstrap/README.md`) and attaches it as `user_data_base64`,
-combined via a cloud-init MIME multipart document with a small AWS-only shell-script part that
-enables the SSM Agent (SSM stays this module's operator-access path, independent of bootstrap).
+combined by `node-bootstrap` into a cloud-init MIME multipart document with a small AWS-only
+shell-script part that enables the SSM Agent (SSM stays this module's operator-access path, independent of bootstrap).
 Nothing in this module connects to the node, waits on it, or observes it converge; `apply`
 returns as soon as the instance and its user-data exist.
 
@@ -43,8 +43,8 @@ current user data.
 
 The addresses are:
 
-- First node: `module.<name>.aws_instance.control_plane`
-- Other nodes: `module.<name>.aws_instance.control_plane_additional["1"]`
+- First node: `module.<name>.aws_instance.control_plane["0"]`
+- Other nodes: `module.<name>.aws_instance.control_plane["1"]`
 
 Inside `aws-cluster`, put `module.<name>.module.control_plane.` before the resource
 type instead.

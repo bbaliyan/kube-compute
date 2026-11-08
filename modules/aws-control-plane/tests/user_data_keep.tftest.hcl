@@ -30,7 +30,7 @@ run "create" {
   command = apply
 
   assert {
-    condition     = aws_instance.control_plane.user_data_base64 == output.connectivity_user_data_base64
+    condition     = aws_instance.control_plane["0"].user_data_base64 == output.connectivity_user_data_base64
     error_message = "a new node must boot with the current user data"
   }
 }
@@ -45,7 +45,7 @@ run "keeps_the_node_when_a_helm_parameter_changes" {
   }
 
   assert {
-    condition     = aws_instance.control_plane.user_data_base64 != output.connectivity_user_data_base64
+    condition     = aws_instance.control_plane["0"].user_data_base64 != output.connectivity_user_data_base64
     error_message = "a user data change must not replace the control-plane node"
   }
 }

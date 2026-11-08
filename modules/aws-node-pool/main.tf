@@ -20,31 +20,6 @@ locals {
 
   availability_zone = data.aws_subnet.selected.availability_zone
 
-  connectivity_user_data = <<-EOT
-    #!/bin/bash
-    systemctl enable --now amazon-ssm-agent 2>/dev/null || true
-  EOT
-
-  mime_boundary = "MIMEBOUNDARY"
-
-  combined_user_data = {
-    for type, bootstrap in module.node_bootstrap : type => join("\n", [
-      "Content-Type: multipart/mixed; boundary=\"${local.mime_boundary}\"",
-      "MIME-Version: 1.0",
-      "",
-      "--${local.mime_boundary}",
-      "Content-Type: text/x-shellscript; charset=\"us-ascii\"",
-      "",
-      local.connectivity_user_data,
-      "--${local.mime_boundary}",
-      "Content-Type: text/cloud-config; charset=\"us-ascii\"",
-      "",
-      bootstrap.cloud_init_user_data,
-      "--${local.mime_boundary}--",
-      "",
-    ])
-  }
-
   agent_token_fetch_command = "aws ssm get-parameter --name '${var.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
 
   node_labels = merge(
@@ -154,6 +129,7 @@ module "node_bootstrap" {
   aws_provider_id           = true
   graceful_shutdown         = var.graceful_shutdown
   os_auto_updates           = var.os_auto_updates
+  ssm_agent_enabled         = true
 }
 
 resource "aws_launch_template" "node" {
@@ -186,7 +162,7 @@ resource "aws_launch_template" "node" {
     }
   }
 
-  user_data = base64gzip(local.combined_user_data[each.key])
+  user_data = base64gzip(module.node_bootstrap[each.key].user_data)
 
   tag_specifications {
     resource_type = "volume"
