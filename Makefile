@@ -127,7 +127,7 @@ sm_aws = env $$(env | sed -n 's/^\(AWS_[A-Za-z0-9_]*\)=.*/-u \1/p') \
   AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null \
   AWS_ENDPOINT_URL=http://127.0.0.1:$(SM_EMULATOR_PORT)
 
-.PHONY: state-migration state-migration-seed state-migration-selftest
+.PHONY: state-migration state-migration-seed state-migration-selftest state-migration-ci
 
 state-migration: $(SM_CASES:%=state-migration/%)
 
@@ -162,6 +162,16 @@ state-migration/%: state-migration-seed
 	@echo "state-migration/$*: $(SM_OLD_REF) -> this branch"; cat $(SM_WORK)/$*/changes.txt
 	@{ grep -E '^(update|create|delete|replace) ' $(SM_WORK)/$*/changes.txt || true; } \
 	  | { grep -vxF -f $(SM_DIR)/allowed/$*.txt || true; } | sed 's/^/unexpected: /' | { ! grep . >&2; }
+
+# CI entry point: installs the pinned moto in a venv, starts it on the loopback
+# port the check uses, and runs every case in parallel.
+SM_MOTO_VERSION ?= 5.2.5
+SM_MOTO_VENV    ?= /tmp/moto-venv
+state-migration-ci:
+	python3 -m venv $(SM_MOTO_VENV)
+	$(SM_MOTO_VENV)/bin/pip install --quiet 'moto[server]==$(SM_MOTO_VERSION)'
+	SM_MOTO_BIN=$(SM_MOTO_VENV)/bin/moto_server $(SM_DIR)/emulator.sh moto start
+	$(MAKE) -j9 -k state-migration EMULATOR=moto
 
 # Renames the control-plane module without a moved block. The check must fail.
 state-migration-selftest:
