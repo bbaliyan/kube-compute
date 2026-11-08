@@ -26,52 +26,6 @@ locals {
       : replace(replace(var.node_name_template, "{zone}", substr(local.availability_zone, length(local.availability_zone) - 1, 1)), "{number}", format("%02d", n))
     )
   }
-  boot_script_parts = {
-    for k, name in local.node_names : k => [
-      for script in var.boot_scripts : join("\n", [
-        "--${local.mime_boundary}",
-        "Content-Type: text/x-shellscript; charset=\"us-ascii\"",
-        "",
-        "#!/bin/bash",
-        "export CLUSTER_NAME='${var.cluster_name}' NODE_ROLE='worker' NODE_NAME='${name}'",
-        "script=\"$(mktemp)\"",
-        "cat > \"$script\" <<'KUBE_COMPUTE_BOOT_SCRIPT'",
-        script,
-        "KUBE_COMPUTE_BOOT_SCRIPT",
-        "bash \"$script\" </dev/null",
-      ])
-    ]
-  }
-
-  # AlmaLinux community AMIs "likely" ship SSM Agent but not guaranteed running.
-  connectivity_user_data = <<-EOT
-    #!/bin/bash
-    systemctl enable --now amazon-ssm-agent 2>/dev/null || true
-  EOT
-
-  # AWS accepts one user_data string per instance, so MIME multipart/mixed joins
-  # the SSM-enable script to node-bootstrap's #cloud-config without re-merging
-  # the YAML. Keyed per node: unlike an ASG, each has its own payload.
-  mime_boundary = "MIMEBOUNDARY"
-
-  combined_user_data = {
-    for k, m in module.node_bootstrap : k => join("\n", concat([
-      "Content-Type: multipart/mixed; boundary=\"${local.mime_boundary}\"",
-      "MIME-Version: 1.0",
-      "",
-      "--${local.mime_boundary}",
-      "Content-Type: text/x-shellscript; charset=\"us-ascii\"",
-      "",
-      local.connectivity_user_data,
-      ], local.boot_script_parts[k], [
-      "--${local.mime_boundary}",
-      "Content-Type: text/cloud-config; charset=\"us-ascii\"",
-      "",
-      m.cloud_init_user_data,
-      "--${local.mime_boundary}--",
-      "",
-    ]))
-  }
 
   # Run on the node at join time, so the token is never in user_data.
   agent_token_fetch_command = "aws ssm get-parameter --name '${var.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
@@ -173,6 +127,8 @@ module "node_bootstrap" {
   aws_provider_id           = var.aws_provider_id
   graceful_shutdown         = var.graceful_shutdown
   os_auto_updates           = var.os_auto_updates
+  boot_scripts              = var.boot_scripts
+  ssm_agent_enabled         = true
 }
 
 # No depends_on: RKE2's agent retries its join indefinitely, so a worker booting
@@ -205,7 +161,7 @@ resource "aws_instance" "node" {
     tags                  = merge(local.common_tags, { Name = "${local.node_names[each.key]}-root" })
   }
 
-  user_data_base64 = base64gzip(local.combined_user_data[each.key])
+  user_data_base64 = base64gzip(module.node_bootstrap[each.key].user_data)
 
   tags = merge(local.common_tags, { Name = local.node_names[each.key] })
 

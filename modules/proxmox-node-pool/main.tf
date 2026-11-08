@@ -243,6 +243,7 @@ module "node_bootstrap" {
   iscsi_initiator_enabled = true
   graceful_shutdown       = var.graceful_shutdown
   os_auto_updates         = var.os_auto_updates
+  boot_scripts            = var.boot_scripts
 }
 
 # Subsumes the old hostname-only snippet — hostname is now one key inside
@@ -259,7 +260,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
   overwrite    = true
 
   source_raw {
-    data      = local.node_init_data[each.key]
+    data      = module.node_bootstrap[each.key].user_data
     file_name = "${var.cluster_name}-${var.pool_name}-${each.key}-node-init.yaml"
   }
 }

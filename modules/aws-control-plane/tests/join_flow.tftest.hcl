@@ -28,7 +28,7 @@ run "cluster_sg_is_self_referencing" {
     error_message = "cluster_security_group_id output must expose the cluster SG id"
   }
   assert {
-    condition     = contains(aws_instance.control_plane.vpc_security_group_ids, aws_security_group.cluster.id)
+    condition     = contains(aws_instance.control_plane["0"].vpc_security_group_ids, aws_security_group.cluster.id)
     error_message = "the control-plane instance must attach the cluster SG"
   }
 }
@@ -48,7 +48,7 @@ run "agent_token_ssm_parameter_output" {
 run "registration_address_and_node_refs" {
   command = plan
   assert {
-    condition     = output.registration_address == aws_instance.control_plane.private_ip
+    condition     = output.registration_address == aws_instance.control_plane["0"].private_ip
     error_message = "for control_plane_count=1, registration_address must be the sole control-plane node's private IP"
   }
   assert {
@@ -56,7 +56,7 @@ run "registration_address_and_node_refs" {
     error_message = "control_plane_node_refs must map a deterministic node name to its ref"
   }
   assert {
-    condition     = output.control_plane_node_refs["cp-bharat-1"].instance_id == aws_instance.control_plane.id
+    condition     = output.control_plane_node_refs["cp-bharat-1"].instance_id == aws_instance.control_plane["0"].id
     error_message = "each node ref must carry the instance id"
   }
   assert {

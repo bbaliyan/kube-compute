@@ -14,3 +14,9 @@ output "node_name" {
   description = "Node name this payload was rendered for — the OS hostname it sets, and therefore the Kubernetes node name RKE2/kubelet will register. Echoed back so a caller can key snippet filenames off the same value without recomputing it."
   value       = var.node_name
 }
+
+output "user_data" {
+  description = "The final user data for this node: cloud_init_user_data alone when there are no boot scripts and no SSM Agent part, otherwise a MIME multipart/mixed document with those shell-script parts ahead of the cloud-config. The caller delivers it verbatim (gzip and base64 it for EC2). Sensitive, for the same reasons as cloud_init_user_data."
+  value       = local.user_data
+  sensitive   = true
+}

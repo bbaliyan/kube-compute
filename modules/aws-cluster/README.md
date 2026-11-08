@@ -289,8 +289,8 @@ boot, so a running node never applies a change.
 A changed user data does not touch a running control-plane or static node. To apply
 it, replace the node on purpose. The addresses are:
 
-- First control-plane node: `module.<name>.module.control_plane.aws_instance.control_plane`
-- Other control-plane nodes: `module.<name>.module.control_plane.aws_instance.control_plane_additional["1"]`
+- First control-plane node: `module.<name>.module.control_plane.aws_instance.control_plane["0"]`
+- Other control-plane nodes: `module.<name>.module.control_plane.aws_instance.control_plane["1"]`
 - Static node: `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`
 
 > **Warning:** Replacing a single-node cluster loses the cluster.

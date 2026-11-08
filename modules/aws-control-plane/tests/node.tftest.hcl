@@ -16,23 +16,23 @@ run "node_resources" {
   }
 
   assert {
-    condition     = aws_instance.control_plane.metadata_options[0].http_tokens == "required"
+    condition     = aws_instance.control_plane["0"].metadata_options[0].http_tokens == "required"
     error_message = "IMDSv2 must be enforced (http_tokens=required)"
   }
   assert {
-    condition     = length(aws_instance.control_plane.user_data_base64) > 0
+    condition     = length(aws_instance.control_plane["0"].user_data_base64) > 0
     error_message = "instance must attach node-bootstrap user-data"
   }
   assert {
-    condition     = aws_instance.control_plane.iam_instance_profile == aws_iam_instance_profile.node.name
+    condition     = aws_instance.control_plane["0"].iam_instance_profile == aws_iam_instance_profile.node.name
     error_message = "instance must use the module instance profile"
   }
   assert {
-    condition     = aws_instance.control_plane.root_block_device[0].volume_type == "gp3"
+    condition     = aws_instance.control_plane["0"].root_block_device[0].volume_type == "gp3"
     error_message = "root volume type must honor the default (gp3)"
   }
   assert {
-    condition     = aws_instance.control_plane.root_block_device[0].delete_on_termination
+    condition     = aws_instance.control_plane["0"].root_block_device[0].delete_on_termination
     error_message = "the root volume must be deleted with its instance"
   }
   assert {

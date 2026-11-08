@@ -9,12 +9,12 @@ output "cluster_name" {
 
 output "instance_id" {
   description = "Provider-native node ID."
-  value       = aws_instance.control_plane.id
+  value       = aws_instance.control_plane["0"].id
 }
 
 output "cluster_ip" {
   description = "Private IP of the RKE2 node. Register your DNS wildcard at this address."
-  value       = aws_instance.control_plane.private_ip
+  value       = aws_instance.control_plane["0"].private_ip
 }
 
 output "cluster_fqdn" {
@@ -29,7 +29,7 @@ output "node_provider" {
 
 output "node_control_ref" {
   description = "Handle the control-plane verb-scripts use to reach the node out-of-band (kubeconfig fetch, break-glass shell). For AWS: the instance ID, targeted via 'aws ssm send-command'/'aws ssm start-session' in region aws_region. Renamed from bootstrap_status_ref: no status file exists to reference anymore now that cloud-init (not Ansible) owns bootstrap, and this was always really just a node-addressing handle."
-  value       = aws_instance.control_plane.id
+  value       = aws_instance.control_plane["0"].id
 }
 
 # ---- DNS support: register this yourself if you didn't pass a hosted_zone_id ----
@@ -77,26 +77,18 @@ output "node_iam_role_name" {
 # ---- Join flow: consumed by aws-node-pool (and, later, additional control-plane nodes) ----
 output "registration_address" {
   description = "Address workers/joining servers use to reach the cluster API. For control_plane_count = 1, this is the sole control-plane node's private IP. For control_plane_count > 1, it depends on endpoint_mode: the internal NLB's DNS name (loadbalancer, default), the shared Route53 record name (dns), or static_registration_address verbatim (static)."
-  value       = local.registration_address != null ? local.registration_address : aws_instance.control_plane.private_ip
+  value       = local.registration_address != null ? local.registration_address : aws_instance.control_plane["0"].private_ip
 }
 
 output "control_plane_node_refs" {
   description = "Map of control-plane node name -> {instance_id, provider}. The control-plane abstraction (SSM send-command today) targets every node from this map instead of a single node_control_ref."
-  value = merge(
-    {
-      (local.control_plane_names["0"]) = {
-        instance_id = aws_instance.control_plane.id
-        provider    = "aws"
-      }
-    },
-    {
-      for i, inst in aws_instance.control_plane_additional :
-      local.control_plane_names[i] => {
-        instance_id = inst.id
-        provider    = "aws"
-      }
+  value = {
+    for k, inst in aws_instance.control_plane :
+    local.control_plane_names[k] => {
+      instance_id = inst.id
+      provider    = "aws"
     }
-  )
+  }
 }
 
 output "cluster_security_group_id" {

@@ -33,7 +33,7 @@ run "a_new_cluster_takes_a_candidate_with_room" {
     error_message = "a new cluster must be placed in a candidate with room"
   }
   assert {
-    condition     = aws_instance.control_plane.subnet_id == "subnet-first"
+    condition     = aws_instance.control_plane["0"].subnet_id == "subnet-first"
     error_message = "the control plane must launch into the chosen subnet"
   }
 }
@@ -51,7 +51,7 @@ run "the_cluster_stays_when_the_first_candidate_is_full" {
     error_message = "a placed cluster must stay in its subnet when the first candidate has no room"
   }
   assert {
-    condition     = aws_instance.control_plane.subnet_id == "subnet-first"
+    condition     = aws_instance.control_plane["0"].subnet_id == "subnet-first"
     error_message = "the control plane must not move to another subnet"
   }
 }
@@ -73,7 +73,7 @@ run "the_cluster_stays_when_the_candidates_are_reordered" {
     error_message = "a roomier first candidate must not pull a placed cluster out of its subnet"
   }
   assert {
-    condition     = aws_instance.control_plane.subnet_id == "subnet-first"
+    condition     = aws_instance.control_plane["0"].subnet_id == "subnet-first"
     error_message = "the control plane must not move to another subnet"
   }
 }

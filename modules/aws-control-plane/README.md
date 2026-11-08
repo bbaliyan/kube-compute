@@ -43,8 +43,8 @@ current user data.
 
 The addresses are:
 
-- First node: `module.<name>.aws_instance.control_plane`
-- Other nodes: `module.<name>.aws_instance.control_plane_additional["1"]`
+- First node: `module.<name>.aws_instance.control_plane["0"]`
+- Other nodes: `module.<name>.aws_instance.control_plane["1"]`
 
 Inside `aws-cluster`, put `module.<name>.module.control_plane.` before the resource
 type instead.

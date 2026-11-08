@@ -40,17 +40,17 @@ run "user_data_is_unchanged" {
   command = apply
 
   assert {
-    condition     = sha256(aws_instance.control_plane.user_data_base64) == "f9a823911065021f95bd23ade0b6d4014f681d041c5446466c5f1b2f2792c3ab"
-    error_message = "the genesis user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane.user_data_base64)), "?")}"
+    condition     = sha256(aws_instance.control_plane["0"].user_data_base64) == "f9a823911065021f95bd23ade0b6d4014f681d041c5446466c5f1b2f2792c3ab"
+    error_message = "the genesis user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane["0"].user_data_base64)), "?")}"
   }
 
   assert {
-    condition     = sha256(aws_instance.control_plane_additional["1"].user_data_base64) == "1bed637c65eae1f86befd0915603ec15730654e962ceb25b453873b24c232823"
-    error_message = "the second node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane_additional["1"].user_data_base64)), "?")}"
+    condition     = sha256(aws_instance.control_plane["1"].user_data_base64) == "1bed637c65eae1f86befd0915603ec15730654e962ceb25b453873b24c232823"
+    error_message = "the second node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane["1"].user_data_base64)), "?")}"
   }
 
   assert {
-    condition     = sha256(aws_instance.control_plane_additional["2"].user_data_base64) == "78149a0357cbb3113575c719c261e03cb44f1bc81810539d3193f9d79346fd91"
-    error_message = "the third node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane_additional["2"].user_data_base64)), "?")}"
+    condition     = sha256(aws_instance.control_plane["2"].user_data_base64) == "78149a0357cbb3113575c719c261e03cb44f1bc81810539d3193f9d79346fd91"
+    error_message = "the third node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.control_plane["2"].user_data_base64)), "?")}"
   }
 }
