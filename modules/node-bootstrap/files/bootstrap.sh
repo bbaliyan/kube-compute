@@ -15,13 +15,10 @@
 # same reason on Proxmox, whose snippet cap is 1 MiB. Argo CD is not baked: this
 # script downloads kube-platform's published manifest on the first server.
 #
-# The contract between this file and the module that writes node.env is the
-# integer below. Bump it whenever a key is added, removed, or changes meaning,
-# and the module's node_env_contract must move with it: a mismatched pair fails
-# on the next line rather than half-configuring a node. An image NEWER than the
-# module needs no version check -- an older module ships its own rendered copy
-# of this file in write_files, which simply overwrites the baked one.
-BOOTSTRAP_CONTRACT=5
+# The module that writes node.env puts the sha256 of its own copy of this file in
+# KUBE_BOOTSTRAP_SHA256. This file hashes itself and refuses to run if the two
+# differ, so an image baked from another version of this file stops the boot with
+# a clear message instead of half-configuring the node.
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
@@ -33,8 +30,9 @@ KC=/opt/kube-compute
 # shellcheck disable=SC1091
 . "$KC/secrets.env"
 
-if [ "${KUBE_COMPUTE_CONTRACT:-unset}" != "$BOOTSTRAP_CONTRACT" ]; then
-  echo "kube-compute: this image bakes bootstrap contract $BOOTSTRAP_CONTRACT but node.env was written for contract ${KUBE_COMPUTE_CONTRACT:-unset} -- the image and the kube-compute module version are not a matching pair, so rebuild the image or move the module pin" >&2
+own_sha256=$(sha256sum "$0")
+if [ "${own_sha256%% *}" != "${KUBE_BOOTSTRAP_SHA256:-unset}" ]; then
+  echo "kube-compute: this image bakes a bootstrap.sh with sha256 ${own_sha256%% *} but the kube-compute module expects ${KUBE_BOOTSTRAP_SHA256:-unset} -- the image and the module version are not a matching pair, so rebuild the image from a kube_compute_ref with the module's bootstrap.sh or move the module pin" >&2
   exit 1
 fi
 

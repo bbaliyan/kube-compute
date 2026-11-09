@@ -83,11 +83,10 @@ a newer bootstrap is needed.
 
 ### Upgrade order
 
-The `node.env` contract is 5. Contract 4 added `REJOIN_PROBE_ADDRESSES`: the addresses a
-first server probes for a live cluster before it starts etcd (the `rejoin_probe_addresses`
-input). Contract 5 changes `bootstrap.sh` only. A first server that finds a live cluster
-becomes a joining server. It skips Cilium, the extra server manifests, Argo CD, the
-Applications and `genesis_apply_manifests`.
+A first server probes `REJOIN_PROBE_ADDRESSES` for a live cluster before it starts etcd
+(the `rejoin_probe_addresses` input). If it finds one, it becomes a joining server. It
+skips Cilium, the extra server manifests, Argo CD, the Applications and
+`genesis_apply_manifests`.
 
 1. Rebuild the node image without the baked Argo CD manifest. The new image carries the new `bootstrap.sh`.
 2. Move the module to the new major version.
@@ -100,8 +99,8 @@ Removing the file does not remove Cilium from the cluster. If Cilium is not Read
 about 6 minutes, the file stays and the log shows a warning. The first server removes the
 file even when GitOps is off.
 
-An image with the old module, or the new module with the old image, fails on the contract
-check at the first line of `bootstrap.sh`. Existing clusters do not change until a node is
+An image with the old module, or the new module with the old image, fails on the sha256
+check near the top of `bootstrap.sh`. Existing clusters do not change until a node is
 replaced.
 
 ## Watching progress
@@ -133,15 +132,12 @@ the fetched agent token, the rejoin-probe result).
 **Why.** The program is almost entirely static. Shipping values instead of code keeps the
 payload small on every platform. EC2 limits user data to 16384 bytes.
 
-**The contract.** `node_env_contract` in `main.tf` and `BOOTSTRAP_CONTRACT` in
-`files/bootstrap.sh` are the two halves of one number. Bump both together when a key
-is added, removed, or changes meaning. Three things enforce it:
-
-- An output precondition here fails the plan if the two disagree in this repo.
-- A test asserts the program references every key `node.env` defines.
-- The program itself refuses to run against a `node.env` written for another
-  contract, so a stale image fails on its first line instead of half-configuring a
-  node.
+**The version check.** `node.env` carries `KUBE_BOOTSTRAP_SHA256`, the sha256 of
+`files/bootstrap.sh` in the module version you applied. The program hashes itself and
+refuses to run if the two differ. A stale image stops on its first lines with a message
+that says what to rebuild, instead of half-configuring the node. Nobody bumps a number:
+any change to the script changes the hash. A test asserts the program references every
+key `node.env` defines.
 
 A module newer than the image fails with a clear message: `runcmd` tests that the
 program exists before it runs it and says what to rebuild.
