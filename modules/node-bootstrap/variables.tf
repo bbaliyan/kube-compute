@@ -49,14 +49,14 @@ variable "control_plane_taint" {
 }
 
 variable "cluster_token" {
-  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (no existing secret store to fetch a server token from). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env, sourced by the bootstrap script, never into config.yaml's world-readable siblings."
+  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (no existing secret store to fetch a server token from). Sensitive: written into the 0600 /etc/rancher/rke2/config.yaml of the cloud-init payload."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "cluster_agent_token" {
-  description = "Separate shared secret accepted only from agents (rke2 config.yaml's agent-token:) — a worker presenting this value can join as an agent but never as a server/etcd member. Only meaningful for node_role server-init (server-join callers omit it in every provider module checked). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
+  description = "Separate shared secret accepted only from agents (rke2 config.yaml's agent-token:) — a worker presenting this value can join as an agent but never as a server/etcd member. Only meaningful for node_role server-init (server-join callers omit it in every provider module checked). Sensitive: written into the 0600 /etc/rancher/rke2/config.yaml of the cloud-init payload."
   type        = string
   default     = null
   sensitive   = true

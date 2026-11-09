@@ -42,10 +42,11 @@ locals {
   # Publishes a single-target A record as soon as the node knows its own IP, so a
   # concurrently-bootstrapping sibling never has to wait for the round-robin api.* record
   # every control-plane node contributes to. The key and the request are removed whether
-  # or not nsupdate succeeds.
+  # or not nsupdate succeeds. runcmd does not stop at a failed command, so a failure
+  # leaves a marker file and the boot program stops on it.
   dns_self_register_script = <<-EOT
     set -eu
-    trap 'rm -f ${local.nsupdate_key_path} ${local.nsupdate_request_path}' EXIT
+    trap 'rc=$?; rm -f ${local.nsupdate_key_path} ${local.nsupdate_request_path}; [ "$rc" -eq 0 ] || touch /run/kube-compute-step-failed' EXIT
     command -v nsupdate >/dev/null 2>&1 || dnf install -y bind-utils
     NODE_IP=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')
     test -n "$NODE_IP"

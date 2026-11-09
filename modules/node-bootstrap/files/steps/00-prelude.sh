@@ -13,8 +13,16 @@ set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
 echo "kube-compute: bootstrap start $(date -Is)"
 
+# A cloud-init command that failed before this program leaves this marker, because
+# runcmd does not stop at a failed command. Stop here, so the boot fails.
+if [ -e /run/kube-compute-step-failed ]; then
+  echo "kube-compute: a step before the boot program failed; see /var/log/cloud-init-output.log" >&2
+  exit 1
+fi
+rm -f /run/kube-compute-boot-complete
+
 MISSING_TOOLS=""
-for tool in git curl getent ip awk systemctl update-ca-trust; do
+for tool in git curl getent ip awk systemctl; do
   command -v "$tool" >/dev/null 2>&1 || MISSING_TOOLS="$MISSING_TOOLS $tool"
 done
 if [ -n "$MISSING_TOOLS" ]; then
@@ -25,6 +33,16 @@ fi
 KC=/opt/kube-compute
 # shellcheck disable=SC1091
 . "$KC/node.env"
+
+# containerd's TLS pin in registries.yaml points at this file, so a node without the CA
+# cannot pull images. cloud-init writes the file, or the image bakes it.
+if [ -n "$TRUSTED_CA_FILE" ]; then
+  if [ ! -s "$TRUSTED_CA_FILE" ]; then
+    echo "kube-compute: no trusted CA at $TRUSTED_CA_FILE" >&2
+    exit 1
+  fi
+  command -v update-ca-trust >/dev/null 2>&1 || { echo "kube-compute: the image lacks update-ca-trust" >&2; exit 1; }
+fi
 
 KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
 PLATFORM_DIR=/run/platform-ref

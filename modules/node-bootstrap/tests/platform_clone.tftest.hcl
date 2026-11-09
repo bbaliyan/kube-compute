@@ -165,7 +165,7 @@ run "a_joining_server_needs_no_repo" {
 run "the_program_starts_with_a_tool_check_that_lists_every_missing_tool" {
   command = plan
   assert {
-    condition     = strcontains(local.bootstrap_program, "for tool in git curl getent ip awk systemctl update-ca-trust; do\n  command -v \"$tool\" >/dev/null 2>&1 || MISSING_TOOLS=\"$MISSING_TOOLS $tool\"\ndone\n")
+    condition     = strcontains(local.bootstrap_program, "for tool in git curl getent ip awk systemctl; do\n  command -v \"$tool\" >/dev/null 2>&1 || MISSING_TOOLS=\"$MISSING_TOOLS $tool\"\ndone\n")
     error_message = "bootstrap.sh must check every tool with command -v and collect the missing ones"
   }
   assert {

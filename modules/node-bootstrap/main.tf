@@ -391,6 +391,8 @@ locals {
     # validation requires every path to sit under /opt/kube-compute/manifests with no
     # whitespace, so none can contain a space.
     GENESIS_APPLY_MANIFESTS = join(" ", local.genesis_apply_manifest_paths)
+    # Empty when no CA is set.
+    TRUSTED_CA_FILE = local.trusted_ca_present ? local.trusted_ca_path : ""
   }
 
   # Single-quoted with the POSIX '\'' escape, the same way secrets.env is, so
@@ -576,10 +578,15 @@ locals {
 
   # A CA that the image bakes is not in user data, so the guard names the cause when it
   # is missing: containerd's TLS pin in registries.yaml points at this file.
-  trusted_ca_command = var.trusted_ca_in_image ? [
+  # runcmd does not stop at a failed command, so a failure leaves a marker file and the boot
+  # program stops on it.
+  trusted_ca_command = [
     "/bin/sh", "-c",
-    "test -s ${local.trusted_ca_path} || { echo 'kube-compute: no trusted CA at ${local.trusted_ca_path}: trusted_ca_in_image is set and the image does not bake one' >&2; exit 1; }; update-ca-trust extract",
-  ] : ["update-ca-trust", "extract"]
+    join("; ", concat(
+      var.trusted_ca_in_image ? ["test -s ${local.trusted_ca_path} || { echo 'kube-compute: no trusted CA at ${local.trusted_ca_path}: trusted_ca_in_image is set and the image does not bake one' >&2; touch /run/kube-compute-step-failed; exit 1; }"] : [],
+      ["update-ca-trust extract || { echo 'kube-compute: update-ca-trust failed' >&2; touch /run/kube-compute-step-failed; exit 1; }"],
+    )),
+  ]
 
   # The cloud-init commands that run before the boot program, in order. The provider
   # modules supply the first ones.
@@ -620,8 +627,11 @@ locals {
     printf 'kubelet-arg+:\n  - "kube-reserved=cpu=%sm,memory=%sMi"\n  - "system-reserved=cpu=100m,memory=256Mi"\n  - "eviction-hard=memory.available<100Mi,nodefs.available<10%%,imagefs.available<15%%,nodefs.inodesFree<5%%,imagefs.inodesFree<5%%"\n' "$KUBE_CPU_M" "$KUBE_MEM_MIB" >/etc/rancher/rke2/config.yaml.d/40-kubelet-reserved.yaml
   EOT
 
+  # This runs after the boot program. The marker makes a failed boot fail this command too,
+  # so cloud-init does not report success for a node that did not join.
   os_auto_updates_script = <<-EOT
     set -eu
+    test -e /run/kube-compute-boot-complete || { echo 'kube-compute: the boot program did not complete' >&2; exit 1; }
     dnf install -y dnf-automatic yum-utils
     dnf config-manager --save --setopt=excludepkgs=rke2-server,rke2-agent,rke2-common
     install -d -m 0755 /etc/systemd/system/dnf-automatic-install.timer.d

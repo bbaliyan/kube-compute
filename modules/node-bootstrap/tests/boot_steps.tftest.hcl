@@ -208,11 +208,11 @@ run "the_ca_is_a_file_and_a_command_not_shell_logic" {
     error_message = "cloud-init must write the trusted CA"
   }
   assert {
-    condition     = contains(yamldecode(output.cloud_init_user_data).runcmd, ["update-ca-trust", "extract"])
+    condition     = anytrue([for c in yamldecode(output.cloud_init_user_data).runcmd : strcontains(join(" ", c), "update-ca-trust extract")])
     error_message = "cloud-init must run update-ca-trust"
   }
   assert {
-    condition     = !strcontains(local.bootstrap_program, "update-ca-trust extract") && !strcontains(local.bootstrap_program, "TRUSTED_CA")
+    condition     = !strcontains(local.bootstrap_program, "update-ca-trust extract")
     error_message = "the boot program must hold no CA logic"
   }
 }
@@ -262,7 +262,103 @@ run "the_join_config_is_declarative" {
     error_message = "a joining server's config.yaml must name the server and carry the token"
   }
   assert {
-    condition     = !strcontains(local.bootstrap_program, "registries") && !strcontains(local.bootstrap_program, "preflight")
+    condition     = !strcontains(local.bootstrap_program, "preflight")
     error_message = "the boot program must hold no registry mirror logic"
+  }
+}
+
+run "a_failed_earlier_step_or_a_missing_ca_stops_the_boot_program" {
+  command = plan
+
+  variables {
+    node_role                 = "worker"
+    registration_address      = "api.test.example"
+    agent_token_fetch_command = "echo tok"
+    trusted_ca_pem            = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
+  }
+
+  assert {
+    condition     = strcontains(local.bootstrap_program, "if [ -e /run/kube-compute-step-failed ]; then") && strcontains(local.bootstrap_program, "if [ -n \"$TRUSTED_CA_FILE\" ]; then")
+    error_message = "the prelude must stop on a step marker and on a missing CA, for every role"
+  }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "TRUSTED_CA_FILE='/etc/pki/ca-trust/source/anchors/trusted-ca.crt'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "node.env must name the CA file when a CA is set"
+  }
+  assert {
+    condition = anytrue([
+      for c in yamldecode(output.cloud_init_user_data).runcmd :
+      strcontains(join(" ", c), "update-ca-trust extract ||") && strcontains(join(" ", c), "touch /run/kube-compute-step-failed") && strcontains(join(" ", c), "exit 1")
+    ])
+    error_message = "a failed update-ca-trust must exit non-zero and leave the marker"
+  }
+}
+
+run "without_a_ca_the_boot_needs_no_ca_tool_or_file" {
+  command = plan
+
+  variables {
+    node_role                 = "worker"
+    registration_address      = "api.test.example"
+    agent_token_fetch_command = "echo tok"
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "TRUSTED_CA_FILE=''")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "with no CA, node.env must leave TRUSTED_CA_FILE empty"
+  }
+  assert {
+    condition     = !strcontains(local.bootstrap_program, "for tool in git curl getent ip awk systemctl update-ca-trust")
+    error_message = "the base tool check must not require update-ca-trust"
+  }
+}
+
+run "a_failed_boot_program_fails_cloud_init_even_with_os_updates" {
+  command = plan
+
+  variables {
+    node_role                 = "worker"
+    registration_address      = "api.test.example"
+    agent_token_fetch_command = "echo tok"
+  }
+
+  assert {
+    condition     = strcontains(local.os_auto_updates_script, "test -e /run/kube-compute-boot-complete || {") && strcontains(local.os_auto_updates_script, "exit 1")
+    error_message = "the command after the boot program must fail when the program did not complete"
+  }
+  assert {
+    condition     = strcontains(local.bootstrap_program, "touch /run/kube-compute-boot-complete") && strcontains(local.bootstrap_program, "rm -f /run/kube-compute-boot-complete")
+    error_message = "the program must clear the completion marker at start and set it only at the end"
+  }
+  assert {
+    condition     = length(split("touch /run/kube-compute-boot-complete", local.bootstrap_program)[0]) > length(split("rm -f /run/kube-compute-boot-complete", local.bootstrap_program)[0])
+    error_message = "the marker is cleared before it is set"
+  }
+}
+
+run "the_agent_token_is_written_as_a_quoted_scalar" {
+  command = plan
+
+  variables {
+    node_role                 = "worker"
+    registration_address      = "api.test.example"
+    agent_token_fetch_command = "echo tok"
+  }
+
+  assert {
+    condition = (
+      strcontains(local.bootstrap_program, "QUOTED_AGENT_TOKEN=\"$${RESOLVED_AGENT_TOKEN//\\\\/\\\\\\\\}\"") &&
+      strcontains(local.bootstrap_program, "echo \"token: \\\"$QUOTED_AGENT_TOKEN\\\"\"") &&
+      !strcontains(local.bootstrap_program, "echo \"token: $RESOLVED_AGENT_TOKEN\"")
+    )
+    error_message = "the agent token must be escaped and double-quoted in the drop-in, never written raw"
   }
 }
