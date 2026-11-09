@@ -320,12 +320,6 @@ locals {
     "",
   ])
 
-  # The one number both halves of the boot agree on. The bootstrap program is
-  # baked into the node image; this says which node.env contract it was written
-  # against, and the program refuses to run against any other. Bump both
-  # together whenever a key below is added, removed, or changes meaning.
-  node_env_contract = 5
-
   # Where a server-init node looks for a live cluster before it starts etcd.
   # Explicit addresses win; otherwise registration_address, as before.
   rejoin_probe_addresses = (
@@ -333,10 +327,9 @@ locals {
     var.node_role == "server-init" && var.registration_address != null ? [var.registration_address] : []
   )
 
-  # The program itself, read only so this module can check it declares the same
-  # contract number. It is never shipped from here -- the node image bakes it,
-  # and this repo is where the image's copy comes from. Reading it is what makes
-  # a bump on one side alone a failed plan instead of a failed boot.
+  # The program itself, read so this module can hand its sha256 to the node. It is
+  # never shipped from here -- the node image bakes it, and this repo is where the
+  # image's copy comes from. The baked program compares its own hash with this one.
   bootstrap_program = file("${path.module}/files/bootstrap.sh")
 
   # Configuration for the baked bootstrap program, as data. The program is the
@@ -346,7 +339,7 @@ locals {
   # Every key is always defined (empty where a role does not use it) so the
   # program can run under `set -u`.
   node_config_values = {
-    KUBE_COMPUTE_CONTRACT = tostring(local.node_env_contract)
+    KUBE_BOOTSTRAP_SHA256 = filesha256("${path.module}/files/bootstrap.sh")
     NODE_ROLE             = var.node_role
     CNI                   = var.cni
     CLUSTER_NAME          = var.cluster_name
@@ -616,7 +609,7 @@ locals {
         [
           # The program is baked into the image, not written above. Without this test an
           # image that lacks it fails with a bare "No such file or directory".
-          ["/bin/sh", "-c", "test -x /opt/kube-compute/bootstrap.sh || { echo 'kube-compute: this image bakes no /opt/kube-compute/bootstrap.sh, which node.env contract ${local.node_env_contract} requires -- rebuild the node image from a ref that bakes it' >&2; exit 1; }"],
+          ["/bin/sh", "-c", "test -x /opt/kube-compute/bootstrap.sh || { echo 'kube-compute: this image bakes no /opt/kube-compute/bootstrap.sh, which every node requires -- rebuild the node image from a ref that bakes it' >&2; exit 1; }"],
           ["/opt/kube-compute/bootstrap.sh"],
         ],
         var.os_auto_updates ? [["/bin/sh", "-c", local.os_auto_updates_script]] : [],

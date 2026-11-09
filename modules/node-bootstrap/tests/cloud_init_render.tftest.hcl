@@ -100,8 +100,12 @@ run "server_init_payload_is_valid_cloud_config" {
     error_message = "the baked cilium.yaml must be removed only inside the cilium and server-init branch, never for a joining server or a worker"
   }
   assert {
-    condition     = strcontains(local.bootstrap_program, "BOOTSTRAP_CONTRACT=${local.node_env_contract}")
-    error_message = "the baked program's contract number must match node_env_contract — the program refuses to run against any other, so a bump on one side alone fails every node's boot"
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "KUBE_BOOTSTRAP_SHA256='${sha256(local.bootstrap_program)}'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "node.env must carry the sha256 of files/bootstrap.sh, which the baked program compares with its own"
   }
   assert {
     condition = alltrue([
