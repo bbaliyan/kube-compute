@@ -18,9 +18,10 @@ locals {
   combined_user_data = { for k, m in module.node_bootstrap : k => m.user_data }
 
   # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes. Static
-  # content is kept out of the payload for that reason: the bootstrap program is
-  # baked into the node image, and so can a CA be (trusted_ca_in_image). The
-  # precondition on the instance turns AWS's rejection into a message naming both.
+  # content is kept out of the payload for that reason: the Cilium render is baked
+  # into the node image, and so can a CA be (trusted_ca_in_image). The bootstrap
+  # program is in the payload with its comments removed. The precondition on the
+  # instance turns AWS's rejection into a message naming the inputs that fix it.
   inline_user_data_bytes = {
     for k, v in local.combined_user_data : k => floor(length(base64gzip(v)) / 4) * 3
   }
@@ -495,7 +496,7 @@ resource "aws_instance" "control_plane" {
       # size is not knowable until apply -- it carries a generated token -- so this
       # runs at apply and names the input that fixes it.
       condition     = local.inline_user_data_bytes[each.key] <= 16384
-      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: check that the node image bakes the bootstrap program, set trusted_ca_in_image if it also bakes the CA, and look at what the platform Application's Helm values are carrying."
+      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: set trusted_ca_in_image if the node image bakes the CA, and look at the boot scripts and at what the platform Application's Helm values are carrying."
     }
 
     precondition {
