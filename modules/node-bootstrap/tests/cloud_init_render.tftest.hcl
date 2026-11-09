@@ -4,8 +4,8 @@
 # bootstrap program, and must carry the values that program needs -- node.env
 # for the flags that gate its genesis-only work, and one config.yaml fragment
 # for everything knowable before the node boots. This module renders neither
-# the Cilium nor the Argo CD manifest itself (the image bakes Cilium, and the
-# node downloads Argo CD) — no `helm`/network dependency for these tests to mock.
+# the Cilium nor the Argo CD manifest itself (the first server reads both from the
+# platform ref) — no `helm`/network dependency for these tests to mock.
 #
 # What the program DOES with a flag is not assertable here. These tests assert
 # the values it is handed, plus that it references every key node.env defines.
@@ -83,7 +83,7 @@ run "server_init_payload_is_valid_cloud_config" {
       length(split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", local.bootstrap_program)) == 2
       && strcontains(split("rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml", local.bootstrap_program)[0], "rollout status daemonset/cilium -n kube-system")
     )
-    error_message = "bootstrap.sh must remove the baked cilium.yaml exactly once, after it waits for the Cilium DaemonSet"
+    error_message = "bootstrap.sh must remove the boot cilium.yaml exactly once, after it waits for the Cilium DaemonSet"
   }
   assert {
     condition = (
@@ -93,7 +93,7 @@ run "server_init_payload_is_valid_cloud_config" {
         "\nfi\n"
       )
     )
-    error_message = "the baked cilium.yaml must be removed only inside the cilium and server-init branch, never for a joining server or a worker"
+    error_message = "the boot cilium.yaml must be removed only inside the cilium and server-init branch, never for a joining server or a worker"
   }
   assert {
     condition = !anytrue([
@@ -195,6 +195,7 @@ run "dns_servers_set_gives_kubelet_a_search_domain_free_resolv_conf" {
     cluster_fqdn              = "api.test.example"
     cluster_fqdn_suffix       = "test.example"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     dns_servers               = ["1.1.1.1", "9.9.9.9"]
   }

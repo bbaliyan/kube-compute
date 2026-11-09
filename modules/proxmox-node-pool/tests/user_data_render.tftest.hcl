@@ -34,12 +34,12 @@ run "user_data_is_unchanged" {
   command = plan
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "c37cab762ec338fce97d76a46c9fbf832862c24eb71aebfbe9116365c7d06e26"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "bae928af9c17843666d373db3dfcc2218b00b82e8ad33055d0a13ebd387ef5f4"
     error_message = "the first worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "e466eef4676b6b313e6b8572b74bd01f44c348ceaf4578df1f69519a4ad7f4e1"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "655f30e255e3508435325acd1667ecd3380bb46e774c352a7e276fe4dfe20fb6"
     error_message = "the second worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data)), "?")}"
   }
 }
@@ -52,7 +52,7 @@ run "user_data_without_boot_scripts_is_unchanged" {
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "7ae1d53f40dcc3310f3ade1e5345d773106cc1a93685e9789addc7f86125d33e"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "6d2900d50550750af7dcb76dc8cb5424a8642daab9515ce28a321b080b8e207a"
     error_message = "the first worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
   }
 }

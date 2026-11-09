@@ -18,8 +18,8 @@ locals {
   combined_user_data = { for k, m in module.node_bootstrap : k => m.user_data }
 
   # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes. Static
-  # content is kept out of the payload for that reason: the Cilium render is baked
-  # into the node image, and so can a CA be (trusted_ca_in_image). The bootstrap
+  # content is kept out of the payload for that reason: the genesis node reads the
+  # Cilium render from the platform ref, and a CA can be baked (trusted_ca_in_image). The bootstrap
   # program is in the payload with its comments removed. The precondition on the
   # instance turns AWS's rejection into a message naming the inputs that fix it.
   inline_user_data_bytes = {

@@ -24,12 +24,9 @@ type, default, and validation — at this module's own top level. See
 `variables.tf` for the full list and field-by-field semantics; this module does not
 re-document them.
 
-`argocd_manifest_url` and `argocd_manifest_sha256` default to a pinned kube-platform release, so no extra input is needed. The first control-plane node downloads that file at first boot and checks its sha256. See [`node-bootstrap`](../node-bootstrap/README.md) to move to a newer release. This is a breaking change. Upgrade in this order:
+The first control-plane node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes the Cilium and Argo CD manifests from `bootstrap/rendered/` in the clone. The template must hold git. `argocd_manifest_url` and `argocd_manifest_sha256` are unused and will be removed. If `gitops_platform_enabled` is false, set `gitops_platform_repo_url`, because the node still reads the Cilium manifest from it. See [`node-bootstrap`](../node-bootstrap/README.md).
 
-1. Rebuild the template without Argo CD.
-2. Move to this version. The two Argo CD manifest inputs have defaults.
-
-After Cilium is Ready, the first server removes the baked Cilium file even when GitOps is off, so a later server restart no longer applies it again.
+After Cilium is Ready, the first server removes the Cilium file from the RKE2 manifests directory even when GitOps is off, so a later server restart no longer applies it again.
 
 `genesis_apply_manifests` is optional. It is a list of `{path, content}` manifests that the first control-plane node applies once, at bootstrap. Unset, nothing extra is applied.
 

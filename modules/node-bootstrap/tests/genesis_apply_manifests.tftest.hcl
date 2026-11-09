@@ -19,6 +19,7 @@ run "genesis_apply_manifests_empty_by_default_leaves_no_trace" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
   }
 
@@ -47,6 +48,7 @@ run "genesis_apply_manifests_renders_entries_and_apply_steps" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
 
     genesis_apply_manifests = [
@@ -182,6 +184,7 @@ run "genesis_apply_manifests_accepts_a_nested_path" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
 
     genesis_apply_manifests = [
@@ -201,6 +204,7 @@ run "genesis_apply_manifests_rejects_whitespace_in_a_path" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     genesis_apply_manifests = [
       {
@@ -221,6 +225,7 @@ run "genesis_apply_manifests_rejects_tab_in_a_path" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     genesis_apply_manifests = [
       {
@@ -241,6 +246,7 @@ run "genesis_apply_manifests_rejects_relative_path" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     genesis_apply_manifests = [
       {
@@ -261,6 +267,7 @@ run "genesis_apply_manifests_rejects_dotdot_segment" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     genesis_apply_manifests = [
       {
@@ -281,6 +288,7 @@ run "genesis_apply_manifests_rejects_path_outside_the_directory" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     genesis_apply_manifests = [
       {
@@ -301,6 +309,7 @@ run "genesis_apply_manifests_rejects_sibling_directory_with_the_same_prefix" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     genesis_apply_manifests = [
       {
@@ -321,6 +330,7 @@ run "genesis_apply_manifests_rejects_the_directory_itself" {
     cluster_token             = "SUPERSECRETTOKEN123"
     cluster_agent_token       = "SUPERSECRETAGENT456"
     gitops_platform_enabled   = false
+    gitops_platform_repo_url  = "https://example.test/platform.git"
     gitops_workloads_repo_url = null
     genesis_apply_manifests = [
       {

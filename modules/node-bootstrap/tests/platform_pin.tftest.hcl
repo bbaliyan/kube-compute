@@ -79,7 +79,8 @@ run "explicit_override_still_wins" {
 run "disabled_platform_renders_no_application_at_all" {
   command = plan
   variables {
-    gitops_platform_enabled = false
+    gitops_platform_enabled  = false
+    gitops_platform_repo_url = "https://example.test/platform.git"
   }
   assert {
     condition = !contains(

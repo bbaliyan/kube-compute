@@ -15,8 +15,8 @@ shell-script part that enables the SSM Agent (SSM stays this module's operator-a
 Nothing in this module connects to the node, waits on it, or observes it converge; `apply`
 returns as soon as the instance and its user-data exist.
 
-The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules, genesis Cilium
-manifest) is expected to already be baked into the AMI, via `kube-images`' `kube-node/packer/aws/`
+The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules) is expected to
+already be baked into the AMI, via `kube-images`' `kube-node/packer/aws/`
 template. You must pass a kube-images-baked AMI with `os_image_ami_id`, or its name with
 `os_image_name`. If you pass neither, the plan fails. A stock image has no RKE2, so a node
 booted from it would never join. With `os_image_name`, the module resolves the ID itself
@@ -27,8 +27,8 @@ matching build. This mirrors `proxmox-control-plane`'s `proxmox_template_vm_id`.
 ### Keeping user data under EC2's limit
 
 EC2 rejects `RunInstances` when decoded user data exceeds 16384 bytes. Static content
-therefore stays out of the payload: the Cilium manifest is baked into the node image,
-and with `trusted_ca_in_image` a CA is too. The bootstrap program travels in the payload
+therefore stays out of the payload: the genesis node reads the Cilium and Argo CD manifests
+from a clone of the platform ref, and with `trusted_ca_in_image` a CA is baked into the image. The bootstrap program travels in the payload
 with its comments removed. A precondition on the instance names the levers when the
 limit is exceeded.
 
@@ -154,12 +154,9 @@ staggered, self-healing retry handles the one genuine etcd constraint (one non-v
 a time) among the joining siblings. Argo/platform GitOps inputs are only ever passed to the
 genesis node, so platform bootstrap manifests never race on more than one server.
 
-## Argo CD manifest
+## Cilium and Argo CD manifests
 
-The genesis node downloads Argo CD at first boot. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` default to a pinned kube-platform release, so no extra input is needed. See [`node-bootstrap`](../node-bootstrap/README.md) to move to a newer release. The
-AMI must not bake Argo CD: rebuild the
-AMI first, then move to this version. See
-[`node-bootstrap`](../node-bootstrap/README.md) for the upgrade order.
+The genesis node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes `bootstrap/rendered/cilium.yaml` and `bootstrap/rendered/argocd.yaml` from the clone. The AMI holds neither. The AMI must hold git. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` are unused and will be removed. See [`node-bootstrap`](../node-bootstrap/README.md).
 
 ## Container Network Interface (CNI)
 
@@ -167,7 +164,7 @@ AMI first, then move to this version. See
 (Canal/flannel+Calico) remains selectable as an escape hatch for a consumer-supplied image
 that ships a different CNI, but is not viable on AlmaLinux 10 (this project's only supported OS):
 its kernel dropped the legacy `br_netfilter`/`xt_conntrack`/`xt_comment` modules flannel and
-Felix's iptables dataplane require. The baked Cilium manifest sets the operator to `1`
+Felix's iptables dataplane require. The Cilium manifest from the platform ref sets the operator to `1`
 replica (chart default `2`) on every topology, so a single-node cluster has no `Pending` replica. The cluster security group's
 self-referencing all-protocol rule already covers every CNI's traffic, so switching `cni` never
 requires a security-group change.

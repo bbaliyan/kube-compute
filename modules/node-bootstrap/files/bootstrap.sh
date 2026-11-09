@@ -11,12 +11,22 @@
 # per-cluster value reaches it as data, in node.env (configuration) and
 # secrets.env (tokens), both written by cloud-init. A heredoc body in this file
 # must never start with "#", because the comment strip would remove that line.
-# The Cilium render is baked into the image. This script downloads kube-platform's
-# published Argo CD manifest on the first server.
+# The first server clones the platform ref (PLATFORM_REPO_URL at PLATFORM_REVISION)
+# before RKE2 starts. It takes the Cilium and Argo CD boot manifests from the
+# clone, under bootstrap/rendered/. The image holds neither.
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
 echo "kube-compute: bootstrap start $(date -Is)"
+
+MISSING_TOOLS=""
+for tool in git curl getent ip awk sha256sum systemctl update-ca-trust; do
+  command -v "$tool" >/dev/null 2>&1 || MISSING_TOOLS="$MISSING_TOOLS $tool"
+done
+if [ -n "$MISSING_TOOLS" ]; then
+  echo "kube-compute: the image lacks these tools:$MISSING_TOOLS" >&2
+  exit 1
+fi
 
 KC=/opt/kube-compute
 # shellcheck disable=SC1091
@@ -39,6 +49,37 @@ wait_until() {
     fi
     sleep 5
   done
+}
+
+# Stops the boot when the image's RKE2 is newer than $1 (a version such as
+# v1.37.1+rke2r1). $2 names where $1 came from. An older or equal image is fine.
+check_rke2_skew() {
+  local image newest
+  image="$(rke2 --version | awk 'NR == 1 {print $3}')"
+  newest="$(printf '%s\n%s\n' "$1" "$image" | sort -V | tail -n 1)"
+  if [ "$image" != "$1" ] && [ "$newest" = "$image" ]; then
+    echo "kube-compute: the image has RKE2 $image, which is newer than $1 from $2" >&2
+    exit 1
+  fi
+}
+
+PLATFORM_DIR=/run/platform-ref
+# git has no retry of its own, so the caller loops. A 40-digit hex revision is a
+# commit: a shallow clone by branch or tag cannot fetch it.
+clone_platform() {
+  rm -rf "$PLATFORM_DIR"
+  if [[ "$PLATFORM_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+    git clone -q --filter=blob:none --no-checkout "$PLATFORM_REPO_URL" "$PLATFORM_DIR" &&
+      git -C "$PLATFORM_DIR" checkout -q "$PLATFORM_REVISION"
+  else
+    git clone -q --depth 1 --branch "$PLATFORM_REVISION" "$PLATFORM_REPO_URL" "$PLATFORM_DIR"
+  fi
+}
+require_platform_file() {
+  if [ ! -s "$PLATFORM_DIR/$1" ]; then
+    echo "kube-compute: $PLATFORM_REPO_URL at $PLATFORM_REVISION has no $1" >&2
+    exit 1
+  fi
 }
 
 # Own IP, discovered on the node itself. RKE2 needs it for node-ip and (on a server) as
@@ -204,16 +245,56 @@ fi
 chmod 0600 "$CONFIG"
 umask 022
 
+if [ "$NODE_ROLE" = "server-init" ] && [ -n "$PLATFORM_REPO_URL" ]; then
+  # Genesis only, and after the rejoin probe: a node that became a joining server
+  # reads nothing from the platform ref. Host networking works before the CNI exists.
+  # GIT_TERMINAL_PROMPT=0 makes a private repo fail instead of waiting for a password.
+  export GIT_TERMINAL_PROMPT=0
+  PLATFORM_CLONED=0
+  for _ in 1 2 3 4 5; do
+    if clone_platform; then
+      PLATFORM_CLONED=1
+      break
+    fi
+    sleep 5
+  done
+  if [ "$PLATFORM_CLONED" -ne 1 ]; then
+    echo "kube-compute: could not clone $PLATFORM_REPO_URL at $PLATFORM_REVISION" >&2
+    exit 1
+  fi
+  if [ "$CNI" = "cilium" ]; then
+    require_platform_file bootstrap/rendered/cilium.yaml
+  fi
+  if [ "$ARGOCD_NEEDED" = "1" ]; then
+    require_platform_file bootstrap/rendered/argocd.yaml
+  fi
+  PLATFORM_K8S_VERSION="$(awk '$1 == "k8sVersion:" {print $2}' "$PLATFORM_DIR/platform/platform-versions/values.yaml")"
+  if [ -z "$PLATFORM_K8S_VERSION" ]; then
+    echo "kube-compute: $PLATFORM_REPO_URL at $PLATFORM_REVISION has no k8sVersion in platform/platform-versions/values.yaml" >&2
+    exit 1
+  fi
+  check_rke2_skew "$PLATFORM_K8S_VERSION" "$PLATFORM_REPO_URL at $PLATFORM_REVISION"
+fi
+if [ "$NODE_ROLE" = "server-join" ]; then
+  # Cheap check: /version answers without credentials. It is skipped when the API
+  # server does not answer.
+  API_HOST="${SERVER_LINE#server: https://}"
+  API_VERSION="$(curl -sk --connect-timeout 3 --max-time 10 "https://${API_HOST%:9345}:6443/version" | awk -F'"' '$2 == "gitVersion" {print $4}' || true)"
+  if [ -n "$API_VERSION" ]; then
+    check_rke2_skew "$API_VERSION" "the API server"
+  fi
+fi
+
 if [ "$NODE_ROLE" != "worker" ]; then
   # ---- auto-deploy manifests: must exist before RKE2's first start, since RKE2
   #      only applies whatever it finds under server/manifests/ at startup ----
   install -d -m 0700 /var/lib/rancher/rke2/server/manifests
   if [ "$CNI" = "cilium" ] && [ "$NODE_ROLE" = "server-init" ]; then
     # Genesis only: Cilium is cluster-wide state, not per-node, so a joining server
-    # does not re-apply it. Rendered by `helm template` on the operator, never via
-    # RKE2's HelmChart CRD — that CR's finalizer runs `helm uninstall` on deletion,
-    # which would fight handing off to Argo CD.
-    install -m 0600 "$KC/manifests/cilium.yaml" /var/lib/rancher/rke2/server/manifests/cilium.yaml
+    # does not re-apply it. A render from the platform ref, never RKE2's HelmChart
+    # CRD — that CR's finalizer runs `helm uninstall` on deletion, which would
+    # fight handing off to Argo CD.
+    install -m 0600 "$PLATFORM_DIR/bootstrap/rendered/cilium.yaml" /var/lib/rancher/rke2/server/manifests/cilium.yaml
   fi
   if [ "$NODE_ROLE" = "server-init" ] && [ -d "$KC/server-manifests" ]; then
     for extra_manifest in "$KC/server-manifests/"*; do
@@ -286,8 +367,8 @@ fi
 if [ "$CNI" = "cilium" ] && [ "$NODE_ROLE" = "server-init" ]; then
   # RKE2 re-applies every file under server/manifests on each rke2-server start
   # (the k3s deploy controller starts with force=true). Once the platform has
-  # upgraded Cilium, a restart of this server would put the older baked render
-  # back. So remove the baked file as soon as Cilium is running. Deleting a
+  # upgraded Cilium, a restart of this server would put the older boot render
+  # back. So remove the boot file as soon as Cilium is running. Deleting a
   # manifest file does not delete the resources it created (k3s documents this;
   # the controller deletes resources only for --disable), so Cilium keeps running.
   # If Cilium is not Ready in time, keep the file: RKE2 keeps retrying it.
@@ -301,9 +382,9 @@ if [ "$CNI" = "cilium" ] && [ "$NODE_ROLE" = "server-init" ]; then
   done
   if [ "$CILIUM_READY" -eq 1 ]; then
     rm -f /var/lib/rancher/rke2/server/manifests/cilium.yaml
-    echo "kube-compute: Cilium Ready, removed the baked cilium.yaml $(date -Is)"
+    echo "kube-compute: Cilium Ready, removed the boot cilium.yaml $(date -Is)"
   else
-    echo "kube-compute: WARNING: Cilium did not become Ready within ~6 minutes, so the baked cilium.yaml stays in server/manifests and RKE2 re-applies it on every restart" >&2
+    echo "kube-compute: WARNING: Cilium did not become Ready within ~6 minutes, so the boot cilium.yaml stays in server/manifests and RKE2 re-applies it on every restart" >&2
   fi
 fi
 
@@ -344,21 +425,13 @@ if [ "$ARGOCD_NEEDED" = "1" ] && [ "$NODE_ROLE" = "server-init" ]; then
   else
     echo "kube-compute: CoreDNS Ready $(date -Is)"
   fi
-  # The Argo CD manifest is published by kube-platform and pinned by URL and
-  # sha256. Every failure here is fatal: a node without Argo CD never syncs.
-  ARGOCD_MANIFEST="$(mktemp)"
-  trap 'rm -f "$ARGOCD_MANIFEST"' EXIT
-  curl -fsSL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 120 \
-    -o "$ARGOCD_MANIFEST" "$ARGOCD_MANIFEST_URL"
-  if ! echo "$ARGOCD_MANIFEST_SHA256  $ARGOCD_MANIFEST" | sha256sum -c - >/dev/null; then
-    echo "kube-compute: $ARGOCD_MANIFEST_URL does not match sha256 $ARGOCD_MANIFEST_SHA256" >&2
-    exit 1
-  fi
+  # The manifest comes from the platform ref cloned before RKE2 started. Failing here is
+  # fatal: a node without Argo CD never syncs.
   # --server-side is required: a client-side apply stores the previous config in
   # a last-applied-configuration annotation, and Argo CD's applicationsets CRD
   # exceeds Kubernetes' 262144-byte annotation limit. --force-conflicts takes
   # ownership of fields from an earlier partial apply on a retried boot.
-  $KUBECTL apply --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
+  $KUBECTL apply --server-side --force-conflicts -f "$PLATFORM_DIR/bootstrap/rendered/argocd.yaml"
   # NOT a health wait — only blocks until the API server serves the Application
   # type (avoids a "no matches for kind Application" race). Deliberately does not
   # wait for argocd-server to roll out: on a tainted control plane, or before a
@@ -406,4 +479,5 @@ if [ "$NODE_ROLE" = "server-init" ]; then
   done
 fi
 
+rm -rf "$PLATFORM_DIR"
 echo "kube-compute: bootstrap complete $(date -Is)"

@@ -5,8 +5,8 @@ output "cloud_init_user_data" {
   sensitive   = true
 
   precondition {
-    condition     = !local.render_argocd || (var.argocd_manifest_url != null && var.argocd_manifest_sha256 != null)
-    error_message = "argocd_manifest_url and argocd_manifest_sha256 are required on the first server while a platform or workloads Application is enabled. Set both to a kube-platform release's argocd-bootstrap.yaml and its sha256."
+    condition     = !local.platform_clone_needed || local.boot_platform_repo_url != ""
+    error_message = "gitops_platform_repo_url is required on the first server when gitops_platform_enabled is false and the node still needs Cilium or Argo CD: the first server clones that repo for bootstrap/rendered/. Set it to the platform repo, or use cni = \"default\" and no Application."
   }
 }
 
@@ -20,8 +20,8 @@ output "user_data" {
   value       = local.user_data
 
   precondition {
-    condition     = !local.render_argocd || (var.argocd_manifest_url != null && var.argocd_manifest_sha256 != null)
-    error_message = "argocd_manifest_url and argocd_manifest_sha256 are required on the first server while a platform or workloads Application is enabled. Set both to a kube-platform release's argocd-bootstrap.yaml and its sha256."
+    condition     = !local.platform_clone_needed || local.boot_platform_repo_url != ""
+    error_message = "gitops_platform_repo_url is required on the first server when gitops_platform_enabled is false and the node still needs Cilium or Argo CD: the first server clones that repo for bootstrap/rendered/. Set it to the platform repo, or use cni = \"default\" and no Application."
   }
   sensitive = true
 }

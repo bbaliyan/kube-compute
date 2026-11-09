@@ -88,7 +88,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'cilium' (the default) or 'default' (the CNI the image ships, Canal). 'default' is not viable on AlmaLinux 10, whose kernel lacks the modules Canal needs. 'cilium' sets disable: [rke2-cilium] on a genesis node so the baked manifest is the only Cilium install."
+  description = "CNI to install: 'cilium' (the default) or 'default' (the CNI the image ships, Canal). 'default' is not viable on AlmaLinux 10, whose kernel lacks the modules Canal needs. 'cilium' sets disable: [rke2-cilium] on a genesis node so the Cilium manifest from the platform ref is the only Cilium install. It needs the platform repo (gitops_platform_repo_url) on the genesis node."
   type        = string
   default     = "cilium"
   validation {
@@ -146,7 +146,7 @@ variable "gitops_platform_enabled" {
 }
 
 variable "argocd_manifest_url" {
-  description = "URL of the Argo CD bootstrap manifest that kube-platform publishes with each release (argocd-bootstrap.yaml). The first server downloads it at first boot. Defaults to a pinned kube-platform release; see the README to move to a newer one. Unused unless a platform or workloads Application is enabled. Only meaningful for node_role = server-init."
+  description = "Unused. The first server now applies bootstrap/rendered/argocd.yaml from the platform ref (gitops_platform_repo_url at gitops_platform_revision). The input stays for one release so callers do not break, then it is removed."
   type        = string
   default     = "https://github.com/bbaliyan/kube-platform/releases/download/stable-20261108/argocd-bootstrap.yaml"
 
@@ -157,7 +157,7 @@ variable "argocd_manifest_url" {
 }
 
 variable "argocd_manifest_sha256" {
-  description = "Lowercase hex sha256 of the file at argocd_manifest_url. It must match the URL: change both together. bootstrap.sh refuses to apply a download that does not match."
+  description = "Unused. See argocd_manifest_url."
   type        = string
   default     = "e18c81805a4d299e93003c16662b889a05e075cc969a11098e54a4dabceb234d"
 
@@ -168,13 +168,13 @@ variable "argocd_manifest_sha256" {
 }
 
 variable "gitops_platform_repo_url" {
-  description = "Argo CD platform Application source repo (kube-platform or a fork). Null/\"\" (the default) falls back to local.pinned_platform_repo_url — see that local for why the pin lives there rather than as this variable's default. Only takes effect when gitops_platform_enabled is true, and only meaningful for node_role = server-init."
+  description = "Argo CD platform Application source repo (kube-platform or a fork). Null/\"\" (the default) falls back to local.pinned_platform_repo_url — see that local for why the pin lives there rather than as this variable's default. The genesis node also clones it for bootstrap/rendered/cilium.yaml and argocd.yaml. When gitops_platform_enabled is false, there is no fallback to the pin and this input is required if the node needs Cilium or Argo CD. Only meaningful for node_role = server-init."
   type        = string
   default     = null
 }
 
 variable "gitops_platform_revision" {
-  description = "Branch/tag/SHA the platform Application tracks. Null/\"\" (the default) falls back to local.pinned_platform_revision — kube-platform's protected `main` branch, not a fixed commit — see that local for why. Override for a fork or to pin a specific revision instead."
+  description = "Branch/tag/SHA the platform Application tracks. The genesis node clones the same ref for its boot manifests (a 40-digit hex value is checked out as a commit). Null/\"\" (the default) falls back to local.pinned_platform_revision — kube-platform's protected `main` branch, not a fixed commit — see that local for why. Override for a fork or to pin a specific revision instead."
   type        = string
   default     = null
 }

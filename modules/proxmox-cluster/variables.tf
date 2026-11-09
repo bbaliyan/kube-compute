@@ -71,7 +71,7 @@ variable "gitops_platform_revision_override" {
 }
 
 variable "argocd_manifest_url" {
-  description = "URL of the Argo CD bootstrap manifest that kube-platform publishes with each release (argocd-bootstrap.yaml). The first server downloads it at first boot. Defaults to a pinned kube-platform release; see the node-bootstrap README to move to a newer one."
+  description = "Unused. The first server applies bootstrap/rendered/argocd.yaml from the platform ref (gitops_platform_repo_url at gitops_platform_revision). The input stays for one release so callers do not break, then it is removed."
   type        = string
   default     = "https://github.com/bbaliyan/kube-platform/releases/download/stable-20261108/argocd-bootstrap.yaml"
 
@@ -82,7 +82,7 @@ variable "argocd_manifest_url" {
 }
 
 variable "argocd_manifest_sha256" {
-  description = "Lowercase hex sha256 of the file at argocd_manifest_url. It must match the URL: change both together. bootstrap.sh refuses to apply a download that does not match."
+  description = "Unused. See argocd_manifest_url."
   type        = string
   default     = "e18c81805a4d299e93003c16662b889a05e075cc969a11098e54a4dabceb234d"
 

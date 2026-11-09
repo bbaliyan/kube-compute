@@ -30,56 +30,47 @@ cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
 With no parts, `user_data` is the plain cloud-config.
 
 The image must already hold OS prep, the RKE2 binaries, the SELinux policy, the kernel
-modules, the guest agent and the Cilium manifest. Build it with
-kube-images. The image does not hold Argo CD: the first server downloads it (see below).
+modules, the guest agent and these tools: git, curl, getent, ip, awk, sha256sum,
+systemctl and update-ca-trust. Build it with kube-images. The image holds neither Cilium
+nor Argo CD: the first server reads both from the platform ref (see below).
 This module renders only the per-cluster identity, secrets and join logic.
 Every provider module calls it: `aws-control-plane`, `aws-static-node`, `aws-node-pool`,
 `proxmox-control-plane` and `proxmox-node-pool`.
 
-## Cilium is baked, Argo CD is downloaded
+## Cilium and Argo CD come from the platform ref
 
-The node image bakes the Cilium manifest at `/opt/kube-compute/manifests/cilium.yaml`.
-A node with `cni: cilium` is not Ready without it. The `render_cilium` local only
-decides whether `bootstrap.sh` applies it. The image does not hold `bootstrap.sh`: this module sends it.
+The first server needs two manifests that are too big for the cloud-init payload:
+Cilium and Argo CD. It reads both from the platform repo, so one value picks the
+version of both: `gitops_platform_repo_url` at `gitops_platform_revision`. This is the
+same ref that the platform Application syncs.
 
-The image does not bake Argo CD. kube-platform publishes one manifest per release,
-`argocd-bootstrap.yaml`, with its sha256. It is about 2 MB, too big for the cloud-init
-payload (Proxmox allows 1 MiB). So the first server downloads it at first boot:
+On the first server, before RKE2 starts, `bootstrap.sh` does these steps:
 
-1. `bootstrap.sh` downloads `argocd_manifest_url`. It retries a few times.
-2. It compares the file with `argocd_manifest_sha256`. If they differ, the boot fails.
-3. It applies the file with server-side apply.
-4. It waits for the Argo CD workloads to roll out.
+1. It checks that the image has the tools listed above. If tools are missing, it names all of them in one message and stops.
+2. It clones the platform ref into `/run/platform-ref`. It tries 5 times, 5 seconds apart.
+   - For a branch or a tag, it runs `git clone --depth 1 --branch`.
+   - For a 40-digit hex commit, it runs `git clone --filter=blob:none --no-checkout` and then `git checkout`.
+3. If `bootstrap/rendered/cilium.yaml` or `bootstrap/rendered/argocd.yaml` is missing, it stops with one line that names the repo, the ref and the path.
+4. It reads `k8sVersion` from `platform/platform-versions/values.yaml`. If the RKE2 in the image is newer, it stops. An equal or older RKE2 is fine.
+5. With `cni = "cilium"`, it copies `cilium.yaml` into the RKE2 manifests directory.
+6. After the node is Ready and CoreDNS is up, it applies `argocd.yaml` with server-side apply.
+7. It waits for the Argo CD workloads to roll out.
 
 Each failure stops the boot and is written to `/var/log/kube-compute-bootstrap.log`.
-The node needs a route to the URL at first boot.
+The node needs a route to the repo at first boot, and the repo must be readable without
+credentials. A joining server or a worker clones nothing.
 
-#### Default Argo CD manifest
+A joining server also compares its image's RKE2 with the version that the API server
+reports at `/version`. It stops if the image is newer. It skips the comparison when the
+API server does not answer. A worker does not compare.
 
-`argocd_manifest_url` and `argocd_manifest_sha256` have a default. It is the
-`argocd-bootstrap.yaml` of kube-platform release `stable-20261108`. A cluster needs no
-extra input. The hash must be 64 lowercase hex characters, and the URL must start with
-`https://`. The URL and the hash must always be changed together.
+If `gitops_platform_enabled` is false, the module does not fall back to the pinned repo.
+Set `gitops_platform_repo_url` when the first server needs Cilium or Argo CD. If it is not
+set, the plan fails with a message that names the input. The pinned default
+(`kube-platform` at `main`) applies only while the platform Application is enabled.
 
-The bootstrap Argo CD does not need to be current. After the first sync, Argo CD
-upgrades itself from the platform. The pin only sets the version that starts the cluster.
-
-To move to a newer platform release:
-
-1. Choose the release tag, for example `stable-20261108`.
-2. Download `argocd-bootstrap.yaml` from that release.
-3. Run `gh attestation verify argocd-bootstrap.yaml --repo bbaliyan/kube-platform`. This verifies where the file came from.
-4. Download the `argocd-bootstrap.yaml.sha256` asset from the same release.
-5. Set `argocd_manifest_url` to the release asset URL: `https://github.com/bbaliyan/kube-platform/releases/download/<tag>/argocd-bootstrap.yaml`.
-6. Set `argocd_manifest_sha256` to the first field of the `.sha256` file.
-
-A custom URL needs its own hash. If you change only one of the two, the first boot
-fails the hash comparison.
-
-Renovate does not update this pin, because it cannot compute the matching hash. Change
-the defaults by hand, in `node-bootstrap` and in each module that repeats them
-(`aws-control-plane`, `proxmox-control-plane`, `aws-cluster`, `proxmox-cluster`), when
-a newer bootstrap is needed.
+`argocd_manifest_url` and `argocd_manifest_sha256` are unused. `bootstrap.sh` does not
+download Argo CD any more. The inputs stay for one release and are then removed.
 
 ### Upgrade order
 
@@ -88,13 +79,12 @@ A first server probes `REJOIN_PROBE_ADDRESSES` for a live cluster before it star
 skips Cilium, the extra server manifests, Argo CD, the Applications and
 `genesis_apply_manifests`.
 
-1. Rebuild the node image without the baked Argo CD manifest.
-2. Move the module to the new major version.
-3. Keep the default `argocd_manifest_url` and `argocd_manifest_sha256`, or set your own.
+1. Rebuild the node image with git, and without a baked Cilium or Argo CD manifest.
+2. Move the module to the new version.
 
-The first server removes the baked `cilium.yaml` from the RKE2 manifests directory after
+The first server removes the copied `cilium.yaml` from the RKE2 manifests directory after
 Cilium is Ready. RKE2 applies every file in that directory again on each start. Without
-the removal, a restart would put the baked Cilium back after the platform upgraded it.
+the removal, a restart would put the boot Cilium back after the platform upgraded it.
 Removing the file does not remove Cilium from the cluster. If Cilium is not Ready within
 about 6 minutes, the file stays and the log shows a warning. The first server removes the
 file even when GitOps is off.
@@ -277,7 +267,7 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 ## Interface notes
 
 - `cni` defaults to `"cilium"`. It is the only variant verified on AlmaLinux 10. On a
-  genesis node, `bootstrap.sh` applies the Cilium manifest baked into the image, and
+  genesis node, `bootstrap.sh` applies the Cilium manifest from the platform ref, and
   `config.yaml` sets `disable: [rke2-cilium]` so RKE2's own Cilium chart never runs.
   `"default"` is for a consumer-supplied image that ships a different CNI.
 - `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command`, `trusted_ca_pem` and
