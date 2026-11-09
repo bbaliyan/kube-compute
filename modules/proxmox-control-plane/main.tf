@@ -14,7 +14,7 @@ locals {
 
   # Join address of every node but genesis. A single-target DNS name, distinct from
   # cluster_fqdn's round-robin api.* record. Genesis self-registers it through
-  # node-bootstrap's dns_self_register_* inputs as soon as it knows its own IP. The
+  # the dns-self-register boot step as soon as it knows its own IP. The
   # precondition on the VMs requires dns_server_address when control_plane_count > 1,
   # so this is a plain string with no dependency on any VM.
   genesis_dns_name     = local.has_domain ? "genesis.${local.dns_name}.${trimsuffix(var.cluster_domain, ".")}" : null
@@ -151,6 +151,26 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
 # The node orders itself: genesis publishes its dns-self-register record early in
 # first boot, and a sibling that resolves registration_address before that lands is
 # absorbed by bootstrap.sh's join-race retry loop, like RKE2's own join retries.
+module "boot_steps" {
+  for_each = { for i in range(var.control_plane_count) : tostring(i) => i }
+
+  source = "../proxmox-boot-steps"
+
+  cluster_name    = var.cluster_name
+  node_name       = local.control_plane_names[each.key]
+  node_fqdn_label = "cp-${each.key}"
+
+  dns_self_register_zone        = each.key == "0" && var.dns_server_address != null ? local.dns_zone : null
+  dns_self_register_record_name = each.key == "0" ? "genesis.${local.dns_name}" : null
+  dns_self_register_ttl         = each.key == "0" ? var.dns_record_ttl : 30
+  dns_server_address            = each.key == "0" ? var.dns_server_address : null
+  dns_server_port               = each.key == "0" ? var.dns_server_port : 53
+  dns_transport                 = each.key == "0" ? var.dns_transport : "udp"
+  tsig_key_name                 = each.key == "0" ? var.tsig_key_name : null
+  tsig_key_algorithm            = each.key == "0" ? var.tsig_key_algorithm : "hmac-sha256"
+  tsig_key_secret               = each.key == "0" ? var.tsig_key_secret : null
+}
+
 module "node_bootstrap" {
   for_each = { for i in range(var.control_plane_count) : tostring(i) => i }
 
@@ -183,28 +203,20 @@ module "node_bootstrap" {
   platform_extra_helm_parameters  = each.key == "0" ? var.platform_extra_helm_parameters : {}
   platform_helm_values_object     = each.key == "0" ? var.platform_helm_values_object : null
   extra_tags                      = var.extra_tags
-  iscsi_initiator_enabled         = true
   boot_scripts                    = var.boot_scripts
+  provider_steps                  = module.boot_steps[each.key].steps
+  provider_files                  = module.boot_steps[each.key].files
 
   genesis_apply_manifests = each.key == "0" ? var.genesis_apply_manifests : []
   extra_server_manifests  = each.key == "0" ? var.extra_server_manifests : {}
 
-  dns_self_register_zone        = each.key == "0" && var.dns_server_address != null ? local.dns_zone : null
-  dns_self_register_record_name = each.key == "0" ? "genesis.${local.dns_name}" : null
-  dns_self_register_ttl         = each.key == "0" ? var.dns_record_ttl : 30
-  dns_server_address            = each.key == "0" ? var.dns_server_address : null
-  dns_server_port               = each.key == "0" ? var.dns_server_port : 53
-  dns_transport                 = each.key == "0" ? var.dns_transport : "udp"
   # Same list this module's own VM network config (network_data_dhcp above)
   # uses — gives kubelet a resolv-conf with no search domain, avoiding a
   # collision between the node's own hostname-derived search domain and a
   # wildcard cluster DNS record (see node-bootstrap's dns_servers variable).
-  dns_servers        = var.dns_servers
-  tsig_key_name      = each.key == "0" ? var.tsig_key_name : null
-  tsig_key_algorithm = each.key == "0" ? var.tsig_key_algorithm : "hmac-sha256"
-  tsig_key_secret    = each.key == "0" ? var.tsig_key_secret : null
-  graceful_shutdown  = var.graceful_shutdown
-  os_auto_updates    = var.os_auto_updates
+  dns_servers       = var.dns_servers
+  graceful_shutdown = var.graceful_shutdown
+  os_auto_updates   = var.os_auto_updates
 }
 
 # Subsumes the old hostname-only snippet — hostname is now one key inside

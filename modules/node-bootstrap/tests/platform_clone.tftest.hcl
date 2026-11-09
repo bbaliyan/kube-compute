@@ -165,7 +165,7 @@ run "a_joining_server_needs_no_repo" {
 run "the_program_starts_with_a_tool_check_that_lists_every_missing_tool" {
   command = plan
   assert {
-    condition     = strcontains(local.bootstrap_program, "for tool in git curl getent ip awk sha256sum systemctl update-ca-trust; do\n  command -v \"$tool\" >/dev/null 2>&1 || MISSING_TOOLS=\"$MISSING_TOOLS $tool\"\ndone\n")
+    condition     = strcontains(local.bootstrap_program, "for tool in git curl getent ip awk systemctl update-ca-trust; do\n  command -v \"$tool\" >/dev/null 2>&1 || MISSING_TOOLS=\"$MISSING_TOOLS $tool\"\ndone\n")
     error_message = "bootstrap.sh must check every tool with command -v and collect the missing ones"
   }
   assert {
@@ -214,10 +214,17 @@ run "a_missing_rendered_file_stops_the_boot_with_one_line" {
   assert {
     condition = (
       strcontains(local.bootstrap_program, "echo \"kube-compute: $PLATFORM_REPO_URL at $PLATFORM_REVISION has no $1\" >&2")
-      && strcontains(local.bootstrap_program, "require_platform_file bootstrap/rendered/cilium.yaml")
-      && strcontains(local.bootstrap_program, "require_platform_file bootstrap/rendered/argocd.yaml")
+      && strcontains(local.bootstrap_program, "for required_file in $PLATFORM_REQUIRED_FILES; do")
     )
     error_message = "bootstrap.sh must stop, naming the repo, the ref and the path, when a rendered file is missing"
+  }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      strcontains(base64decode(f.content), "PLATFORM_REQUIRED_FILES='bootstrap/rendered/cilium.yaml bootstrap/rendered/argocd.yaml'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "node.env must list the rendered files a genesis node with Cilium and Argo CD requires"
   }
 }
 
@@ -239,6 +246,9 @@ run "argocd_is_applied_from_the_clone_after_ready" {
 
 run "the_rke2_skew_check_compares_the_image_with_the_platform_and_the_api_server" {
   command = plan
+  variables {
+    rejoin_probe_addresses = ["10.0.0.9"]
+  }
   assert {
     condition = (
       strcontains(local.bootstrap_program, "image=\"$(rke2 --version | awk 'NR == 1 {print $3}')\"")

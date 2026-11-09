@@ -200,6 +200,16 @@ locals {
 # agent process retries against the join URL, so no explicit depends_on on the
 # control plane's bootstrap is added either; the consumer's root module creates the
 # natural data dependency via var.registration_address.
+module "boot_steps" {
+  source = "../proxmox-boot-steps"
+
+  for_each = { for i in range(var.desired_count) : tostring(i) => i }
+
+  cluster_name    = var.cluster_name
+  node_name       = local.worker_names[each.key]
+  node_fqdn_label = "${var.pool_name}-${each.key}"
+}
+
 module "node_bootstrap" {
   source = "../node-bootstrap"
 
@@ -221,10 +231,11 @@ module "node_bootstrap" {
   # pod scheduled on it inherits the same node-search-domain collision).
   dns_servers = var.dns_servers
 
-  iscsi_initiator_enabled = true
-  graceful_shutdown       = var.graceful_shutdown
-  os_auto_updates         = var.os_auto_updates
-  boot_scripts            = var.boot_scripts
+  provider_steps    = module.boot_steps[each.key].steps
+  provider_files    = module.boot_steps[each.key].files
+  graceful_shutdown = var.graceful_shutdown
+  os_auto_updates   = var.os_auto_updates
+  boot_scripts      = var.boot_scripts
 }
 
 # Subsumes the old hostname-only snippet — hostname is now one key inside

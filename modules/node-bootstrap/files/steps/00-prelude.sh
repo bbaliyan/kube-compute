@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Runtime half of the RKE2 bootstrap. The image bakes the OS, the RKE2 binaries and the
+# tools. This program holds what only this node can do: join logic and the genesis steps.
+#
+# Terraform joins the step files in this directory that apply to the node's role, and
+# cloud-init writes the result to /opt/kube-compute/bootstrap.sh with its comment lines
+# removed to save space. A step that does not apply to the role is never in the file.
+# Per-cluster values reach the program as data, in node.env. A heredoc body in a step
+# must never start with "#", because the comment strip would remove that line.
+
+set -euo pipefail
+exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
+echo "kube-compute: bootstrap start $(date -Is)"
+
+MISSING_TOOLS=""
+for tool in git curl getent ip awk systemctl update-ca-trust; do
+  command -v "$tool" >/dev/null 2>&1 || MISSING_TOOLS="$MISSING_TOOLS $tool"
+done
+if [ -n "$MISSING_TOOLS" ]; then
+  echo "kube-compute: the image lacks these tools:$MISSING_TOOLS" >&2
+  exit 1
+fi
+
+KC=/opt/kube-compute
+# shellcheck disable=SC1091
+. "$KC/node.env"
+
+KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
+PLATFORM_DIR=/run/platform-ref
+
+# RKE2 needs the node's own IP for node-ip and, on a server, for tls-san.
+NODE_IP="$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')"
+if [ -z "$NODE_IP" ]; then
+  echo "kube-compute: could not determine this node's IP" >&2
+  exit 1
+fi

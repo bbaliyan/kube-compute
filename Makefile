@@ -17,7 +17,7 @@ SHELL := bash
 CHECKS    ?= /usr/share/kube-devenv/checks
 MODULES   := $(patsubst %/,%,$(wildcard modules/*/))
 TESTS     := $(wildcard modules/*/tests/*.tftest.hcl)
-BOOTSTRAP := modules/node-bootstrap/files/bootstrap.sh
+BOOTSTRAP := modules/node-bootstrap/files/steps
 BASE_REF  ?= $(shell git rev-parse --verify --quiet origin/main)
 PROVIDERS ?= proxmox aws
 
@@ -51,8 +51,8 @@ fmt:
 	tofu fmt -check -recursive
 
 lint-bootstrap:
-	bash -n $(BOOTSTRAP)
-	shellcheck -S warning $(BOOTSTRAP)
+	cat $(BOOTSTRAP)/*.sh | bash -n
+	cat $(BOOTSTRAP)/*.sh | shellcheck -S warning -s bash -
 
 lint-scripts:
 	bash -n scripts/*.sh tests/*.sh .githooks/pre-commit

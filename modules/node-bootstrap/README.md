@@ -19,19 +19,16 @@ to `depends_on`.
 ## User data
 
 `user_data` is the final user data of the node. It is `cloud_init_user_data`
-alone, or a MIME multipart/mixed document when shell-script parts run first:
-
-- `ssm_agent_enabled = true` adds a part that starts the AWS SSM Agent. The AWS
-  modules set it.
-- Each entry of `boot_scripts` becomes a part. The script sees `CLUSTER_NAME`,
-  `NODE_ROLE` (`control-plane` or `worker`) and `NODE_NAME`.
+alone, or a MIME multipart/mixed document when shell-script parts run first.
+Each entry of `boot_scripts` becomes a part. The script sees `CLUSTER_NAME`,
+`NODE_ROLE` (`control-plane` or `worker`) and `NODE_NAME`.
 
 cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
 With no parts, `user_data` is the plain cloud-config.
 
 The image must already hold OS prep, the RKE2 binaries, the SELinux policy, the kernel
-modules, the guest agent and these tools: git, curl, getent, ip, awk, sha256sum,
-systemctl and update-ca-trust. Build it with kube-images. The image holds neither Cilium
+modules, the guest agent and these tools: git, curl, getent, ip, awk, systemctl
+and update-ca-trust. Build it with kube-images. The image holds neither Cilium
 nor Argo CD: the first server reads both from the platform ref (see below).
 This module renders only the per-cluster identity, secrets and join logic.
 Every provider module calls it: `aws-control-plane`, `aws-static-node`, `aws-node-pool`,
@@ -44,7 +41,7 @@ Cilium and Argo CD. It reads both from the platform repo, so one value picks the
 version of both: `gitops_platform_repo_url` at `gitops_platform_revision`. This is the
 same ref that the platform Application syncs.
 
-On the first server, before RKE2 starts, `bootstrap.sh` does these steps:
+On the first server, before RKE2 starts, the boot program does these steps:
 
 1. It checks that the image has the tools listed above. If tools are missing, it names all of them in one message and stops.
 2. It clones the platform ref into `/run/platform-ref`. It tries 5 times, 5 seconds apart.
@@ -100,30 +97,45 @@ signal, no provisioner output, and no `bootstrap_log_path`-style output.
 
 ## The program travels in user data
 
-`bootstrap.sh` lives at `files/bootstrap.sh`. This module writes it to
-`/opt/kube-compute/bootstrap.sh` (0755) as one `write_files` entry, and `runcmd` runs it.
-It removes the comment lines first, to save space. A line whose first non-blank
-character is `#` is dropped, except the shebang. A heredoc body line in the script
-must therefore never start with `#`. A test fails if one does.
+The boot program is a list of step files in `files/steps/`. The module lists them in
+`boot_step_catalog`, each with the condition that selects it. It joins the steps that
+apply to the node's role and writes the result to `/opt/kube-compute/bootstrap.sh`
+(0755) as one `write_files` entry. `runcmd` runs it. A step that does not apply to the
+role is never in the file:
 
-The copy in user data replaces any `bootstrap.sh` that an older image still bakes. A
-change to the script needs no image rebuild.
+- Core steps depend on the role. A server runs `node-config-server`, the start and
+  wait steps for servers and the skew check. An agent runs `node-config-agent`,
+  `start-agent` and `wait-ready-agent`.
+- Genesis steps (`platform-clone`, `genesis-cilium-manifest`, `genesis-cilium-handoff`,
+  `genesis-argocd`, `genesis-extra-manifests`, `genesis-apply-manifests`) are in the
+  program only on the first server, and only when the feature is on.
+- Provider steps are not here. The provider modules pass them in `provider_steps` and
+  `provider_files`: DNS self-registration and the iSCSI initiator name on Proxmox, SSM
+  Agent and the provider ID on AWS.
 
-The module also writes the two files the program reads:
+The `boot_steps` output lists every step in the order it runs. The provider modules
+assert the exact list in their tests, so a step of one provider cannot reach the other.
 
-- **`node.env`** (0644) — configuration. Every key is always defined, empty where a
-  role does not use it, so the program runs under `set -u`.
-- **`secrets.env`** (0600) — the join tokens and the TSIG secret, unchanged.
+The module removes the comment lines first, to save space. A line whose first non-blank
+character is `#` is dropped, except the shebang. A step must use no heredoc, because a
+body line that starts with `#` would be dropped. A test fails if a step has one.
 
-Plus one fragment, `rke2-config-static.yaml`, holding everything in `config.yaml`
-knowable before the node boots: labels, taints, extra SANs, the server flags,
-kubelet's resolv-conf pointer. Which blocks a role gets is decided here; the program
-appends the fragment to the few lines only the node itself can produce (its own IP,
-the fetched agent token, the rejoin-probe result).
+The module also writes the files the program reads:
+
+- **`/etc/rancher/rke2/config.yaml`** (0600) — the RKE2 config known at plan time: the
+  join server and tokens, labels, taints, extra SANs, the server flags and kubelet's
+  resolv-conf pointer. cloud-init writes it. The program adds only what the node alone
+  knows, as the drop-in `config.yaml.d/20-node.yaml`: its own IP, the server that the
+  rejoin probe found and, on an agent, the fetched token.
+- **`node.env`** (0644) — configuration for the program. Every key is always defined,
+  empty where a role does not use it, so the program runs under `set -u`.
+- **`secrets.env`** (0600), on an agent only — the agent token fetch command.
+
+The trusted CA is a `write_files` entry and a `runcmd` entry (`update-ca-trust extract`).
+There is no registry mirror check at boot.
 
 EC2 limits user data to 16384 bytes after gzip. A test renders a heavy AWS genesis
-node and asserts it stays at least 2048 bytes under that limit. A test also asserts the
-program references every key `node.env` defines.
+node and asserts it stays at least 1024 bytes under that limit.
 
 ## Genesis-apply manifests
 
@@ -198,16 +210,16 @@ Kubelet copies the search domains of the node's `/etc/resolv.conf` into every po
 
 If you set `dns_servers`, the module writes a kubelet `resolv.conf` with those servers and no `search` line. Every pod on the node then skips the search domains. If you do not set it, kubelet uses the node's own `/etc/resolv.conf`.
 
-## `aws_provider_id`
+## Provider steps
 
-Registers the node with providerID `aws:///<zone>/<instance-id>` and labels it
-`node.kubernetes.io/instance-type`, written as an RKE2 `config.yaml.d` drop-in from
-instance metadata before the bootstrap program starts RKE2. cluster-autoscaler and
-the AWS cloud controller manager find a node's instance through the providerID. The
-label is otherwise set by a cloud controller manager's node controller, which RKE2's
-is not here (`disable-cloud-controller`) and kube-platform's AWS one does not run.
-Off by default, since turning it on changes the payload of existing nodes. See
-"A change to the user data of a running node".
+`provider_steps` and `provider_files` carry what only one provider needs. This module
+holds no AWS or Proxmox logic. `aws-boot-steps` builds the AWS steps: SSM Agent and,
+with `aws_provider_id`, the providerID and the instance-type label. cluster-autoscaler
+and the AWS cloud controller manager find a node's instance through the providerID.
+`proxmox-boot-steps` builds the Proxmox steps: the iSCSI initiator name, and DNS
+self-registration with `nsupdate` on the first server. A step is a name and cloud-init
+`runcmd` commands. A provider file is a `write_files` entry that the commands read.
+The provider steps run first. A failed `runcmd` command does not stop the later ones.
 
 ## Resources reserved for the node
 
@@ -264,14 +276,13 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 ## Interface notes
 
 - `cni` defaults to `"cilium"`. It is the only variant verified on AlmaLinux 10. On a
-  genesis node, `bootstrap.sh` applies the Cilium manifest from the platform ref, and
+  genesis node, the boot program applies the Cilium manifest from the platform ref, and
   `config.yaml` sets `disable: [rke2-cilium]` so RKE2's own Cilium chart never runs.
   `"default"` is for a consumer-supplied image that ships a different CNI.
-- `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command`, `trusted_ca_pem` and
-  `tsig_key_secret` are `sensitive = true`. They reach the node only in the base64
-  `write_files` of the payload, such as the 0600 `/opt/kube-compute/secrets.env`.
+- `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command` and `trusted_ca_pem`
+  are `sensitive = true`. They reach the node only in the base64 `write_files` of the
+  payload, such as the 0600 `/etc/rancher/rke2/config.yaml`.
   `server-join` receives `cluster_token` the same way `server-init` does. Only `worker`
   runs `agent_token_fetch_command`, to read the agent token from the provider's secret store.
 - `aws-node-pool` sets `set_hostname = false`, because every member of a pool shares one
-  rendered payload. The AWS modules set `ssm_agent_enabled = true`, so the MIME
-  multipart document carries the SSM Agent script. See "User data" above.
+  rendered payload.
