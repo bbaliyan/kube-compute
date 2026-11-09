@@ -29,7 +29,9 @@ This matches the AWS modules, where the first node probes `registration_address`
 
 The first node repeats the probe for about 60 seconds. A slow DNS answer or a booting peer then does not hide the live cluster. The node writes the IP that answered into its join address, not the name.
 
-The probe needs the `bootstrap.sh` of this version in the node image. An older image probes a name once, as an IP, and fails. Rebuild the image before you rely on this.
+The probe needs the `bootstrap.sh` of this version in the node image. An older image runs one `curl` against the name. That `curl` does not try each IP and does not skip the node's own address. Rebuild the image before you rely on this.
+
+The wait costs time on every fresh multi-node boot, not only on a replacement. A new cluster has no live peer, so the first node waits the full 60 seconds before it starts etcd. The wait is bounded. A pass can run past 60 seconds, because a stale IP costs up to 10 seconds and a resolver can time out, but it cannot loop forever.
 
 If no peer answers, the first node starts a new cluster. This happens when you replace the first node while every peer is down. Replace the first node last, with every peer healthy.
 

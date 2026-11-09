@@ -274,3 +274,17 @@ run "single_node_with_dns_has_no_probe_address" {
     error_message = "a single node has no peers, so genesis must carry no probe address even with DNS registration"
   }
 }
+
+# The empty probe list for a multi-node cluster is only a safeguard in main.tf: this
+# precondition already stops a multi-node cluster with no DNS server, so a genesis
+# with no probe address cannot ship.
+run "multi_node_without_dns_server_is_rejected" {
+  command = plan
+  variables {
+    control_plane_count  = 3
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+  }
+
+  expect_failures = [proxmox_virtual_environment_vm.control_plane]
+}

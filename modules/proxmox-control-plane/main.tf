@@ -31,6 +31,7 @@ locals {
   genesis_rejoin_probe_addresses = (
     var.control_plane_count == 1 ? [] :
     local.static_ips ? [for cidr in slice(var.control_plane_ip_addresses, 1, var.control_plane_count) : split("/", cidr)[0]] :
+    # Safeguard: the VM precondition already requires a DNS server when count > 1.
     local.dns_registration_enabled ? [local.cluster_fqdn] : []
   )
 
