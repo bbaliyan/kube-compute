@@ -51,7 +51,7 @@ On the first server, before RKE2 starts, `bootstrap.sh` does these steps:
    - For a branch or a tag, it runs `git clone --depth 1 --branch`.
    - For a 40-digit hex commit, it runs `git clone --filter=blob:none --no-checkout` and then `git checkout`.
 3. If `bootstrap/rendered/cilium.yaml` or `bootstrap/rendered/argocd.yaml` is missing, it stops with one line that names the repo, the ref and the path.
-4. It reads `k8sVersion` from `platform/platform-versions/values.yaml`. If the RKE2 in the image is newer, it stops. An equal or older RKE2 is fine.
+4. It reads `k8sVersion` from `platform/platform-versions/values.yaml`. If the minor version of the RKE2 in the image is newer, it stops. A newer patch of the same minor version is fine.
 5. With `cni = "cilium"`, it copies `cilium.yaml` into the RKE2 manifests directory.
 6. After the node is Ready and CoreDNS is up, it applies `argocd.yaml` with server-side apply.
 7. It waits for the Argo CD workloads to roll out.
@@ -61,7 +61,7 @@ The node needs a route to the repo at first boot, and the repo must be readable 
 credentials. A joining server or a worker clones nothing.
 
 A joining server also compares its image's RKE2 with the version that the API server
-reports at `/version`. It stops if the image is newer. It skips the comparison when the
+reports at `/version`. It stops if the minor version of the image is newer. It skips the comparison when the
 API server does not answer. A worker does not compare.
 
 If `gitops_platform_enabled` is false, the module does not fall back to the pinned repo.

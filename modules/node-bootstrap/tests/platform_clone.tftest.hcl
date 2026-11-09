@@ -243,6 +243,7 @@ run "the_rke2_skew_check_compares_the_image_with_the_platform_and_the_api_server
     condition = (
       strcontains(local.bootstrap_program, "image=\"$(rke2 --version | awk 'NR == 1 {print $3}')\"")
       && strcontains(local.bootstrap_program, "sort -V | tail -n 1")
+      && strcontains(local.bootstrap_program, "local image image_minor target_minor newest")
       && strcontains(local.bootstrap_program, "check_rke2_skew \"$PLATFORM_K8S_VERSION\"")
       && strcontains(local.bootstrap_program, "awk '$1 == \"k8sVersion:\" {print $2}' \"$PLATFORM_DIR/platform/platform-versions/values.yaml\"")
       && strcontains(local.bootstrap_program, "check_rke2_skew \"$API_VERSION\" \"the API server\"")
