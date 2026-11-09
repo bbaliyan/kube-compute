@@ -22,8 +22,6 @@ override_data {
 }
 
 variables {
-  argocd_manifest_url         = "https://example.invalid/argocd-bootstrap.yaml"
-  argocd_manifest_sha256      = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
   os_image_ami_id             = "ami-0123456789abcdef0"
   cluster_name                = "heavy"
   aws_region                  = "eu-west-1"

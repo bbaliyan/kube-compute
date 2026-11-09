@@ -4,13 +4,11 @@
 # body that starts with "#". These tests fail if the program ever has one.
 
 variables {
-  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
-  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  cluster_name           = "test"
-  node_name              = "test-cp-0"
-  node_role              = "server-init"
-  cluster_token          = "SUPERSECRETTOKEN123"
-  cluster_agent_token    = "SUPERSECRETAGENT456"
+  cluster_name        = "test"
+  node_name           = "test-cp-0"
+  node_role           = "server-init"
+  cluster_token       = "SUPERSECRETTOKEN123"
+  cluster_agent_token = "SUPERSECRETAGENT456"
 }
 
 run "heredoc_bodies_have_no_comment_looking_lines" {

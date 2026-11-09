@@ -40,28 +40,6 @@ variable "gitops_platform_revision_override" {
   default     = null
 }
 
-variable "argocd_manifest_url" {
-  description = "Unused. The first server applies bootstrap/rendered/argocd.yaml from the platform ref (gitops_platform_repo_url at gitops_platform_revision). The input stays for one release so callers do not break, then it is removed."
-  type        = string
-  default     = "https://github.com/bbaliyan/kube-platform/releases/download/stable-20261108/argocd-bootstrap.yaml"
-
-  validation {
-    condition     = var.argocd_manifest_url == null || startswith(coalesce(var.argocd_manifest_url, "x"), "https://")
-    error_message = "argocd_manifest_url must start with https://."
-  }
-}
-
-variable "argocd_manifest_sha256" {
-  description = "Unused. See argocd_manifest_url."
-  type        = string
-  default     = "e18c81805a4d299e93003c16662b889a05e075cc969a11098e54a4dabceb234d"
-
-  validation {
-    condition     = var.argocd_manifest_sha256 == null || can(regex("^[0-9a-f]{64}$", coalesce(var.argocd_manifest_sha256, "")))
-    error_message = "argocd_manifest_sha256 must be 64 lowercase hex characters."
-  }
-}
-
 variable "gitops_workloads_repo_url" {
   description = "Optional user-defined workloads Application source repo, independent of the platform Application (no shared ordering). Null (the default) = no workloads Application."
   type        = string

@@ -156,7 +156,7 @@ genesis node, so platform bootstrap manifests never race on more than one server
 
 ## Cilium and Argo CD manifests
 
-The genesis node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes `bootstrap/rendered/cilium.yaml` and `bootstrap/rendered/argocd.yaml` from the clone. The AMI holds neither. The AMI must hold git. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` are unused and will be removed. See [`node-bootstrap`](../node-bootstrap/README.md).
+The genesis node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes `bootstrap/rendered/cilium.yaml` and `bootstrap/rendered/argocd.yaml` from the clone. The AMI holds neither. The AMI must hold git. See [`node-bootstrap`](../node-bootstrap/README.md).
 
 ## Container Network Interface (CNI)
 
