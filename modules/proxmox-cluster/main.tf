@@ -44,8 +44,6 @@ module "control_plane" {
   gitops_platform_enabled           = var.gitops_platform_enabled
   gitops_platform_repo_url_override = var.gitops_platform_repo_url_override
   gitops_platform_revision_override = var.gitops_platform_revision_override
-  argocd_manifest_url               = var.argocd_manifest_url
-  argocd_manifest_sha256            = var.argocd_manifest_sha256
   gitops_workloads_repo_url         = var.gitops_workloads_repo_url
   gitops_workloads_revision         = var.gitops_workloads_revision
   gitops_workloads_path             = var.gitops_workloads_path

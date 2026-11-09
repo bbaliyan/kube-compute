@@ -10,7 +10,6 @@ A good upgrade plan has only moves.
 2. The released module (`SM_OLD_REF`, default `v0.9.0`) is cloned from the registry mirror.
 3. This branch is built into the same layout with `scripts/release-split.sh`.
 4. For each case, both trees get `root/emulator.tf` and the case inputs, as Terragrunt would add them.
-   Only the branch tree gets `cases/new-side.auto.tfvars`: the inputs that the released module does not declare.
 5. The released tree is applied. The branch tree is planned on that state.
 6. `changes.jq` lists each move, update, create, delete and replace.
 7. The check fails on an update, create, delete or replace that `allowed/<case>.txt` does not list. Each case lists its own changes, so a regression in one shape fails that case.

@@ -153,7 +153,6 @@ state-migration/%: state-migration-seed
 	  cp $(SM_DIR)/root/*.tf $(SM_WORK)/$*/$$side/; \
 	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/common.auto.tfvars >$(SM_WORK)/$*/$$side/common.auto.tfvars; \
 	  sed -f $(SM_WORK)/seed.sed $(SM_DIR)/cases/$*.tfvars >$(SM_WORK)/$*/$$side/terraform.tfvars; \
-	  [ $$side = old ] || cp $(SM_DIR)/cases/new-side.auto.tfvars $(SM_WORK)/$*/$$side/; \
 	  $(if $(SM_NEW_SED),[ $$side = old ] || sed -i -e '$(SM_NEW_SED)' $(SM_WORK)/$*/new/*.tf;) \
 	  $(call sm_time,$* $$side init) $(sm_aws) tofu -chdir=$(SM_WORK)/$*/$$side init -input=false -backend-config=path=$(SM_WORK)/$*/terraform.tfstate >$(SM_WORK)/$*/$$side-init.log; \
 	done

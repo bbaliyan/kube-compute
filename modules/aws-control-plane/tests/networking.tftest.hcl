@@ -11,11 +11,9 @@ mock_provider "aws" {
 }
 
 variables {
-  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
-  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  os_image_ami_id        = "ami-0123456789abcdef0"
-  aws_region             = "eu-west-1"
-  allowed_ingress_cidrs  = ["10.0.0.0/8"]
+  os_image_ami_id       = "ami-0123456789abcdef0"
+  aws_region            = "eu-west-1"
+  allowed_ingress_cidrs = ["10.0.0.0/8"]
 }
 
 run "explicit_subnet_and_arm64" {

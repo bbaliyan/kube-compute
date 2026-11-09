@@ -69,9 +69,6 @@ Set `gitops_platform_repo_url` when the first server needs Cilium or Argo CD. If
 set, the plan fails with a message that names the input. The pinned default
 (`kube-platform` at `main`) applies only while the platform Application is enabled.
 
-`argocd_manifest_url` and `argocd_manifest_sha256` are unused. `bootstrap.sh` does not
-download Argo CD any more. The inputs stay for one release and are then removed.
-
 ### Upgrade order
 
 A first server probes `REJOIN_PROBE_ADDRESSES` for a live cluster before it starts etcd

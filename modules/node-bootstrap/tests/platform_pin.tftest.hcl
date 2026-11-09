@@ -10,13 +10,11 @@
 # cloud-init payload.
 
 variables {
-  argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
-  argocd_manifest_sha256 = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
-  cluster_name           = "test"
-  node_name              = "test-cp-0"
-  node_role              = "server-init"
-  cluster_token          = "tok"
-  cluster_agent_token    = "agenttok"
+  cluster_name        = "test"
+  node_name           = "test-cp-0"
+  node_role           = "server-init"
+  cluster_token       = "tok"
+  cluster_agent_token = "agenttok"
 }
 
 run "null_repo_url_falls_back_to_the_pin" {

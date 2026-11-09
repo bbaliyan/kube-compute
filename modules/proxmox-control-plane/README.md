@@ -131,7 +131,7 @@ secrets, and join logic, as a cloud-init payload rendered by `node-bootstrap`.
 Bootstrap runs asynchronously after `tofu apply` returns — tail
 `/var/log/kube-compute-bootstrap.log` on the node to watch it.
 
-The first control-plane node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes the Cilium and Argo CD manifests from `bootstrap/rendered/` in the clone. The template holds neither, but it must hold git. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` are unused and will be removed. See [`node-bootstrap`](../node-bootstrap/README.md).
+The first control-plane node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes the Cilium and Argo CD manifests from `bootstrap/rendered/` in the clone. The template holds neither, but it must hold git. See [`node-bootstrap`](../node-bootstrap/README.md).
 
 No check compares the template's contents with this module's inputs. The template's name is the documentation.
 

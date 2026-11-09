@@ -19,8 +19,6 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   # so nothing here talks to a real API.
   command = apply
   variables {
-    argocd_manifest_url        = "https://example.invalid/argocd-bootstrap.yaml"
-    argocd_manifest_sha256     = "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4"
     cluster_name               = "example"
     proxmox_node               = "pve"
     vm_cores                   = 4
