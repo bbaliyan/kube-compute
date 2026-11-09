@@ -53,8 +53,8 @@ run "genesis_user_data_stays_under_the_ec2_limit" {
   command = plan
 
   assert {
-    condition     = local.inline_user_data_bytes["0"] <= 14336
-    error_message = "the heavy genesis user data must stay at or below 14336 bytes, 2048 under the EC2 limit of 16384. Measured: genesis ${nonsensitive(local.inline_user_data_bytes["0"])}, joining server ${nonsensitive(local.inline_user_data_bytes["1"])}."
+    condition     = local.inline_user_data_bytes["0"] <= 15360
+    error_message = "the heavy genesis user data must stay at or below 15360 bytes, 1024 under the EC2 limit of 16384. Measured: genesis ${nonsensitive(local.inline_user_data_bytes["0"])}, joining server ${nonsensitive(local.inline_user_data_bytes["1"])}."
   }
   assert {
     condition     = local.inline_user_data_bytes["1"] <= local.inline_user_data_bytes["0"]

@@ -44,12 +44,23 @@ locals {
 
   is_server = contains(["server-init", "server-join"], var.node_role)
 
-  # Whether bootstrap.sh applies the Cilium manifest baked into the image at
-  # /opt/kube-compute/manifests/, and whether it downloads and applies
-  # kube-platform's Argo CD manifest. This module renders neither manifest: Argo CD
-  # is too big for Proxmox's 1 MiB cicustom snippet cap.
+  # Whether bootstrap.sh applies the Cilium manifest and the Argo CD manifest. It
+  # takes both from bootstrap/rendered/ in a clone of the platform ref. This module
+  # renders neither: Argo CD is too big for Proxmox's 1 MiB cicustom snippet cap.
   render_cilium = var.cni == "cilium" && var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
+
+  # The genesis node clones the platform ref when it needs either manifest. With
+  # gitops_platform_enabled = false the pinned repo is not used: the caller names the
+  # repo, because a cluster that opted out of the platform should not silently
+  # fetch from the public default. An empty URL fails the precondition on the outputs.
+  platform_clone_needed = local.render_cilium || local.render_argocd
+  boot_platform_repo_url = !local.platform_clone_needed ? "" : (
+    var.gitops_platform_enabled ? local.effective_gitops_platform_repo_url : (
+      var.gitops_platform_repo_url != null ? var.gitops_platform_repo_url : ""
+    )
+  )
+  boot_platform_revision = local.platform_clone_needed ? local.effective_gitops_platform_revision : ""
 
   # Genesis-only, same as render_cilium/render_argocd — but deliberately NOT
   # gated on argocd_needed/render_argocd: an arbitrary genesis-apply manifest
@@ -359,8 +370,8 @@ locals {
     TSIG_KEY_NAME                 = var.tsig_key_name != null ? var.tsig_key_name : ""
     TSIG_KEY_ALGORITHM            = var.tsig_key_algorithm
     ARGOCD_NEEDED                 = local.render_argocd ? "1" : "0"
-    ARGOCD_MANIFEST_URL           = local.render_argocd && var.argocd_manifest_url != null ? var.argocd_manifest_url : ""
-    ARGOCD_MANIFEST_SHA256        = local.render_argocd && var.argocd_manifest_sha256 != null ? var.argocd_manifest_sha256 : ""
+    PLATFORM_REPO_URL             = local.boot_platform_repo_url
+    PLATFORM_REVISION             = local.boot_platform_revision
     PLATFORM_APP_ENABLED          = local.platform_app_enabled ? "1" : "0"
     WORKLOADS_APP_ENABLED         = local.workloads_app_enabled ? "1" : "0"
     # Space-separated because the program word-splits it. The genesis_apply_manifests
@@ -423,9 +434,8 @@ locals {
   # operator-supplied manifest, a token containing a colon can never break
   # the surrounding YAML), and lets the whole document be safely produced by
   # yamlencode() rather than a text template. Cilium/Argo CD's own manifests
-  # are NOT among these entries — kube-images bakes them directly onto the
-  # template at /opt/kube-compute/manifests/, and bootstrap.sh reads them
-  # from there; embedding Argo CD's ~1.9 MB manifest here would exceed Proxmox's
+  # are NOT among these entries: bootstrap.sh reads them from a clone of the
+  # platform ref. Embedding Argo CD's ~2 MB manifest here would exceed Proxmox's
   # 1 MiB cicustom snippet cap.
   write_files = concat(
     [

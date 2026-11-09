@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# The Argo CD manifest is downloaded by bootstrap.sh at first boot. This module
-# only passes its URL and sha256 on, as data in node.env, and refuses to render
-# a first server that would have nothing to download or nothing to verify with.
-# Both inputs default to a pinned kube-platform release.
+# bootstrap.sh no longer downloads Argo CD. It applies bootstrap/rendered/argocd.yaml
+# from the platform ref (see platform_clone.tftest.hcl). The argocd_manifest_url and
+# argocd_manifest_sha256 inputs stay for one release so callers do not break; the
+# next ticket removes them. These tests lock in that nothing uses them and that
+# they still validate until then.
 
 variables {
   cluster_name        = "test"
@@ -12,69 +13,34 @@ variables {
   cluster_agent_token = "agenttok"
 }
 
-run "url_and_hash_reach_node_env" {
+run "the_inputs_no_longer_reach_node_env_or_the_program" {
   command = plan
   variables {
     argocd_manifest_url    = "https://example.invalid/releases/v1/argocd-bootstrap.yaml"
     argocd_manifest_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   }
   assert {
-    condition = anytrue([
+    condition = !anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "ARGOCD_MANIFEST_URL='https://example.invalid/releases/v1/argocd-bootstrap.yaml'")
-      && strcontains(base64decode(f.content), "ARGOCD_MANIFEST_SHA256='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'")
-      if f.path == "/opt/kube-compute/node.env"
+      strcontains(base64decode(f.content), "example.invalid") || strcontains(base64decode(f.content), "ARGOCD_MANIFEST")
     ])
-    error_message = "node.env must carry the Argo CD manifest URL and sha256 for bootstrap.sh"
+    error_message = "no payload file may carry the Argo CD manifest URL or sha256 any more"
   }
-}
-
-run "defaults_pass_validation_and_reach_node_env" {
-  command = plan
   assert {
-    condition = anytrue([
-      for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "ARGOCD_MANIFEST_URL='https://github.com/bbaliyan/kube-platform/releases/download/stable-20261108/argocd-bootstrap.yaml'")
-      && strcontains(base64decode(f.content), "ARGOCD_MANIFEST_SHA256='e18c81805a4d299e93003c16662b889a05e075cc969a11098e54a4dabceb234d'")
-      if f.path == "/opt/kube-compute/node.env"
-    ])
-    error_message = "with no manifest input, node.env must carry the pinned default URL and sha256"
+    condition     = !strcontains(local.bootstrap_program, "ARGOCD_MANIFEST") && !strcontains(local.bootstrap_program, "mktemp")
+    error_message = "bootstrap.sh must not download the Argo CD manifest"
   }
 }
 
-run "first_server_with_gitops_rejects_null_inputs" {
+run "first_server_with_gitops_accepts_null_inputs" {
   command = plan
   variables {
     argocd_manifest_url    = null
     argocd_manifest_sha256 = null
   }
-  expect_failures = [output.cloud_init_user_data, output.user_data]
-}
-
-run "first_server_without_gitops_needs_neither" {
-  command = plan
-  variables {
-    gitops_platform_enabled   = false
-    gitops_workloads_repo_url = null
-    argocd_manifest_url       = null
-    argocd_manifest_sha256    = null
-  }
   assert {
     condition     = output.node_name == "test-cp-0"
-    error_message = "a cluster without GitOps must still render without the Argo CD manifest inputs"
-  }
-}
-
-run "joining_server_needs_neither" {
-  command = plan
-  variables {
-    node_role              = "server-join"
-    argocd_manifest_url    = null
-    argocd_manifest_sha256 = null
-  }
-  assert {
-    condition     = output.node_name == "test-cp-0"
-    error_message = "only the first server downloads the Argo CD manifest"
+    error_message = "the first server must render without the unused Argo CD manifest inputs"
   }
 }
 
