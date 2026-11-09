@@ -105,6 +105,12 @@ resource "aws_iam_instance_profile" "node" {
   tags        = local.common_tags
 }
 
+module "boot_steps" {
+  source = "../aws-boot-steps"
+
+  aws_provider_id = var.aws_provider_id
+}
+
 # One render per node, which is what lets set_hostname stay true here: an ASG's
 # members share a single render and so cannot each carry a distinct hostname.
 module "node_bootstrap" {
@@ -124,11 +130,10 @@ module "node_bootstrap" {
   trusted_ca_in_image       = var.trusted_ca_in_image
   registry_mirror_url       = var.registry_mirror_url
   dns_servers               = var.dns_servers
-  aws_provider_id           = var.aws_provider_id
+  provider_steps            = module.boot_steps.steps
   graceful_shutdown         = var.graceful_shutdown
   os_auto_updates           = var.os_auto_updates
   boot_scripts              = var.boot_scripts
-  ssm_agent_enabled         = true
 }
 
 # No depends_on: RKE2's agent retries its join indefinitely, so a worker booting

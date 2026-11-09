@@ -49,14 +49,14 @@ variable "control_plane_taint" {
 }
 
 variable "cluster_token" {
-  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (no existing secret store to fetch a server token from). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env, sourced by the bootstrap script, never into config.yaml's world-readable siblings."
+  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (no existing secret store to fetch a server token from). Sensitive: written into the 0600 /etc/rancher/rke2/config.yaml of the cloud-init payload."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "cluster_agent_token" {
-  description = "Separate shared secret accepted only from agents (rke2 config.yaml's agent-token:) — a worker presenting this value can join as an agent but never as a server/etcd member. Only meaningful for node_role server-init (server-join callers omit it in every provider module checked). Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
+  description = "Separate shared secret accepted only from agents (rke2 config.yaml's agent-token:) — a worker presenting this value can join as an agent but never as a server/etcd member. Only meaningful for node_role server-init (server-join callers omit it in every provider module checked). Sensitive: written into the 0600 /etc/rancher/rke2/config.yaml of the cloud-init payload."
   type        = string
   default     = null
   sensitive   = true
@@ -225,89 +225,10 @@ variable "extra_tags" {
   default     = {}
 }
 
-variable "dns_self_register_zone" {
-  description = "DNS zone (FQDN, trailing dot, e.g. 'lan.') the genesis node self-registers a single-target A record into via RFC2136/nsupdate, as soon as it knows its own IP. Null/empty (the default) disables self-registration entirely — every dns_self_register_*/dns_server_*/tsig_* variable is then ignored. Only meaningful for node_role = 'server-init'; ignored for server-join and worker."
-  type        = string
-  default     = null
-}
-
-variable "dns_self_register_record_name" {
-  description = "Record name, relative to dns_self_register_zone (e.g. 'genesis.my-cluster' for zone 'example.test.' registers 'genesis.my-cluster.example.test.'). Required when dns_self_register_zone is set; ignored otherwise."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.dns_self_register_record_name != null
-    error_message = "dns_self_register_record_name is required when dns_self_register_zone is set."
-  }
-}
-
-variable "dns_self_register_ttl" {
-  description = "TTL in seconds for the self-registered record. Only meaningful when dns_self_register_zone is set. Kept low by default: this record is republished on every apply via authoritative RFC2136 update, but a downstream caching resolver (e.g. a LAN router forwarding to the authoritative server) has no way to know that and keeps serving whatever it last cached for up to this TTL — on a reused cluster/record name that stale window directly delays every joining node."
-  type        = number
-  default     = 30
-}
-
-variable "dns_server_address" {
-  description = "RFC2136 DNS server address the genesis node sends its nsupdate request to. Required when dns_self_register_zone is set; ignored otherwise."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.dns_server_address != null
-    error_message = "dns_server_address is required when dns_self_register_zone is set."
-  }
-}
-
-variable "dns_server_port" {
-  description = "RFC2136 DNS server port. Only meaningful when dns_self_register_zone is set."
-  type        = number
-  default     = 53
-}
-
 variable "dns_servers" {
   description = "Resolver IPs for kubelet and pods, for example the list your VM network config uses. Null or empty (the default) leaves kubelet on the node's own /etc/resolv.conf. A list writes a kubelet resolv.conf with no search domain. See the README, section \"DNS search domains\"."
   type        = list(string)
   default     = null
-}
-
-variable "dns_transport" {
-  description = "Transport nsupdate uses to reach dns_server_address: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. Only meaningful when dns_self_register_zone is set."
-  type        = string
-  default     = "udp"
-  validation {
-    condition     = contains(["udp", "tcp", "udp4", "udp6", "tcp4", "tcp6"], var.dns_transport)
-    error_message = "dns_transport must be one of: udp, tcp, udp4, udp6, tcp4, tcp6."
-  }
-}
-
-variable "tsig_key_name" {
-  description = "TSIG key name authorizing the nsupdate request. Required when dns_self_register_zone is set; ignored otherwise."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.tsig_key_name != null
-    error_message = "tsig_key_name is required when dns_self_register_zone is set."
-  }
-}
-
-variable "tsig_key_algorithm" {
-  description = "TSIG key algorithm (e.g. 'hmac-sha256'). Only meaningful when dns_self_register_zone is set."
-  type        = string
-  default     = "hmac-sha256"
-}
-
-variable "tsig_key_secret" {
-  description = "Base64-encoded TSIG key secret. Required when dns_self_register_zone is set; ignored otherwise. Sensitive: written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env, consumed by a 0600 keyfile the bootstrap script removes immediately after nsupdate."
-  type        = string
-  default     = null
-  sensitive   = true
-
-  validation {
-    condition     = (var.dns_self_register_zone == null || var.dns_self_register_zone == "") || var.tsig_key_secret != null
-    error_message = "tsig_key_secret is required when dns_self_register_zone is set."
-  }
 }
 
 variable "genesis_apply_manifests" {
@@ -332,18 +253,6 @@ variable "genesis_apply_manifests" {
     condition     = alltrue([for m in var.genesis_apply_manifests : !contains(split("/", m.path), "..")])
     error_message = "genesis_apply_manifests: a path must not contain a .. segment."
   }
-}
-
-variable "iscsi_initiator_enabled" {
-  description = "Write a deterministic iSCSI InitiatorName (iqn.2026.lan.<cluster_name>:<node_fqdn_label, or node_name if unset>) to /etc/iscsi/initiatorname.iscsi and restart iscsid, replacing the OS-generated random one. Only meaningful where the image already has iscsi-initiator-utils baked in (kube-images' Proxmox template does; AWS uses EBS CSI and has no iSCSI initiator at all). Exists so an iSCSI target's initiator allow-list can be registered once, ahead of time, instead of re-discovered and re-registered by hand after every VM rebuild. False (the default) leaves the OS-generated random name untouched."
-  type        = bool
-  default     = false
-}
-
-variable "aws_provider_id" {
-  description = "Registers the node with providerID aws:///<zone>/<instance-id> and labels it node.kubernetes.io/instance-type, both read from EC2 instance metadata before RKE2 starts. cluster-autoscaler and the AWS cloud controller manager find a node's instance by the providerID. Any role takes the label, control plane included."
-  type        = bool
-  default     = false
 }
 
 variable "graceful_shutdown" {
@@ -377,8 +286,26 @@ variable "boot_scripts" {
   default     = []
 }
 
-variable "ssm_agent_enabled" {
-  description = "Whether user_data starts with a shell-script part that enables the AWS SSM Agent. Only meaningful on AWS. When true, user_data is always a MIME multipart document."
-  type        = bool
-  default     = false
+variable "provider_steps" {
+  description = "Boot steps that belong to one provider. The provider module builds them, so this module holds no provider logic. Each step has a name and cloud-init runcmd commands (a command is a list of strings). They run in order, before the module's own commands and the boot program. The names appear in the boot_steps output."
+  type = list(object({
+    name     = string
+    commands = list(list(string))
+  }))
+  default = []
+
+  validation {
+    condition     = length(distinct([for step in var.provider_steps : step.name])) == length(var.provider_steps)
+    error_message = "provider_steps: every step name must be unique."
+  }
+}
+
+variable "provider_files" {
+  description = "Files that the provider steps need, written by cloud-init before any command runs. Sensitive content is allowed."
+  type = list(object({
+    path        = string
+    content     = string
+    permissions = optional(string, "0644")
+  }))
+  default = []
 }

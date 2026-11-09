@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The bootstrap program travels in user data with its comment lines removed.
 # The strip is a regex over lines, so it would also remove a line of a heredoc
-# body that starts with "#". These tests fail if the program ever has one.
+# body that starts with "#". The steps use no heredoc, and these tests fail if one appears.
 
 variables {
   cluster_name        = "test"
@@ -11,23 +11,21 @@ variables {
   cluster_agent_token = "SUPERSECRETAGENT456"
 }
 
-run "heredoc_bodies_have_no_comment_looking_lines" {
+run "no_step_has_a_heredoc" {
   command = plan
 
+  variables {
+    gitops_platform_repo_url = "https://example.test/platform.git"
+    rejoin_probe_addresses   = ["10.0.0.9"]
+  }
+
   assert {
-    condition     = length(regexall("<<", local.bootstrap_program)) == length(regexall("<<EOF\n", local.bootstrap_program))
-    error_message = "every heredoc in bootstrap.sh must use the EOF delimiter, so this test can find the bodies"
+    condition     = !strcontains(local.bootstrap_program, "<<")
+    error_message = "a step must use no heredoc: the comment strip would remove a body line that starts with '#', and a file that cloud-init writes is the declarative way"
   }
   assert {
-    condition     = length(regexall("<<EOF\n", local.bootstrap_program)) > 0
-    error_message = "the heredoc scan found no heredoc, so it checks nothing"
-  }
-  assert {
-    condition = alltrue([
-      for body in regexall("(?s)<<EOF\n(.*?)\nEOF\n", local.bootstrap_program) :
-      length(regexall("(?m)^[ \t]*#", body[0])) == 0
-    ])
-    error_message = "a heredoc body line in bootstrap.sh starts with '#', and the comment strip would remove it. Reword the line."
+    condition     = length(local.boot_steps_enabled) > 10
+    error_message = "the scan must see the steps of a genesis node that can rejoin, or it checks nothing"
   }
 }
 

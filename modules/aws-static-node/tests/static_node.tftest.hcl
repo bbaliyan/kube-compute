@@ -110,7 +110,7 @@ run "each_node_gets_its_own_hostname_and_the_groups_taints" {
       for f in yamldecode(module.node_bootstrap["1"].cloud_init_user_data).write_files :
       strcontains(base64decode(f.content), "node-taint:") &&
       strcontains(base64decode(f.content), "dedicated=true:NoSchedule")
-      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
+      if f.path == "/etc/rancher/rke2/config.yaml"
     ])
     error_message = "node_taints must reach the node's config.yaml -- without the taint a dedicated node is merely preferred and anything else can still land on it"
   }
@@ -120,7 +120,7 @@ run "each_node_gets_its_own_hostname_and_the_groups_taints" {
       strcontains(base64decode(f.content), "kube-compute.io/node-group=dedicated") &&
       strcontains(base64decode(f.content), "topology.kubernetes.io/zone=eu-west-1a") &&
       strcontains(base64decode(f.content), "workload=reserved")
-      if f.path == "/opt/kube-compute/rke2-config-static.yaml"
+      if f.path == "/etc/rancher/rke2/config.yaml"
     ])
     error_message = "the group label, the AZ label and the caller's own labels must all reach config.yaml -- a workload selects the node by one of them"
   }

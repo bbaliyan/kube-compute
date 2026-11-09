@@ -24,8 +24,7 @@ get every current address back, picking one themselves.
 
 Some DNS servers reject every dynamic update that the `hashicorp/dns` provider sends with
 `NOTIMP (4)`. The same operation through `nsupdate` succeeds on both TCP and UDP.
-`node-bootstrap`'s genesis self-registration also uses `nsupdate`
-(see its `files/bootstrap.sh`).
+The genesis self-registration step of `proxmox-boot-steps` also uses `nsupdate`.
 
 - **A dedicated module, not folded into `node-bootstrap`.** `node-bootstrap`
   installs/joins one node given a role already assigned by the caller; this

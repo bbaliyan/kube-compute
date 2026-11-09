@@ -214,6 +214,12 @@ resource "aws_vpc_security_group_egress_rule" "cluster_all" {
 # node-bootstrap renders at plan time and runs nothing, so a joining node that
 # boots before genesis is ready relies on RKE2's own join retry. Ordering among
 # the joining nodes (one etcd learner at a time) is handled by bootstrap.sh.
+module "boot_steps" {
+  source = "../aws-boot-steps"
+
+  aws_provider_id = var.aws_provider_id
+}
+
 module "node_bootstrap" {
   for_each = { for i in range(var.control_plane_count) : tostring(i) => i }
 
@@ -247,11 +253,10 @@ module "node_bootstrap" {
   platform_extra_helm_parameters  = each.key == "0" ? var.platform_extra_helm_parameters : {}
   platform_helm_values_object     = each.key == "0" ? var.platform_helm_values_object : null
   extra_tags                      = var.extra_tags
-  aws_provider_id                 = var.aws_provider_id
+  provider_steps                  = module.boot_steps.steps
   graceful_shutdown               = var.graceful_shutdown
   os_auto_updates                 = var.os_auto_updates
   boot_scripts                    = var.boot_scripts
-  ssm_agent_enabled               = true
 }
 
 # No registration endpoint for control_plane_count = 1. Internal NLB is the default HA mode

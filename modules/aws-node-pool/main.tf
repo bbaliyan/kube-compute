@@ -109,6 +109,12 @@ resource "aws_iam_instance_profile" "node" {
   tags        = local.common_tags
 }
 
+module "boot_steps" {
+  source = "../aws-boot-steps"
+
+  aws_provider_id = true
+}
+
 # Every instance of a type boots the same render, so EC2 names the host rather than cloud-init.
 module "node_bootstrap" {
   source   = "../node-bootstrap"
@@ -126,10 +132,9 @@ module "node_bootstrap" {
   trusted_ca_in_image       = var.trusted_ca_in_image
   registry_mirror_url       = var.registry_mirror_url
   dns_servers               = var.dns_servers
-  aws_provider_id           = true
+  provider_steps            = module.boot_steps.steps
   graceful_shutdown         = var.graceful_shutdown
   os_auto_updates           = var.os_auto_updates
-  ssm_agent_enabled         = true
 }
 
 resource "aws_launch_template" "node" {

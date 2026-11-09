@@ -90,7 +90,7 @@ run "disabled_platform_renders_no_application_at_all" {
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "ARGOCD_NEEDED='0'")
+      !strcontains(base64decode(f.content), "argocd.yaml")
       if f.path == "/opt/kube-compute/node.env"
     ])
     error_message = "with no platform and no workloads Application, node.env must tell bootstrap.sh not to install Argo CD"
