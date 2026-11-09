@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Guards the lean-cloud-init contract: the payload must be a single valid
-# cloud-config document, must set a distinct hostname, must invoke the baked
+# cloud-config document, must set a distinct hostname, must write and invoke the
 # bootstrap program, and must carry the values that program needs -- node.env
 # for the flags that gate its genesis-only work, and one config.yaml fragment
 # for everything knowable before the node boots. This module renders neither
-# the Cilium nor the Argo CD manifest itself (the image bakes both) — no
-# `helm`/network dependency for these tests to mock.
+# the Cilium nor the Argo CD manifest itself (the image bakes Cilium, and the
+# node downloads Argo CD) — no `helm`/network dependency for these tests to mock.
 #
-# What the program DOES with a flag is not assertable here: the program is a
-# baked file, not part of the payload. These tests assert the values it is
-# handed, plus that it references every key node.env defines.
+# What the program DOES with a flag is not assertable here. These tests assert
+# the values it is handed, plus that it references every key node.env defines.
 
 variables {
   argocd_manifest_url    = "https://example.invalid/argocd-bootstrap.yaml"
@@ -49,25 +48,22 @@ run "server_init_payload_is_valid_cloud_config" {
   }
   assert {
     condition     = contains(yamldecode(output.cloud_init_user_data).runcmd, ["/opt/kube-compute/bootstrap.sh"])
-    error_message = "the payload must invoke the baked bootstrap program from runcmd"
+    error_message = "the payload must invoke the bootstrap program from runcmd"
   }
   assert {
-    condition     = strcontains(yamldecode(output.cloud_init_user_data).runcmd[index(yamldecode(output.cloud_init_user_data).runcmd, ["/opt/kube-compute/bootstrap.sh"]) - 1][2], "bakes no /opt/kube-compute/bootstrap.sh")
-    error_message = "runcmd must first check the program is actually baked into this image — without it an image predating the bake fails with cloud-init's own bare 'No such file or directory' against a path this module used to write itself"
-  }
-  assert {
-    condition = !contains(
-      [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
-      "/opt/kube-compute/bootstrap.sh"
-    )
-    error_message = "the program must NOT travel in user data -- shipping it is what put this payload over EC2's 16384-byte limit, once here and once more inside every worker group's cloud-init"
+    condition = anytrue([
+      for f in yamldecode(output.cloud_init_user_data).write_files :
+      f.permissions == "0755" && f.encoding == "b64" && base64decode(f.content) == local.bootstrap_program_inline
+      if f.path == "/opt/kube-compute/bootstrap.sh"
+    ])
+    error_message = "the payload must write the comment-stripped bootstrap program to /opt/kube-compute/bootstrap.sh with mode 0755, so it overwrites any copy an older image bakes"
   }
   assert {
     condition = contains(
       [for f in yamldecode(output.cloud_init_user_data).write_files : f.path],
       "/opt/kube-compute/node.env"
     )
-    error_message = "the payload must deliver node.env — it is how every per-cluster value now reaches the baked program"
+    error_message = "the payload must deliver node.env — it is how every per-cluster value now reaches the bootstrap program"
   }
   # The drift guard on a contract that is now split across two repos: a key
   # renamed on either side of it silently stops reaching the node, and `set -u`
@@ -77,7 +73,7 @@ run "server_init_payload_is_valid_cloud_config" {
       for k in keys(local.node_config_values) :
       strcontains(local.bootstrap_program, k)
     ])
-    error_message = "every key node.env defines must be read by the baked program, or the two halves of the boot have drifted apart"
+    error_message = "every key node.env defines must be read by the bootstrap program, or the two halves of the boot have drifted apart"
   }
   # The baked cilium.yaml must not outlive the Cilium handoff to Argo CD: RKE2
   # re-applies every server/manifests file on each start. The removal must come
@@ -100,12 +96,11 @@ run "server_init_payload_is_valid_cloud_config" {
     error_message = "the baked cilium.yaml must be removed only inside the cilium and server-init branch, never for a joining server or a worker"
   }
   assert {
-    condition = anytrue([
+    condition = !anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "KUBE_BOOTSTRAP_SHA256='${sha256(local.bootstrap_program)}'")
-      if f.path == "/opt/kube-compute/node.env"
+      strcontains(base64decode(f.content), "KUBE_BOOTSTRAP_SHA256")
     ])
-    error_message = "node.env must carry the sha256 of files/bootstrap.sh, which the baked program compares with its own"
+    error_message = "no image and module pairing remains, so nothing may carry a bootstrap.sh hash"
   }
   assert {
     condition = alltrue([
@@ -235,7 +230,7 @@ run "worker_payload_skips_genesis_only_content" {
   }
 
   # A worker is denied the genesis work by the flags it is given, not by a
-  # different program: the same baked file boots every role.
+  # different program: the same program boots every role.
   assert {
     condition = anytrue([
       for f in yamldecode(output.cloud_init_user_data).write_files :
@@ -348,7 +343,7 @@ run "server_join_uses_the_staggered_self_healing_join" {
     cluster_token        = "SUPERSECRETTOKEN123"
   }
 
-  # The staggered self-healing join loop lives in the baked program, gated on
+  # The staggered self-healing join loop lives in the bootstrap program, gated on
   # this one value; what a joining server must not inherit is genesis work.
   assert {
     condition = anytrue([
@@ -361,7 +356,7 @@ run "server_join_uses_the_staggered_self_healing_join" {
   }
   assert {
     condition     = strcontains(local.bootstrap_program, "join-race exhausted after 6 attempts")
-    error_message = "the baked program must keep the self-healing join retry loop — etcd admits one non-voting learner at a time, so a concurrent join must wipe local server state and retry"
+    error_message = "the bootstrap program must keep the self-healing join retry loop — etcd admits one non-voting learner at a time, so a concurrent join must wipe local server state and retry"
   }
 }
 
