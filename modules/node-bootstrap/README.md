@@ -129,7 +129,8 @@ The module also writes the files the program reads:
   rejoin probe found and, on an agent, the fetched token.
 - **`node.env`** (0644) — configuration for the program. Every key is always defined,
   empty where a role does not use it, so the program runs under `set -u`.
-- **`secrets.env`** (0600), on an agent only — the agent token fetch command.
+- **`secrets.env`** (0600), on an agent only — the agent token fetch command. The program
+  deletes it when the boot succeeds. If the boot fails, it stays for diagnosis.
 
 The trusted CA is a `write_files` entry and a `runcmd` entry (`update-ca-trust extract`).
 There is no registry mirror check at boot.

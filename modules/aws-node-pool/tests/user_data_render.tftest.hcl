@@ -34,7 +34,7 @@ run "user_data_is_unchanged" {
   command = plan
 
   assert {
-    condition     = sha256(aws_launch_template.node["t3a.large"].user_data) == "e15b7c05709627bce24a1b8fcc0970a4e35162eecad6fb63c0b2d2fbd61efe2d"
+    condition     = sha256(aws_launch_template.node["t3a.large"].user_data) == "eeb0630d074d842e65560050012ffa9598aff3afbdf2cf2010a6a05173d329d3"
     error_message = "the launch template user data must render as before: got ${try(nonsensitive(sha256(aws_launch_template.node["t3a.large"].user_data)), "?")}"
   }
 }

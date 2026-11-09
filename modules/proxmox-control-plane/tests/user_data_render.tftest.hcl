@@ -58,17 +58,17 @@ run "user_data_is_unchanged" {
   command = apply
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "f26a6e51982b698e0773b8ab31f3f09593527ee97ebbd2e05f2c7692a8add05a"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "2d457631d467d08fac0be8d53b8fe9dc3254454748afdeffe980fb30ab27b69d"
     error_message = "the genesis user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "54c01c0f12b419414d2ca7bb4e0147ddcf5b6741e733c97e5ba08390248dc2ef"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "5c29004709e75f7256f7fdd763a35cdf5b08332536e5a811d38e4a5c131e34e2"
     error_message = "the second node user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data)), "?")}"
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["2"].source_raw[0].data) == "df1a2d7cbc8f1ceac821ef74ed2e7d2aee2133b485aacb0290baf7b570740332"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["2"].source_raw[0].data) == "001e56cf3f4130f6b18609e0893c1baca68ec9319d2dc1cc6e142e58e247e584"
     error_message = "the third node user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["2"].source_raw[0].data)), "?")}"
   }
 }
@@ -81,12 +81,12 @@ run "user_data_without_boot_scripts_is_unchanged" {
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "2308830046bf3f5eabd34c31c8fdaff9a2ed99592a2bced2652c3e1f51132329"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "90e96eaaaf5973316617950a582458055c7f89f83c7967b90afb73af2e9ac4ec"
     error_message = "the genesis user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "1b8b563f5a682b3a5d559db44561731f819f8192574657e8a94b39f8824d1b01"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "a157a0e4a82f620b9131487fbb34cea184f7c7ecc7e596d09aca8ee169b0f8a1"
     error_message = "the second node user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data)), "?")}"
   }
 }
