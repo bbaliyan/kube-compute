@@ -327,23 +327,22 @@ locals {
     var.node_role == "server-init" && var.registration_address != null ? [var.registration_address] : []
   )
 
-  # The program itself, read so this module can hand its sha256 to the node. It is
-  # never shipped from here -- the node image bakes it, and this repo is where the
-  # image's copy comes from. The baked program compares its own hash with this one.
   bootstrap_program = file("${path.module}/files/bootstrap.sh")
 
-  # Configuration for the baked bootstrap program, as data. The program is the
-  # image's business; only these values are this module's. Shipping the program in
-  # user data would exceed EC2's 16384-byte decoded limit.
+  # The program as it travels in user data. Lines whose first non-blank character
+  # is "#" are dropped, except the shebang. This is safe only while no heredoc body
+  # line starts with "#"; tests/bootstrap_inline.tftest.hcl enforces that.
+  bootstrap_program_inline = replace(local.bootstrap_program, "/(?m)^[ \t]*#([^!\n][^\n]*)?\n/", "")
+
+  # Configuration for the bootstrap program, as data.
   #
   # Every key is always defined (empty where a role does not use it) so the
   # program can run under `set -u`.
   node_config_values = {
-    KUBE_BOOTSTRAP_SHA256 = filesha256("${path.module}/files/bootstrap.sh")
-    NODE_ROLE             = var.node_role
-    CNI                   = var.cni
-    CLUSTER_NAME          = var.cluster_name
-    REGISTRATION_ADDRESS  = var.registration_address != null ? var.registration_address : ""
+    NODE_ROLE            = var.node_role
+    CNI                  = var.cni
+    CLUSTER_NAME         = var.cluster_name
+    REGISTRATION_ADDRESS = var.registration_address != null ? var.registration_address : ""
     # Space-separated because the program word-splits it. Addresses are IPs or
     # FQDNs, so none can contain one.
     REJOIN_PROBE_ADDRESSES        = join(" ", local.rejoin_probe_addresses)
@@ -376,7 +375,7 @@ locals {
     [
       "# SPDX-License-Identifier: Apache-2.0",
       "# Written by kube-compute's node-bootstrap module, read by the bootstrap",
-      "# program baked into this image. Configuration only -- tokens and the TSIG",
+      "# program. Configuration only -- tokens and the TSIG",
       "# secret live in secrets.env, which is 0600.",
     ],
     [for k in sort(keys(local.node_config_values)) : "${k}='${replace(local.node_config_values[k], "'", "'\\''")}'"],
@@ -443,6 +442,13 @@ locals {
         owner       = "root:root"
         encoding    = "b64"
         content     = base64encode(local.node_env)
+      },
+      {
+        path        = "/opt/kube-compute/bootstrap.sh"
+        permissions = "0755"
+        owner       = "root:root"
+        encoding    = "b64"
+        content     = base64encode(local.bootstrap_program_inline)
       },
       {
         # Always written, even when every block in it is empty: the program cats
@@ -607,9 +613,6 @@ locals {
         [["/bin/sh", "-c", local.kubelet_reserved_script]],
         local.graceful_shutdown_enabled ? [["systemctl", "restart", "systemd-logind"]] : [],
         [
-          # The program is baked into the image, not written above. Without this test an
-          # image that lacks it fails with a bare "No such file or directory".
-          ["/bin/sh", "-c", "test -x /opt/kube-compute/bootstrap.sh || { echo 'kube-compute: this image bakes no /opt/kube-compute/bootstrap.sh, which every node requires -- rebuild the node image from a ref that bakes it' >&2; exit 1; }"],
           ["/opt/kube-compute/bootstrap.sh"],
         ],
         var.os_auto_updates ? [["/bin/sh", "-c", local.os_auto_updates_script]] : [],

@@ -30,7 +30,7 @@ cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
 With no parts, `user_data` is the plain cloud-config.
 
 The image must already hold OS prep, the RKE2 binaries, the SELinux policy, the kernel
-modules, the guest agent, `bootstrap.sh` and the Cilium manifest. Build it with
+modules, the guest agent and the Cilium manifest. Build it with
 kube-images. The image does not hold Argo CD: the first server downloads it (see below).
 This module renders only the per-cluster identity, secrets and join logic.
 Every provider module calls it: `aws-control-plane`, `aws-static-node`, `aws-node-pool`,
@@ -40,7 +40,7 @@ Every provider module calls it: `aws-control-plane`, `aws-static-node`, `aws-nod
 
 The node image bakes the Cilium manifest at `/opt/kube-compute/manifests/cilium.yaml`.
 A node with `cni: cilium` is not Ready without it. The `render_cilium` local only
-decides whether `bootstrap.sh` applies it.
+decides whether `bootstrap.sh` applies it. The image does not hold `bootstrap.sh`: this module sends it.
 
 The image does not bake Argo CD. kube-platform publishes one manifest per release,
 `argocd-bootstrap.yaml`, with its sha256. It is about 2 MB, too big for the cloud-init
@@ -88,7 +88,7 @@ A first server probes `REJOIN_PROBE_ADDRESSES` for a live cluster before it star
 skips Cilium, the extra server manifests, Argo CD, the Applications and
 `genesis_apply_manifests`.
 
-1. Rebuild the node image without the baked Argo CD manifest. The new image carries the new `bootstrap.sh`.
+1. Rebuild the node image without the baked Argo CD manifest.
 2. Move the module to the new major version.
 3. Keep the default `argocd_manifest_url` and `argocd_manifest_sha256`, or set your own.
 
@@ -99,9 +99,7 @@ Removing the file does not remove Cilium from the cluster. If Cilium is not Read
 about 6 minutes, the file stays and the log shows a warning. The first server removes the
 file even when GitOps is off.
 
-An image with the old module, or the new module with the old image, fails on the sha256
-check near the top of `bootstrap.sh`. Existing clusters do not change until a node is
-replaced.
+Existing clusters do not change until a node is replaced.
 
 ## Watching progress
 
@@ -113,11 +111,18 @@ writes its own progress to `/var/log/kube-compute-bootstrap.log`; that log
 is the only place to watch bootstrap progress. There is no Terraform-visible
 signal, no provisioner output, and no `bootstrap_log_path`-style output.
 
-## The program is in the image; this module sends it values
+## The program travels in user data
 
-`bootstrap.sh` is not rendered here and does not travel in the payload. It lives at
-`files/bootstrap.sh`, the node image bakes it at `/opt/kube-compute/bootstrap.sh`,
-and this module writes the two files it reads:
+`bootstrap.sh` lives at `files/bootstrap.sh`. This module writes it to
+`/opt/kube-compute/bootstrap.sh` (0755) as one `write_files` entry, and `runcmd` runs it.
+It removes the comment lines first, to save space. A line whose first non-blank
+character is `#` is dropped, except the shebang. A heredoc body line in the script
+must therefore never start with `#`. A test fails if one does.
+
+The copy in user data replaces any `bootstrap.sh` that an older image still bakes. A
+change to the script needs no image rebuild.
+
+The module also writes the two files the program reads:
 
 - **`node.env`** (0644) — configuration. Every key is always defined, empty where a
   role does not use it, so the program runs under `set -u`.
@@ -129,18 +134,9 @@ kubelet's resolv-conf pointer. Which blocks a role gets is decided here; the pro
 appends the fragment to the few lines only the node itself can produce (its own IP,
 the fetched agent token, the rejoin-probe result).
 
-**Why.** The program is almost entirely static. Shipping values instead of code keeps the
-payload small on every platform. EC2 limits user data to 16384 bytes.
-
-**The version check.** `node.env` carries `KUBE_BOOTSTRAP_SHA256`, the sha256 of
-`files/bootstrap.sh` in the module version you applied. The program hashes itself and
-refuses to run if the two differ. A stale image stops on its first lines with a message
-that says what to rebuild, instead of half-configuring the node. Nobody bumps a number:
-any change to the script changes the hash. A test asserts the program references every
-key `node.env` defines.
-
-A module newer than the image fails with a clear message: `runcmd` tests that the
-program exists before it runs it and says what to rebuild.
+EC2 limits user data to 16384 bytes after gzip. A test renders a heavy AWS genesis
+node and asserts it stays at least 2048 bytes under that limit. A test also asserts the
+program references every key `node.env` defines.
 
 ## Genesis-apply manifests
 

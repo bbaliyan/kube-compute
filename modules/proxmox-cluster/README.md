@@ -26,10 +26,8 @@ re-document them.
 
 `argocd_manifest_url` and `argocd_manifest_sha256` default to a pinned kube-platform release, so no extra input is needed. The first control-plane node downloads that file at first boot and checks its sha256. See [`node-bootstrap`](../node-bootstrap/README.md) to move to a newer release. This is a breaking change. Upgrade in this order:
 
-1. Rebuild the template without Argo CD. It then carries the matching `bootstrap.sh`.
+1. Rebuild the template without Argo CD.
 2. Move to this version. The two Argo CD manifest inputs have defaults.
-
-A new template with the old module, or the reverse, fails at the first line of `bootstrap.sh`.
 
 After Cilium is Ready, the first server removes the baked Cilium file even when GitOps is off, so a later server restart no longer applies it again.
 

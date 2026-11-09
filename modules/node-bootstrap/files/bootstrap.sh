@@ -6,19 +6,13 @@
 # half (OS prep, RKE2 binaries, SELinux policy, guest agent, kernel modules) is
 # already present in the image.
 #
-# THIS FILE IS BAKED INTO THE IMAGE, not delivered by cloud-init. It is a plain
-# program with no templating: every per-cluster value reaches it as data, in
-# node.env (configuration) and secrets.env (tokens), both written by cloud-init.
-# EC2 allows 16384 decoded bytes of user data, so the program is baked into the
-# image and does not travel in user data.
-# Baking it is also what the images already do with the Cilium render, for the
-# same reason on Proxmox, whose snippet cap is 1 MiB. Argo CD is not baked: this
-# script downloads kube-platform's published manifest on the first server.
-#
-# The module that writes node.env puts the sha256 of its own copy of this file in
-# KUBE_BOOTSTRAP_SHA256. This file hashes itself and refuses to run if the two
-# differ, so an image baked from another version of this file stops the boot with
-# a clear message instead of half-configuring the node.
+# cloud-init writes this file to /opt/kube-compute/bootstrap.sh, with its comment
+# lines removed to save space. It is a plain program with no templating: every
+# per-cluster value reaches it as data, in node.env (configuration) and
+# secrets.env (tokens), both written by cloud-init. A heredoc body in this file
+# must never start with "#", because the comment strip would remove that line.
+# The Cilium render is baked into the image. This script downloads kube-platform's
+# published Argo CD manifest on the first server.
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1
@@ -29,12 +23,6 @@ KC=/opt/kube-compute
 . "$KC/node.env"
 # shellcheck disable=SC1091
 . "$KC/secrets.env"
-
-own_sha256=$(sha256sum "$0")
-if [ "${own_sha256%% *}" != "${KUBE_BOOTSTRAP_SHA256:-unset}" ]; then
-  echo "kube-compute: this image bakes a bootstrap.sh with sha256 ${own_sha256%% *} but the kube-compute module expects ${KUBE_BOOTSTRAP_SHA256:-unset} -- the image and the module version are not a matching pair, so rebuild the image from a kube_compute_ref with the module's bootstrap.sh or move the module pin" >&2
-  exit 1
-fi
 
 KUBECTL="/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
 

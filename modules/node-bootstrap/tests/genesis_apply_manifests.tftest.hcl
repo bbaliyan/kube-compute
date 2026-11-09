@@ -92,7 +92,7 @@ run "genesis_apply_manifests_renders_entries_and_apply_steps" {
         "for manifest_path in $GENESIS_APPLY_MANIFESTS",
       ] : strcontains(local.bootstrap_program, line)
     ])
-    error_message = "the baked program must still apply the listed manifests in order"
+    error_message = "the bootstrap program must still apply the listed manifests in order"
   }
 }
 
@@ -190,15 +190,6 @@ run "genesis_apply_manifests_accepts_a_nested_path" {
         content = "kind: Cluster\n"
       }
     ]
-  }
-
-  assert {
-    condition = anytrue([
-      for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "KUBE_BOOTSTRAP_SHA256='${sha256(local.bootstrap_program)}'")
-      if f.path == "/opt/kube-compute/node.env"
-    ])
-    error_message = "node.env must carry the sha256 of bootstrap.sh"
   }
 }
 
