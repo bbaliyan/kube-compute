@@ -210,7 +210,7 @@ run "five_node_genesis_probes_the_other_four" {
   }
 }
 
-run "ha_genesis_over_dhcp_has_no_probe_address" {
+run "ha_genesis_over_dhcp_with_dns_probes_the_cluster_name" {
   command = apply
   variables {
     control_plane_count  = 3
@@ -224,9 +224,67 @@ run "ha_genesis_over_dhcp_has_no_probe_address" {
   assert {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='api.example.example.com'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "over DHCP with DNS registration, genesis must probe the cluster name so a replaced first node finds its peers"
+  }
+}
+
+run "ha_genesis_with_static_ips_keeps_peer_ips_even_with_dns" {
+  command = apply
+  variables {
+    control_plane_count        = 3
+    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
+    vm_gateway                 = "192.168.1.1"
+    cluster_domain             = "example.com"
+    cluster_network_cidr       = "192.168.1.0/24"
+    dns_server_address         = "192.168.1.53"
+    tsig_key_name              = "kube-compute"
+    tsig_key_secret            = "ZmFrZXNlY3JldA=="
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='192.168.1.11 192.168.1.12'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "static IPs must keep the peer IPs as the probe list, not the cluster name"
+  }
+}
+
+run "single_node_with_dns_has_no_probe_address" {
+  command = apply
+  variables {
+    control_plane_count  = 1
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
+  }
+
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
       strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES=''")
       if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "over DHCP no peer IP is known before genesis exists, so genesis must not carry a probe address"
+    error_message = "a single node has no peers, so genesis must carry no probe address even with DNS registration"
   }
+}
+
+# The empty probe list for a multi-node cluster is only a safeguard in main.tf: this
+# precondition already stops a multi-node cluster with no DNS server, so a genesis
+# with no probe address cannot ship.
+run "multi_node_without_dns_server_is_rejected" {
+  command = plan
+  variables {
+    control_plane_count  = 3
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+  }
+
+  expect_failures = [proxmox_virtual_environment_vm.control_plane]
 }

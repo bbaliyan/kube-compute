@@ -22,10 +22,18 @@ locals {
 
   # A replaced genesis node must probe its peers, not registration_address: that address
   # resolves to genesis itself, and genesis rewrites the genesis DNS record to itself before the
-  # probe runs, so the probe would never see the live cluster. It probes every other
-  # control-plane node, so one peer being down does not hide the live cluster. Only static
-  # peer IPs are known before genesis exists; a DHCP peer IP would close a dependency cycle.
-  genesis_rejoin_probe_addresses = var.control_plane_count > 1 && local.static_ips ? [for cidr in slice(var.control_plane_ip_addresses, 1, var.control_plane_count) : split("/", cidr)[0]] : []
+  # probe runs, so the probe would never see the live cluster. With static IPs it probes every
+  # other control-plane node, so one peer being down does not hide the live cluster. With DHCP
+  # no peer IP is known before genesis exists (a DHCP peer IP would close a dependency cycle),
+  # so it probes cluster_fqdn when DNS registration publishes it: the node resolves the name
+  # and skips its own IP. This is the same probe the AWS modules make of their registration
+  # address.
+  genesis_rejoin_probe_addresses = (
+    var.control_plane_count == 1 ? [] :
+    local.static_ips ? [for cidr in slice(var.control_plane_ip_addresses, 1, var.control_plane_count) : split("/", cidr)[0]] :
+    # Safeguard: the VM precondition already requires a DNS server when count > 1.
+    local.dns_registration_enabled ? [local.cluster_fqdn] : []
+  )
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
   effective_cni       = coalesce(var.cni, "cilium")

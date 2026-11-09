@@ -20,9 +20,22 @@ computes the same formula independently to reference the cluster ipset by name.
 
 ## Replacing the first control-plane node
 
-On a multi-node cluster with static IPs, the first node probes the IP of every other control-plane node at boot, in order. If one answers, a replaced first node rejoins through it instead of starting a new etcd cluster. With DHCP, no peer IP is known before the first node exists, so there is no probe. Use `control_plane_ip_addresses` on a multi-node cluster.
+On a multi-node cluster, the first node looks for a live cluster at boot, before it starts etcd. If a peer answers, a replaced first node joins through it instead of starting a new etcd cluster.
 
-If no peer answers, the first node starts a new cluster. Do not replace the first node in the same apply as every other control-plane node. Any HTTPS service that answers at a peer IP can start a join attempt, so each peer IP must belong to a control-plane node only.
+- With static IPs, the first node probes the IP of every other control-plane node.
+- With DHCP, the first node probes the cluster name `api.<cluster>.<domain>`. It resolves the name, skips its own IP, and probes each IP that remains.
+
+This matches the AWS modules, where the first node probes `registration_address`.
+
+The first node repeats the probe for about 60 seconds. A slow DNS answer or a booting peer then does not hide the live cluster. The node writes the IP that answered into its join address, not the name.
+
+The probe needs the `bootstrap.sh` of this version in the node image. An older image runs one `curl` against the name. That `curl` does not try each IP and does not skip the node's own address. Rebuild the image before you rely on this.
+
+The wait costs time on every fresh multi-node boot, not only on a replacement. A new cluster has no live peer, so the first node waits the full 60 seconds before it starts etcd. The wait is bounded. A pass can run past 60 seconds, because a stale IP costs up to 10 seconds and a resolver can time out, but it cannot loop forever.
+
+If no peer answers, the first node starts a new cluster. This happens when you replace the first node while every peer is down. Replace the first node last, with every peer healthy.
+
+Any HTTPS service that answers at a probed IP can start a join attempt. A dead IP that DHCP hands to a different RKE2 cluster on the same network also answers. The join then loops on the token. There is no split brain, but the node does not form.
 
 ## Rolling to a new template
 
@@ -36,7 +49,7 @@ Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
 
 > **Warning:** On a single-node cluster, a replaced node starts a new cluster. The cluster loses its data.
 
-> **Warning:** On a multi-node cluster with DHCP, a replaced first node starts a new etcd cluster. Do not replace the first node there.
+> **Warning:** Replace the first node last, with every peer healthy. If every peer is down, a replaced first node starts a new cluster.
 
 1. Set `proxmox_template_vm_id` to the new template.
 2. Run `tofu apply`. The plan must not replace a VM.
@@ -49,7 +62,7 @@ Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
 8. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
 9. If an additional node is still on the old template, go back to step 3.
 
-> **Warning:** Replace the first node last, in its own apply. It rejoins through the second node, so the second node must be healthy.
+> **Warning:** Replace the first node last, in its own apply. It rejoins through a peer, so every peer must be healthy. The image must bake the `bootstrap.sh` of this version when the cluster uses DHCP.
 
 10. Drain the first node, and then delete it, as in steps 4 and 5.
 11. Replace the first node: `tofu apply -replace='proxmox_virtual_environment_vm.control_plane["0"]'`.
