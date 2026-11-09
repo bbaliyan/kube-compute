@@ -130,10 +130,8 @@ The first control-plane node downloads Argo CD at first boot. The inputs `argocd
 
 This is a breaking change. Upgrade in this order:
 
-1. Rebuild the AMI without Argo CD. It then carries the matching `bootstrap.sh`.
+1. Rebuild the AMI without Argo CD.
 2. Move to this version. The two Argo CD manifest inputs have defaults.
-
-A new AMI with the old module, or the reverse, fails at the first line of `bootstrap.sh`.
 
 After Cilium is Ready, the first server removes the baked Cilium file even when GitOps is off, so a later server restart no longer applies it again.
 

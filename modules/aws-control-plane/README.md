@@ -27,9 +27,10 @@ matching build. This mirrors `proxmox-control-plane`'s `proxmox_template_vm_id`.
 ### Keeping user data under EC2's limit
 
 EC2 rejects `RunInstances` when decoded user data exceeds 16384 bytes. Static content
-therefore stays out of the payload: the bootstrap program is baked into the node image,
-and with `trusted_ca_in_image` a CA is too. A precondition on the instance names those
-levers when the limit is exceeded.
+therefore stays out of the payload: the Cilium manifest is baked into the node image,
+and with `trusted_ca_in_image` a CA is too. The bootstrap program travels in the payload
+with its comments removed. A precondition on the instance names the levers when the
+limit is exceeded.
 
 ### A change to the user data of a running node
 
@@ -156,7 +157,7 @@ genesis node, so platform bootstrap manifests never race on more than one server
 ## Argo CD manifest
 
 The genesis node downloads Argo CD at first boot. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` default to a pinned kube-platform release, so no extra input is needed. See [`node-bootstrap`](../node-bootstrap/README.md) to move to a newer release. The
-AMI must not bake Argo CD, and it must bake the matching `bootstrap.sh`: rebuild the
+AMI must not bake Argo CD: rebuild the
 AMI first, then move to this version. See
 [`node-bootstrap`](../node-bootstrap/README.md) for the upgrade order.
 

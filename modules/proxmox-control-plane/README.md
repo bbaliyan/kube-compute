@@ -29,8 +29,6 @@ This matches the AWS modules, where the first node probes `registration_address`
 
 The first node repeats the probe for about 60 seconds. A slow DNS answer or a booting peer then does not hide the live cluster. The node writes the IP that answered into its join address, not the name.
 
-The probe needs the `bootstrap.sh` of this version in the node image. An older image runs one `curl` against the name. That `curl` does not try each IP and does not skip the node's own address. Rebuild the image before you rely on this.
-
 The wait costs time on every fresh multi-node boot, not only on a replacement. A new cluster has no live peer, so the first node waits the full 60 seconds before it starts etcd. The wait is bounded. A pass can run past 60 seconds, because a stale IP costs up to 10 seconds and a resolver can time out, but it cannot loop forever.
 
 If no peer answers, the first node starts a new cluster. This happens when you replace the first node while every peer is down. Replace the first node last, with every peer healthy.
@@ -62,7 +60,7 @@ Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
 8. Verify that every etcd pod is `Running`: `kubectl -n kube-system get pods -l component=etcd`.
 9. If an additional node is still on the old template, go back to step 3.
 
-> **Warning:** Replace the first node last, in its own apply. It rejoins through a peer, so every peer must be healthy. The image must bake the `bootstrap.sh` of this version when the cluster uses DHCP.
+> **Warning:** Replace the first node last, in its own apply. It rejoins through a peer, so every peer must be healthy.
 
 10. Drain the first node, and then delete it, as in steps 4 and 5.
 11. Replace the first node: `tofu apply -replace='proxmox_virtual_environment_vm.control_plane["0"]'`.
@@ -134,8 +132,7 @@ Bootstrap runs asynchronously after `tofu apply` returns — tail
 `/var/log/kube-compute-bootstrap.log` on the node to watch it.
 
 The first control-plane node downloads Argo CD at first boot. The inputs `argocd_manifest_url` and `argocd_manifest_sha256` default to a pinned kube-platform release, so no extra input is needed. See [`node-bootstrap`](../node-bootstrap/README.md) to move to a newer release.
-The template must not bake Argo CD, and it must bake the matching `bootstrap.sh`:
-rebuild the template first, then move to this version. See
+The template must not bake Argo CD: rebuild the template first, then move to this version. See
 [`node-bootstrap`](../node-bootstrap/README.md) for the upgrade order.
 
 No check compares the template's contents with this module's inputs. The template's name is the documentation.
