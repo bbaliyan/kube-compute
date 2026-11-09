@@ -342,6 +342,10 @@ run "a_failed_boot_program_fails_cloud_init_even_with_os_updates" {
     condition     = length(split("touch /run/kube-compute-boot-complete", local.bootstrap_program)[0]) > length(split("rm -f /run/kube-compute-boot-complete", local.bootstrap_program)[0])
     error_message = "the marker is cleared before it is set"
   }
+  assert {
+    condition     = length(split("rm -f \"$KC/secrets.env\"", local.bootstrap_program)[0]) < length(split("touch /run/kube-compute-boot-complete", local.bootstrap_program)[0]) && strcontains(local.bootstrap_program, "rm -f \"$KC/secrets.env\"")
+    error_message = "a successful boot must delete secrets.env before it sets the completion marker"
+  }
 }
 
 run "the_agent_token_is_written_as_a_quoted_scalar" {
