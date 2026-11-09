@@ -68,15 +68,16 @@ The address comes from the provider:
   `genesis.<cluster>.<cluster_domain>` DNS name (`registration_address`). DNS is required for
   more than one control-plane node, so set `cluster_domain` and `dns_server_address`.
   `cluster_fqdn` is the stable multi-node address for clients outside the join flow. See
-  `modules/dns-registration`'s README. Only `tofu test` against a mocked provider has validated the join
-  flow and the DNS registration so far.
+  `modules/dns-registration`'s README. `tofu test` against a mocked provider and a rolling template
+  update of a three-node cluster on DHCP have validated the join flow and the DNS registration.
 
 On a multi-node cluster, the first control-plane node probes the live cluster at boot. If the
 cluster answers, the node joins it. If not, the node initializes a new cluster. On AWS it probes
 `registration_address`. On Proxmox it probes the static IP of every other control-plane node, in
 order (`rejoin_probe_addresses`), because its own join address points back at itself. It joins
 through the first one that answers. A Proxmox cluster whose control-plane nodes use DHCP has no
-address to probe, so a replaced first node initializes a new cluster.
+addresses to list. There the first node resolves the cluster name `api.<cluster>.<cluster_domain>`
+and probes each IP that remains after it skips its own. It repeats the probe for about 60 seconds.
 
 If no probed address answers, the node initializes a new cluster. So do not replace the first
 node in the same apply as every other control-plane node. Any HTTPS service that answers at a
