@@ -259,6 +259,13 @@ variable "cluster_network_cidr" {
   description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'), used as the sole member of the cluster-wide firewall ipset. Proxmox multi-node is a single flat L2 subnet, and bpg/proxmox's ipset resource is owned monolithically by one Terraform state, so exact per-VM membership (AWS's self-referencing security group) can't span the control plane's and each node pool's separate states — this CIDR is the pragmatic Proxmox equivalent of 'this cluster's own members'. Required when control_plane_count > 1 or any node pool will attach; optional for a single-node cluster with no pools."
   type        = string
   default     = null
+
+  # Every VM's firewall admits cluster traffic only from this CIDR; without it
+  # the ipset falls back to the genesis node alone and joining nodes can't reach it.
+  validation {
+    condition     = var.cluster_network_cidr != null || (var.control_plane_count == 1 && length(var.node_pools) == 0)
+    error_message = "cluster_network_cidr is required when control_plane_count > 1 or any node pool is set: it is the firewall ipset every node admits cluster traffic from."
+  }
 }
 
 variable "allowed_ingress_cidrs" {

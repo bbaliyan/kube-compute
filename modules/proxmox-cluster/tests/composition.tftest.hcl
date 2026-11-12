@@ -175,7 +175,21 @@ run "pools_need_cluster_network_cidr" {
     }
   }
 
-  expect_failures = [terraform_data.cluster_network_cidr_set_for_multi_node]
+  expect_failures = [var.cluster_network_cidr]
+}
+
+run "a_multi_node_control_plane_needs_cluster_network_cidr" {
+  command = plan
+
+  variables {
+    cluster_domain      = "lan"
+    dns_server_address  = "192.168.1.53"
+    tsig_key_name       = "kube-compute"
+    tsig_key_secret     = "ZmFrZXNlY3JldA=="
+    control_plane_count = 3
+  }
+
+  expect_failures = [var.cluster_network_cidr]
 }
 
 run "platform_node_group_must_name_a_pool" {

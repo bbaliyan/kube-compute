@@ -229,7 +229,7 @@ module "autoscaled_nodes" {
   subnet_id                 = module.control_plane.subnet_id
 
   # At least one, so an instance type too large for its role's caps fails on
-  # terraform_data.autoscaling_limits instead of inside this module.
+  # the data.aws_ec2_instance_type.sized postcondition instead of inside this module.
   instance_type_max_sizes = { for type, max_size in local.autoscaled_max_sizes[each.key] : type => max(1, max_size) }
 
   os_image_ami_id     = each.value.os_image_ami_id
@@ -248,14 +248,11 @@ module "autoscaled_nodes" {
   extra_tags          = var.extra_tags
 }
 
-resource "terraform_data" "autoscaling_limits" {
-  count = local.autoscaling_enabled ? 1 : 0
+removed {
+  from = terraform_data.autoscaling_limits
 
   lifecycle {
-    precondition {
-      condition     = alltrue(flatten([for sizes in values(local.autoscaled_max_sizes) : [for max_size in values(sizes) : max_size >= 1]]))
-      error_message = "Instance types larger than their role's max_cpu_cores or max_memory_gib could never be launched: ${join(", ", flatten([for role, sizes in local.autoscaled_max_sizes : [for type, max_size in sizes : "${role} ${type}" if max_size < 1]]))}."
-    }
+    destroy = false
   }
 }
 

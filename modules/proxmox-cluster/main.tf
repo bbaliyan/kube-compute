@@ -21,17 +21,11 @@ locals {
   ingress_pools = [for k in keys(var.node_pools) : k if var.platform_node_group == null || k == var.platform_node_group]
 }
 
-# Every VM's firewall admits cluster traffic only from cluster_network_cidr;
-# without it the ipset falls back to the genesis node alone, and once the
-# firewall is enforced, joining nodes can't reach it.
-resource "terraform_data" "cluster_network_cidr_set_for_multi_node" {
-  count = var.control_plane_count > 1 || length(var.node_pools) > 0 ? 1 : 0
+removed {
+  from = terraform_data.cluster_network_cidr_set_for_multi_node
 
   lifecycle {
-    precondition {
-      condition     = var.cluster_network_cidr != null
-      error_message = "cluster_network_cidr is required when control_plane_count > 1 or any node pool is set: it is the firewall ipset every node admits cluster traffic from."
-    }
+    destroy = false
   }
 }
 
