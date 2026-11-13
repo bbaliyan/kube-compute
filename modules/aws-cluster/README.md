@@ -137,9 +137,10 @@ runs:
   Node object of a terminated instance so its pods and volumes can move. The autoscaler
   never deletes Node objects itself.
 
-The autoscaler runs on the platform node. The cloud controller manager runs on the control
-plane. This module gives each role its permissions, and scaling is limited to this
-cluster's own groups.
+Each one authenticates as the node it runs on. The autoscaler runs on the platform node,
+the cloud controller manager on the control plane, and the first node back after a stop.
+This module gives each role its permissions. Scaling is limited to this cluster's own
+groups.
 
 
 Both find a node's instance through its providerID, so every node of an autoscaled cluster
