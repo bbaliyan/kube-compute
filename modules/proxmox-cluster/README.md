@@ -232,6 +232,28 @@ apply the change. To apply it, replace the VM on purpose with `tofu apply -repla
 See proxmox-control-plane's "A change to the user data of a running node" for the
 addresses and the steps. `node_pools` workers keep running in the same way.
 
+## Input notes
+
+These notes hold the reasons behind some input descriptions.
+
+- `control_plane_ip_addresses`: with DHCP, the module reads each address from the guest
+  agent after the VM boots. Static addresses suit HA better, because genesis must be
+  reachable before the joiners boot.
+- `cluster_network_cidr`: Proxmox has one flat subnet and one state owns the firewall ipset. The
+  ipset cannot list each VM, because the control plane and each pool have separate states.
+  The subnet CIDR stands in for "the members of this cluster".
+- `dns_record_ttl`: keep it low. A caching resolver in front of the DNS server keeps the
+  last answer for up to the TTL. A long TTL delays the join of nodes on a reused name.
+- `extra_server_manifests`: the files are not interpreted. One example is a `HelmChartConfig` that
+  changes the CoreDNS Corefile to add a forward zone for a private domain. Proxmox has no
+  cloud DNS, so such a zone needs this.
+- Worker join address: a pool joins through the single-target `genesis.` name and not
+  through the round-robin `api.` name. A round-robin name can hang a join for 10 minutes or
+  more.
+- `cluster_dns_name`: with `cluster_name = "app-red"`, `cluster_domain = "red.example.internal"`
+  and `cluster_dns_name = "app"`, the API name is `api.app.red.example.internal`. VM names,
+  node names and ipsets keep the full cluster name.
+
 ## Existing standalone modules remain fully supported
 
 `proxmox-control-plane` and `proxmox-node-pool` are unchanged and continue to work

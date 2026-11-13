@@ -59,7 +59,7 @@ variable "gitops_workloads_path" {
 }
 
 variable "cluster_type" {
-  description = "Cluster topology intent: 'all_in_one' (control-plane nodes stay schedulable) or 'dedicated_control_plane' (control-plane nodes are tainted so user workloads run only on separate node pools)."
+  description = "Cluster topology: 'all_in_one' (control-plane nodes stay schedulable) or 'dedicated_control_plane' (control-plane nodes are tainted, so workloads run only on node pools). The module cannot derive this from the worker count, because node pools are separate state."
   type        = string
   default     = "all_in_one"
   validation {
@@ -69,7 +69,7 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (its kernel dropped modules flannel and Felix require). 'default' remains selectable as an escape hatch for a consumer-supplied playbook targeting a different OS. Set explicitly to override."
+  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
   type        = string
   default     = null
   validation {
@@ -181,7 +181,7 @@ variable "cpu_units" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every control-plane node from. The template carries OS prep, the RKE2 binaries (server and agent units; the role is chosen at launch), SELinux policy, kernel modules and the guest agent. No check compares this ID with what is baked into the template. A new value reaches only new VMs and VMs you replace on purpose: existing VMs keep their disks. See the README for the rolling replacement."
+  description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. Existing VMs keep their disks. To roll nodes one at a time, see 'Rolling to a new template' in the README."
   type        = number
   nullable    = false
 }
@@ -193,7 +193,7 @@ variable "ssh_authorized_keys" {
 }
 
 variable "dns_servers" {
-  description = "DNS nameserver addresses written into every control-plane VM's cloud-init network-config, and passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf — defense in depth against any node-inherited DNS search domain colliding with a wildcard cluster DNS record, on top of node-bootstrap's own prefer_fqdn_over_hostname fix for the specific hostname-derived case (see node-bootstrap's dns_servers variable for the full picture)."
+  description = "DNS nameserver addresses written into the cloud-init network-config of every VM. They also give kubelet a resolv-conf with no search domain, so a node search domain cannot match the wildcard cluster record."
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
 }
@@ -209,7 +209,7 @@ variable "control_plane_count" {
 }
 
 variable "control_plane_ip_addresses" {
-  description = "Static IPv4 addresses in CIDR notation (e.g. '192.168.1.10/24'), one per control-plane node, in order. Optional at any control_plane_count: when null, every control-plane node gets its IP via DHCP and it's resolved post-apply through the Proxmox guest agent (used for join tokens, TLS SANs, the etcd firewall ipset, and the dns-registration record). Static IPs remain the practical default for HA — genesis must be reachable before joiners' node-bootstrap runs, and DHCP-assigned IPs are only known after each VM boots."
+  description = "Static IPv4 addresses in CIDR form (e.g. '192.168.1.10/24'), one per control-plane node, in order. Null (the default) uses DHCP. Static addresses are advised for HA, because genesis must be reachable before joiners boot."
   type        = list(string)
   default     = null
 
@@ -226,7 +226,7 @@ variable "vm_gateway" {
 }
 
 variable "cluster_network_cidr" {
-  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'), used as the sole member of the cluster-wide firewall ipset. Proxmox multi-node is a single flat L2 subnet, and bpg/proxmox's ipset resource is owned monolithically by one Terraform state, so exact per-VM membership (AWS's self-referencing security group) can't span the control plane's and each node pool's separate states — this CIDR is the pragmatic Proxmox equivalent of 'this cluster's own members'. Required when control_plane_count > 1 or when any node pool will attach; optional (module still creates the ipset) for a single-node cluster with no pools."
+  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'). It is the only member of the cluster firewall ipset. Required when control_plane_count > 1 or when any node pool attaches."
   type        = string
   default     = null
 }
@@ -261,7 +261,7 @@ variable "cluster_dns_name" {
 }
 
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'cluster.example'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the HA registration/access endpoint — without it there is no single address that names every control-plane node."
+  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>; cluster_dns_name replaces cluster_name if set. Required when control_plane_count > 1."
   type        = string
   default     = null
 
@@ -297,7 +297,7 @@ variable "dns_transport" {
 }
 
 variable "dns_record_ttl" {
-  description = "TTL in seconds for the published cluster_fqdn record, and for the genesis node's own self-registered record. Ignored when dns_server_address is null. Kept low by default — see proxmox-boot-steps' dns_self_register_ttl for why a low TTL matters here (downstream resolver caching can otherwise stale-block a fresh apply's join for up to a full TTL)."
+  description = "TTL in seconds for the published cluster_fqdn record and the genesis node's self-registered record. Ignored when dns_server_address is null. Keep it low; see proxmox-boot-steps' dns_self_register_ttl."
   type        = number
   default     = 30
 }
@@ -393,7 +393,7 @@ variable "boot_scripts" {
 }
 
 variable "cloud_init_upload_mode" {
-  description = "How the provider copies cloud-init snippet files to the Proxmox host over SSH. Null keeps the provider default, 'stream', which opens a shell and tries sudo. Use 'sftp' when the SSH user is limited to the SFTP subsystem: it needs write permission on the snippets directory and does not use sudo. Has no effect on ISO or image downloads, which use the API."
+  description = "How the provider copies cloud-init snippets to the Proxmox host over SSH. Null keeps the provider default, 'stream', which uses sudo. 'sftp' needs write access to the snippets directory and no sudo. It does not affect ISO or image downloads."
   type        = string
   default     = null
 

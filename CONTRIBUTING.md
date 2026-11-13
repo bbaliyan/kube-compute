@@ -20,3 +20,22 @@ Run `make test-commit` inside the kube-devenv image. CI runs the same target. Ru
 
 - OpenTofu: run `tofu fmt` before committing.
 - Every source file carries `# SPDX-License-Identifier: Apache-2.0`.
+
+## Examples
+
+`examples/` holds one minimal call for each cluster module. Every value is a
+placeholder. `make validate` runs `tofu validate` on each one. Keep them valid
+when you change a required input.
+
+## Versions and release notes
+
+- A release is a tag `vX.Y.Z` on `main`. The release workflow publishes it to the
+  provider mirrors, with notes built from the commits since the last release.
+  There is no CHANGELOG file. The commit subject is the release note.
+- The version is 0.x. A breaking change raises the minor number. Any other change
+  raises the patch number.
+- A change is breaking if it removes or renames a module, an input or an output,
+  changes a default, adds an input that has no default, changes the type of an
+  input or an output, makes a validation stricter, or forces a node to be replaced.
+- Mark a breaking commit with `!`, as in `feat!:` or `refactor!:`, and say in the
+  body what a user must change.

@@ -16,19 +16,19 @@ variable "cluster_fqdn" {
 }
 
 variable "cluster_fqdn_suffix" {
-  description = "Optional DNS suffix under which the platform's web-UI ingress hostnames are published (e.g. 'my-cluster.example.com' yields argocd.my-cluster.example.com). Distinct from cluster_fqdn, which is the API server name (api.<suffix>) — the ingress suffix must not carry the 'api.' prefix. Null/empty disables platform ingress."
+  description = "Optional DNS suffix for the platform web UI hostnames (e.g. 'my-cluster.example.com' gives argocd.my-cluster.example.com). It differs from cluster_fqdn and must not start with 'api.'. Null or empty disables platform ingress."
   type        = string
   default     = null
 }
 
 variable "node_fqdn_label" {
-  description = "Optional override for the fqdn's leftmost label (before cluster_fqdn_suffix), when it should differ from node_name. node_name is also this node's OS hostname and (on Proxmox) its VM/tag name in the provider UI, where a cluster-name prefix is useful for telling clusters apart at a glance; the fqdn already carries that identity in its suffix (cluster_fqdn_suffix embeds cluster_name), so repeating the prefix there is redundant. Null (the default) uses node_name for the label, preserving existing behavior."
+  description = "Optional override for the leftmost fqdn label (before cluster_fqdn_suffix). Null (the default) uses node_name. The fqdn suffix already carries the cluster name, so a cluster-name prefix here is redundant."
   type        = string
   default     = null
 }
 
 variable "set_hostname" {
-  description = "Whether cloud-init sets hostname and fqdn from node_name. true (the default) is required for a node with its own render, because RKE2 registers the node by OS hostname. false omits both keys, for a render shared by several VMs such as an Auto Scaling group. The platform metadata then supplies the hostname."
+  description = "Whether cloud-init sets hostname and fqdn from node_name. true (the default) is required for a node with its own render, because RKE2 registers by OS hostname. false omits both keys, for a render shared by several VMs such as an Auto Scaling group."
   type        = bool
   default     = true
 }
@@ -49,33 +49,33 @@ variable "control_plane_taint" {
 }
 
 variable "cluster_token" {
-  description = "Shared secret used to join a server to the cluster (rke2 config.yaml's token:). Required for node_role server-init and server-join alike — both receive the same freshly-generated cluster secret directly (no existing secret store to fetch a server token from). Sensitive: written into the 0600 /etc/rancher/rke2/config.yaml of the cloud-init payload."
+  description = "Shared secret that joins a server to the cluster (config.yaml token). Required for server-init and server-join. Sensitive: written to the 0600 /etc/rancher/rke2/config.yaml."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "cluster_agent_token" {
-  description = "Separate shared secret accepted only from agents (rke2 config.yaml's agent-token:) — a worker presenting this value can join as an agent but never as a server/etcd member. Only meaningful for node_role server-init (server-join callers omit it in every provider module checked). Sensitive: written into the 0600 /etc/rancher/rke2/config.yaml of the cloud-init payload."
+  description = "Separate secret accepted only from agents (config.yaml agent-token), so a worker can join as an agent but never as a server. Used only for server-init. Sensitive: written to the 0600 /etc/rancher/rke2/config.yaml."
   type        = string
   default     = null
   sensitive   = true
 }
 
 variable "registration_address" {
-  description = "IP or FQDN of the existing cluster's registration endpoint (a control plane's registration_address output). Used to build config.yaml's server: https://<address>:9345. Required for node_role server-join or worker. Optional for server-init: when set, the node probes this address at boot and joins the cluster that answers instead of initializing a new one (the rejoin probe)."
+  description = "IP or FQDN of the existing cluster's registration endpoint (a control plane's registration_address output). Required for server-join and worker. Optional for server-init: if set, the node probes it at boot and joins the cluster that answers (rejoin probe)."
   type        = string
   default     = null
 }
 
 variable "rejoin_probe_addresses" {
-  description = "IPs or FQDNs a server-init node probes, in order, before it starts etcd. The node joins the cluster of the first address that answers and initializes a new cluster only if none does. Use it when registration_address points back at the node itself. Empty (the default) means the node probes registration_address, if set. Only meaningful for node_role = server-init."
+  description = "IPs or FQDNs a server-init node probes in order before it starts etcd. It joins the first cluster that answers and initializes a new one only if none does. Use it when registration_address points at the node itself. Empty (the default) probes registration_address."
   type        = list(string)
   default     = []
 }
 
 variable "agent_token_fetch_command" {
-  description = "Shell command that prints the rke2 agent join token to stdout when run on the node (e.g. a cloud provider's CLI call to fetch a secret from its parameter/secrets store). Required for node_role worker; ignored otherwise. Sensitive: some providers' fetch commands embed the raw token in the command string itself rather than fetching it out-of-band (e.g. Proxmox's node-pool module passes a literal `echo '<token>'`), so this is treated as sensitive uniformly and written into the cloud-init payload's 0600 /opt/kube-compute/secrets.env."
+  description = "Shell command that prints the rke2 agent join token to stdout on the node, for example a cloud CLI call that reads a secrets store. Required for node_role worker; ignored otherwise. Sensitive: it is written to the 0600 /opt/kube-compute/secrets.env."
   type        = string
   default     = null
   sensitive   = true
@@ -88,7 +88,7 @@ variable "extra_tls_sans" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'cilium' (the default) or 'default' (the CNI the image ships, Canal). 'default' is not viable on AlmaLinux 10, whose kernel lacks the modules Canal needs. 'cilium' sets disable: [rke2-cilium] on a genesis node so the Cilium manifest from the platform ref is the only Cilium install. It needs the platform repo (gitops_platform_repo_url) on the genesis node."
+  description = "CNI to install: 'cilium' (the default) or 'default' (Canal, not viable on AlmaLinux 10). On a genesis node 'cilium' disables rke2-cilium, so the Cilium manifest from the platform ref is the only install. It needs gitops_platform_repo_url."
   type        = string
   default     = "cilium"
   validation {
@@ -105,7 +105,7 @@ variable "trusted_ca_pem" {
 }
 
 variable "trusted_ca_in_image" {
-  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. true keeps the PEM out of user data while still using its value for containerd's TLS pin and the platform Application's trustedCaPemB64 parameter. The bootstrap program fails the boot if the image does not carry the file."
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. If true, user data omits the PEM, but the value is still used for the containerd TLS pin. The boot program fails if the file is missing."
   type        = bool
   default     = false
 }
@@ -123,7 +123,7 @@ variable "node_labels" {
 }
 
 variable "node_taints" {
-  description = "Extra node-taint: entries applied at rke2 install time, each a full \"key=value:Effect\" string (e.g. [\"dedicated=true:NoSchedule\"]). Only meaningful for node_role = worker: the server roles fill the same single config.yaml key from control_plane_taint. A label and a nodeSelector make a node merely preferred; only a taint keeps other pods off it."
+  description = "Extra node-taint entries applied at RKE2 install time, each a full 'key=value:Effect' string (e.g. ['dedicated=true:NoSchedule']). Only for node_role = worker; server roles use control_plane_taint. Only a taint keeps other pods off a node."
   type        = list(string)
   default     = []
 
@@ -146,19 +146,19 @@ variable "gitops_platform_enabled" {
 }
 
 variable "gitops_platform_repo_url" {
-  description = "Argo CD platform Application source repo (kube-platform or a fork). Null/\"\" (the default) falls back to local.pinned_platform_repo_url — see that local for why the pin lives there rather than as this variable's default. The genesis node also clones it for bootstrap/rendered/cilium.yaml and argocd.yaml. When gitops_platform_enabled is false, there is no fallback to the pin and this input is required if the node needs Cilium or Argo CD. Only meaningful for node_role = server-init."
+  description = "Source repo of the Argo CD platform Application (kube-platform or a fork). Null or empty (the default) uses local.pinned_platform_repo_url. The genesis node also clones it for its Cilium and Argo CD manifests. Only for server-init."
   type        = string
   default     = null
 }
 
 variable "gitops_platform_revision" {
-  description = "Branch/tag/SHA the platform Application tracks. The genesis node clones the same ref for its boot manifests (a 40-digit hex value is checked out as a commit). Null/\"\" (the default) falls back to local.pinned_platform_revision — kube-platform's protected `main` branch, not a fixed commit — see that local for why. Override for a fork or to pin a specific revision instead."
+  description = "Branch, tag or SHA the platform Application tracks. The genesis node clones the same ref for its boot manifests (40 hex digits means a commit). Null or empty (the default) uses local.pinned_platform_revision, the protected main branch of kube-platform."
   type        = string
   default     = null
 }
 
 variable "gitops_workloads_repo_url" {
-  description = "Optional user-defined workloads Application source repo, fully independent of the platform Application — no shared app-of-apps parent, no enforced ordering (Argo CD's own automated selfHeal/retry converges a workload that depends on something platform provides, once platform catches up). Null/empty (the default) = no workloads Application at all. Only meaningful for node_role = server-init."
+  description = "Optional source repo of a workloads Application, independent of the platform Application and with no ordering between them. Null or empty (the default) creates none. Only for node_role = server-init."
   type        = string
   default     = null
 }
@@ -232,7 +232,7 @@ variable "dns_servers" {
 }
 
 variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests to write under /opt/kube-compute/manifests/ and apply via bootstrap.sh, (this module does not interpret content). Empty list (default) applies nothing beyond the existing platform/workloads Applications. Only meaningful for node_role = server-init — genesis-only, mirroring render_cilium/render_argocd."
+  description = "Ordered list of {path, content} manifests written under /opt/kube-compute/manifests/ and applied by bootstrap.sh. This module does not interpret content. Empty (the default) applies none. Only for node_role = server-init."
   type = list(object({
     path    = string
     content = string
@@ -256,7 +256,7 @@ variable "genesis_apply_manifests" {
 }
 
 variable "graceful_shutdown" {
-  description = "How long kubelet holds up an OS shutdown to evict pods, so a node that is stopped on a schedule -- or terminated by an autoscaler -- stops its workloads instead of having them killed with it. critical_seconds is the part of that reserved for critical pods, and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables the feature, leaving pods to be killed when containerd goes down. Keep the total well under the two minutes a cloud gives an instance before it pulls the power."
+  description = "How long kubelet delays an OS shutdown to evict pods. critical_seconds is the part reserved for critical pods and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. Keep the total well under 2 minutes."
   type = object({
     seconds          = optional(number, 90)
     critical_seconds = optional(number, 30)
@@ -275,7 +275,7 @@ variable "graceful_shutdown" {
 }
 
 variable "os_auto_updates" {
-  description = "Installs OS updates daily with dnf-automatic, without rebooting, once the node has joined. RKE2's own packages are excluded from dnf, since system-upgrade-controller upgrades them. Also installs yum-utils, whose needs-restarting reports when a reboot is due. False leaves the node's packages as baked."
+  description = "Install OS updates daily with dnf-automatic, without rebooting, once the node has joined. RKE2 packages are excluded, because system-upgrade-controller upgrades them. Also installs yum-utils, whose needs-restarting reports a due reboot. False leaves packages as baked."
   type        = bool
   default     = true
 }
@@ -287,7 +287,7 @@ variable "boot_scripts" {
 }
 
 variable "provider_steps" {
-  description = "Boot steps that belong to one provider. The provider module builds them, so this module holds no provider logic. Each step has a name and cloud-init runcmd commands (a command is a list of strings). They run in order, before the module's own commands and the boot program. The names appear in the boot_steps output."
+  description = "Boot steps owned by one provider. The provider module builds them, so this module holds no provider logic. Each has a name and cloud-init runcmd commands (a command is a list of strings). They run in order before the module's own commands."
   type = list(object({
     name     = string
     commands = list(list(string))
