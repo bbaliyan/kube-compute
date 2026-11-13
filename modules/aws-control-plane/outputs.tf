@@ -71,7 +71,7 @@ output "node_security_group_id" {
 
 output "node_iam_role_name" {
   description = "IAM role name attached to the node. Reference this in your consumer repo to attach additional policies (e.g. SSM Parameter Store read access for ESO)."
-  value       = aws_iam_role.node.name
+  value       = module.node_iam.role_name
 }
 
 # ---- Join flow: consumed by aws-node-pool (and, later, additional control-plane nodes) ----

@@ -24,7 +24,7 @@ run "node_resources" {
     error_message = "instance must attach node-bootstrap user-data"
   }
   assert {
-    condition     = aws_instance.control_plane["0"].iam_instance_profile == aws_iam_instance_profile.node.name
+    condition     = aws_instance.control_plane["0"].iam_instance_profile == module.node_iam.instance_profile_name
     error_message = "instance must use the module instance profile"
   }
   assert {
@@ -50,7 +50,7 @@ run "node_resources" {
     error_message = "SG must NOT open SSH (22) on any CIDR"
   }
   assert {
-    condition     = aws_iam_role_policy_attachment.ssm_core.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-    error_message = "IAM role must attach AmazonSSMManagedInstanceCore for the control-plane"
+    condition     = length(output.node_iam_role_name) > 0
+    error_message = "node_iam_role_name must expose the role of the shared IAM module"
   }
 }

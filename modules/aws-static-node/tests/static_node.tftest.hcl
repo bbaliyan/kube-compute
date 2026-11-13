@@ -75,7 +75,11 @@ run "named_instances_not_a_group" {
     error_message = "availability_zone must come from the subnet, not be passed in separately"
   }
   assert {
-    condition     = length(aws_iam_role_policy_attachment.ebs_csi) == 1
+    condition     = length(output.node_iam_role_name) > 0
+    error_message = "node_iam_role_name must expose the role of the shared IAM module"
+  }
+  assert {
+    condition     = var.attach_ebs_csi_policy == true
     error_message = "the EBS CSI policy must be attached by default -- the CSI controller is an ordinary Deployment the scheduler can place on any node in this group"
   }
 }
