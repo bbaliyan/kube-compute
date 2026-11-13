@@ -211,7 +211,7 @@ variable "cpu_units" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. Existing VMs keep their disks."
+  description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. To roll nodes one at a time, see 'Rolling to a new template' in the proxmox-control-plane and proxmox-node-pool READMEs."
   type        = number
   nullable    = false
 }
@@ -404,7 +404,7 @@ variable "node_pools" {
 }
 
 variable "platform_node_group" {
-  description = "node_pools key of the pool that runs the platform stack, ingress included. That pool's node-group label pins the platform components, it alone opens ingress_ports, and the wildcard DNS record points at its workers. Null keeps all of that on the control plane."
+  description = "node_pools key of the pool running the platform stack, ingress included. Its node-group label pins the platform pods, it alone opens ingress_ports, and the wildcard DNS record points at its workers. Null keeps all of that on the control plane, or on every pool of a dedicated_control_plane cluster."
   type        = string
   default     = null
 

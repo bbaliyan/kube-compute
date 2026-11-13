@@ -192,7 +192,7 @@ variable "vpc_name" {
 }
 
 variable "subnet_names" {
-  description = "Candidate subnets by Name tag, in order of preference. The first with subnet_min_free_ips free addresses wins, and the choice stays in state. To choose again, replace terraform_data.subnet_choice[0] in the control plane; a new choice replaces every node. List form of subnet_name."
+  description = "Candidate subnets by Name tag, in order of preference. The first with a free address for the control plane and each static node without its own subnet_id wins, and the choice stays in state. To choose again, replace terraform_data.subnet_choice[0] in the control plane. List form of subnet_name."
   type        = list(string)
   default     = null
 }
@@ -316,7 +316,7 @@ variable "platform_node_group" {
 }
 
 variable "power_schedule" {
-  description = "When the nodes run. days uses EventBridge Scheduler form (MON-FRI, MON,WED,FRI); unset means every day. At stop_time the control plane and static nodes stop and autoscaled groups scale to zero. start_time starts them again. Times are HH:MM in timezone. Null leaves the cluster running."
+  description = "When nodes run. days uses EventBridge Scheduler form (MON-FRI); unset means every day. At stop_time the control plane and static nodes stop and autoscaled groups scale to zero. start_time starts them again; without it the cluster stays stopped. Times are HH:MM in timezone. Null: always running."
   type = object({
     stop_time  = string
     timezone   = string
@@ -347,7 +347,7 @@ variable "power_schedule" {
 }
 
 variable "autoscaled_nodes" {
-  description = "Roles cluster-autoscaler adds nodes to, keyed by role name (e.g. 'workers'). Each instance type of a role is an EC2 Auto Scaling group from zero, in the control plane's subnet. Nodes carry kube-compute.io/node-group=<role>. max_cpu_cores and max_memory_gib cap each role."
+  description = "Roles the autoscaler fills. Each instance type is an Auto Scaling group from zero in the control-plane subnet, labelled kube-compute.io/node-group=<role>. max_cpu_cores and max_memory_gib cap a role. Adding the first role or removing the last replaces the control plane and static nodes."
   type = map(object({
     instance_types      = list(string)
     max_cpu_cores       = number
@@ -392,7 +392,7 @@ variable "graceful_shutdown" {
 }
 
 variable "os_auto_updates" {
-  description = "Installs OS updates daily with dnf-automatic on every node, without rebooting; a node whose updates need a reboot reports it through needs-restarting (yum-utils). RKE2's own packages are excluded from dnf, since system-upgrade-controller upgrades them. False leaves nodes' packages as baked."
+  description = "Install OS updates with dnf-automatic on every node, daily, without rebooting. RKE2 packages are excluded, because system-upgrade-controller upgrades them. needs-restarting (yum-utils) reports a due reboot. False leaves packages as baked."
   type        = bool
   default     = true
 }

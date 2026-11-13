@@ -59,7 +59,7 @@ variable "gitops_workloads_path" {
 }
 
 variable "cluster_type" {
-  description = "Cluster topology intent: 'all_in_one' (control-plane nodes stay schedulable) or 'dedicated_control_plane' (control-plane nodes are tainted so user workloads run only on separate node pools)."
+  description = "Cluster topology: 'all_in_one' (control-plane nodes stay schedulable) or 'dedicated_control_plane' (control-plane nodes are tainted, so workloads run only on node pools). The module cannot derive this from the worker count, because node pools are separate state."
   type        = string
   default     = "all_in_one"
   validation {
@@ -181,7 +181,7 @@ variable "cpu_units" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. Existing VMs keep their disks."
+  description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. Existing VMs keep their disks. To roll nodes one at a time, see 'Rolling to a new template' in the README."
   type        = number
   nullable    = false
 }

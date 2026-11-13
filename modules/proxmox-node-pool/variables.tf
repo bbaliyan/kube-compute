@@ -95,7 +95,7 @@ variable "cpu_units" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of the kube-images Proxmox template to full-clone every worker from. A new value reaches only new or replaced VMs. Existing VMs keep their disks."
+  description = "VM ID of the kube-images Proxmox template to full-clone every worker from. A new value reaches only new or replaced VMs. Existing VMs keep their disks. To roll nodes one at a time, see 'Rolling to a new template' in the README."
   type        = number
   nullable    = false
 }

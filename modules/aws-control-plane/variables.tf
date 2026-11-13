@@ -119,7 +119,7 @@ variable "control_plane_subnets" {
 }
 
 variable "endpoint_mode" {
-  description = "How joining nodes reach the registration endpoint when control_plane_count > 1: 'loadbalancer' (default) creates an internal NLB; 'dns' creates Route53 multivalue records with health checks and needs cluster_domain; 'static' uses static_registration_address as given."
+  description = "How joining nodes reach the registration endpoint when control_plane_count > 1: 'loadbalancer' (default) creates an internal NLB; 'dns' creates Route53 multivalue records with health checks and needs cluster_domain and a hosted zone; 'static' uses static_registration_address as given."
   type        = string
   default     = "loadbalancer"
   validation {
