@@ -11,8 +11,8 @@ A good upgrade plan has only moves.
 3. This branch is built into the same layout with `scripts/release-split.sh`.
 4. For each case, both trees get `root/emulator.tf` and the case inputs, as Terragrunt would add them.
 5. The released tree is applied. The branch tree is planned on that state.
-6. `changes.jq` lists each move, update, create, delete and replace.
-7. The check fails on an update, create, delete or replace that `allowed/<case>.txt` does not list. Each case lists its own changes, so a regression in one shape fails that case.
+6. `changes.jq` lists each move, update, create, delete, forget and replace. A forget leaves state and changes no infrastructure.
+7. The check fails on an update, create, delete, forget or replace that `allowed/<case>.txt` does not list. Each case lists its own changes, so a regression in one shape fails that case.
 
 ## Cases
 

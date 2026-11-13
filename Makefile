@@ -160,7 +160,7 @@ state-migration/%: state-migration-seed
 	$(call sm_time,$* new plan) $(sm_aws) tofu -chdir=$(SM_WORK)/$*/new plan -input=false -refresh=false -parallelism=30 -out=$(SM_WORK)/$*/plan >$(SM_WORK)/$*/plan.log
 	$(call sm_time,$* show) $(sm_aws) tofu -chdir=$(SM_WORK)/$*/new show -json $(SM_WORK)/$*/plan | jq -r -f $(SM_DIR)/changes.jq | sort >$(SM_WORK)/$*/changes.txt
 	@echo "state-migration/$*: $(SM_OLD_REF) -> this branch"; cat $(SM_WORK)/$*/changes.txt
-	@{ grep -E '^(update|create|delete|replace) ' $(SM_WORK)/$*/changes.txt || true; } \
+	@{ grep -E '^(update|create|delete|forget|replace) ' $(SM_WORK)/$*/changes.txt || true; } \
 	  | { grep -vxF -f $(SM_DIR)/allowed/$*.txt || true; } | sed 's/^/unexpected: /' | { ! grep . >&2; }
 
 # CI entry point: installs the pinned moto in a venv, starts it on the loopback
