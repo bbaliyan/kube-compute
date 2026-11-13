@@ -66,6 +66,7 @@ lint-scripts:
 	bash -n scripts/*.sh tests/*.sh .githooks/pre-commit
 	shellcheck -S warning scripts/*.sh tests/*.sh .githooks/pre-commit
 	tests/check-trivyignore.sh
+	tests/check-description-length.sh
 
 lint-pipelines:
 	$(CHECKS)/pipeline-lint.sh .
