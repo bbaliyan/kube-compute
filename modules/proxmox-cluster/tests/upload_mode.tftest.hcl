@@ -40,7 +40,6 @@ variables {
       desired_count          = 1
       registration_address   = "192.168.1.5"
       pool_id                = "batch"
-      cpu_units              = 50
     }
   }
 }

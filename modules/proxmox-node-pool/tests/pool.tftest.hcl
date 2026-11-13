@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# pool_id and cpu_units are optional. Unset must leave the VMs in no Proxmox
-# pool and on the provider's default CPU weight, as before they existed.
+# pool_id are optional. Unset must leave the VMs in no Proxmox
+# pool, as before it existed.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/example.yaml" }
@@ -25,34 +25,23 @@ variables {
   proxmox_template_vm_id = 9000
 }
 
-run "unset_means_no_pool_and_default_cpu_weight" {
+run "unset_means_no_pool" {
   command = plan
 
   assert {
     condition     = alltrue([for vm in proxmox_virtual_environment_vm.worker : vm.pool_id == null])
     error_message = "workers must not join a pool when pool_id is unset"
   }
-  # The mock reports a computed units as 0, so unset is checked on the output
-  # that carries the input, not on the VM attribute.
-  assert {
-    condition     = output.cpu_units == null
-    error_message = "cpu_units must stay null so the provider keeps its default CPU weight"
-  }
 }
 
 run "set_applies_to_every_worker" {
   command = plan
   variables {
-    pool_id   = "kube"
-    cpu_units = 100
+    pool_id = "kube"
   }
 
   assert {
     condition     = alltrue([for vm in proxmox_virtual_environment_vm.worker : vm.pool_id == "kube"])
     error_message = "every worker must join the pool named by pool_id"
-  }
-  assert {
-    condition     = alltrue([for vm in proxmox_virtual_environment_vm.worker : vm.cpu[0].units == 100])
-    error_message = "every worker must carry cpu_units as its CPU weight"
   }
 }

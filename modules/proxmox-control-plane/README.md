@@ -69,12 +69,11 @@ Inside `proxmox-cluster`, put `module.control_plane.` before each address below.
 
 Roll the control plane before the workers: a kubelet must not be newer than the API server.
 
-## Proxmox pool and CPU weight
+## Proxmox pool
 
-Both inputs are optional. Unset, the VMs join no pool and keep the Proxmox default CPU weight.
+`pool_id` is optional. Unset, the VMs join no pool.
 
 - `pool_id`: the Proxmox resource pool every control-plane VM joins. Set it when the API token is scoped to one pool.
-- `cpu_units`: the CPU weight of each VM, from 1 to 262144. A lower weight gives CPU to other VMs when the host is busy.
 
 ## Cloud-init snippet upload
 

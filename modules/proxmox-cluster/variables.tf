@@ -165,17 +165,6 @@ variable "pool_id" {
   default     = null
 }
 
-variable "cpu_units" {
-  description = "Proxmox CPU weight (cpuunits) of each control-plane VM and every node_pools worker, unless a node_pools entry sets its own cpu_units. A lower value yields CPU to other VMs. Null (default) keeps the Proxmox default."
-  type        = number
-  default     = null
-
-  validation {
-    condition     = var.cpu_units == null ? true : var.cpu_units >= 1 && var.cpu_units <= 262144
-    error_message = "cpu_units must be between 1 and 262144, the range Proxmox accepts."
-  }
-}
-
 variable "proxmox_template_vm_id" {
   description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. To roll nodes one at a time, see 'Rolling to a new template' in the proxmox-control-plane and proxmox-node-pool READMEs."
   type        = number
@@ -327,7 +316,6 @@ variable "node_pools" {
     vm_disk_gb             = number
     vm_cpu_type            = optional(string, "x86-64-v2-AES")
     pool_id                = optional(string)
-    cpu_units              = optional(number)
     proxmox_template_vm_id = optional(number)
     ssh_authorized_keys    = optional(list(string))
     dns_servers            = optional(list(string))
@@ -349,10 +337,6 @@ variable "node_pools" {
   }))
   default = {}
 
-  validation {
-    condition     = alltrue([for pool in values(var.node_pools) : pool.cpu_units == null ? true : pool.cpu_units >= 1 && pool.cpu_units <= 262144])
-    error_message = "A node_pools cpu_units must be between 1 and 262144, the range Proxmox accepts."
-  }
   validation {
     condition     = length(compact([for pool in values(var.node_pools) : pool.node_name_template])) == length(distinct(compact([for pool in values(var.node_pools) : pool.node_name_template])))
     error_message = "Two node_pools have the same node_name_template, so their workers would share names."

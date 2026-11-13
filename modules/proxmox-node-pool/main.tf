@@ -127,7 +127,6 @@ resource "proxmox_virtual_environment_vm" "worker" {
   cpu {
     cores = var.vm_cores
     type  = var.vm_cpu_type
-    units = var.cpu_units
   }
 
   memory {

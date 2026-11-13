@@ -159,17 +159,6 @@ variable "pool_id" {
   default     = null
 }
 
-variable "cpu_units" {
-  description = "Proxmox CPU weight (cpuunits) of each control-plane VM: its share of CPU time when the host is busy, relative to other VMs. A lower value yields CPU to other VMs. Null (default) keeps the Proxmox default."
-  type        = number
-  default     = null
-
-  validation {
-    condition     = var.cpu_units == null ? true : var.cpu_units >= 1 && var.cpu_units <= 262144
-    error_message = "cpu_units must be between 1 and 262144, the range Proxmox accepts."
-  }
-}
-
 variable "proxmox_template_vm_id" {
   description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. Existing VMs keep their disks. To roll nodes one at a time, see 'Rolling to a new template' in the README."
   type        = number

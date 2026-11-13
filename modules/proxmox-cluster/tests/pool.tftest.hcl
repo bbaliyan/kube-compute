@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Cluster-wide pool_id and cpu_units reach the control plane and every node
-# pool. A node_pools entry may override either. Unset changes nothing.
+# The cluster-wide pool_id reaches the control plane and every node
+# pool. A node_pools entry may override it. Unset changes nothing.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/example.yaml" }
@@ -40,42 +40,40 @@ variables {
       desired_count          = 1
       registration_address   = "192.168.1.5"
       pool_id                = "batch"
-      cpu_units              = 50
     }
   }
 }
 
 # apply, not plan: the pools read the control plane's token, unknown at plan time.
-run "unset_means_no_pool_and_default_cpu_weight" {
+run "unset_means_no_pool" {
   command = apply
 
   assert {
-    condition     = output.pool_id == null && output.cpu_units == null
-    error_message = "unset pool_id and cpu_units must reach the control plane as null"
+    condition     = output.pool_id == null
+    error_message = "unset pool_id must reach the control plane as null"
   }
   assert {
-    condition     = output.node_pools["inherit"].pool_id == null && output.node_pools["inherit"].cpu_units == null
-    error_message = "unset pool_id and cpu_units must reach the node pools as null"
+    condition     = output.node_pools["inherit"].pool_id == null
+    error_message = "unset pool_id must reach the node pools as null"
   }
 }
 
 run "cluster_wide_values_reach_control_plane_and_pools" {
   command = apply
   variables {
-    pool_id   = "kube"
-    cpu_units = 100
+    pool_id = "kube"
   }
 
   assert {
-    condition     = output.pool_id == "kube" && output.cpu_units == 100
-    error_message = "pool_id and cpu_units must pass through to the control plane"
+    condition     = output.pool_id == "kube"
+    error_message = "pool_id must pass through to the control plane"
   }
   assert {
-    condition     = output.node_pools["inherit"].pool_id == "kube" && output.node_pools["inherit"].cpu_units == 100
-    error_message = "a pool that sets neither must take the cluster-wide values"
+    condition     = output.node_pools["inherit"].pool_id == "kube"
+    error_message = "a pool that sets none must take the cluster-wide value"
   }
   assert {
-    condition     = output.node_pools["override"].pool_id == "batch" && output.node_pools["override"].cpu_units == 50
-    error_message = "a node_pools entry's own pool_id and cpu_units must win over the cluster-wide ones"
+    condition     = output.node_pools["override"].pool_id == "batch"
+    error_message = "a node_pools entry's own pool_id must win over the cluster-wide one"
   }
 }
