@@ -17,7 +17,7 @@ variable "trusted_ca_pem" {
 }
 
 variable "trusted_ca_in_image" {
-  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt, so no node in this cluster ships the PEM in its user data. The value is still used for containerd's TLS pin and the platform Application, and the bootstrap program fails the boot if the image does not carry the file."
+  description = "Whether the node image already carries trusted_ca_pem at /etc/pki/ca-trust/source/anchors/trusted-ca.crt. If true, user data omits the PEM, but the value is still used for the containerd TLS pin. The boot program fails if the file is missing."
   type        = bool
   default     = false
 }
@@ -29,7 +29,7 @@ variable "registry_mirror_url" {
 }
 
 variable "dns_servers" {
-  description = "Upstream DNS resolver IPs for the control plane, passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf — defense in depth against any node-inherited DNS search domain colliding with a wildcard cluster DNS record (*.<cluster>.<domain>, see cluster_domain), on top of node-bootstrap's own prefer_fqdn_over_hostname fix for the specific hostname-derived case. Null/empty (the default) leaves kubelet's default ClusterFirst DNS policy in place: every pod inherits its node's own /etc/resolv.conf search domain(s) verbatim. 169.254.169.253 (the VPC's own Amazon-provided DNS Resolver) is a safe default for a standard VPC. Each node_pools entry has its own dns_servers field for the same reason on workers — not auto-wired from this one, since a pool could reasonably live in a different VPC."
+  description = "Upstream DNS resolver IPs. They give kubelet a resolv-conf with no search domain, so a node search domain cannot match the wildcard cluster record. Null keeps the kubelet default. 169.254.169.253 is the Amazon-provided resolver."
   type        = list(string)
   default     = null
 }
@@ -81,7 +81,7 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (its kernel dropped modules flannel and Felix require). 'default' remains an escape hatch for a consumer-supplied playbook targeting a different OS."
+  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
   type        = string
   default     = null
   validation {
@@ -192,7 +192,7 @@ variable "vpc_name" {
 }
 
 variable "subnet_names" {
-  description = "Candidate subnets by Name tag, in order of preference. A new cluster is placed in the first with a free address for the control plane and every static node without its own subnet_id; the whole cluster then stays in that subnet, even as it fills. To choose again on purpose, run tofu apply -replace='module.<name>.module.control_plane.terraform_data.subnet_choice[0]'; if the choice changes, every node is replaced. Candidates may be in different availability zones. List form of subnet_name; see the aws-control-plane module."
+  description = "Candidate subnets by Name tag, in order of preference. The first with subnet_min_free_ips free addresses wins, and the choice stays in state. To choose again, replace terraform_data.subnet_choice[0] in the control plane; a new choice replaces every node. List form of subnet_name."
   type        = list(string)
   default     = null
 }
@@ -204,7 +204,7 @@ variable "subnet_name" {
 }
 
 variable "cluster_dns_name" {
-  description = "Name to use in DNS in place of cluster_name, so that the FQDN is <cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name. Set this where cluster_name carries something the domain already says: with cluster_name = \"app-red\" and cluster_domain = \"red.example.internal\", cluster_dns_name = \"app\" keeps the name app.red.example.internal while tags, resource names and the agent token parameter stay unique to that cluster."
+  description = "Name used in DNS in place of cluster_name, so the FQDN is <cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name."
   type        = string
   default     = null
   validation {
@@ -244,7 +244,7 @@ variable "os_image_ami_id" {
 }
 
 variable "os_image_name" {
-  description = "AMI name of a kube-images build for the control-plane node(s), e.g. its self-descriptive build name. Set this or os_image_ami_id. Resolved to an ID via a data lookup scoped to this account and the derived architecture. Accepts EC2 Name-filter wildcards (*, ?): a pattern with the build date/suffix omitted resolves to the most recent matching build. Ignored when os_image_ami_id is set."
+  description = "AMI name of a kube-images build for the control-plane nodes. Set this or os_image_ami_id, which wins if set. Accepts EC2 Name wildcards (*, ?); a pattern without the build date picks the newest match."
   type        = string
   default     = null
 
@@ -278,14 +278,7 @@ variable "root_volume_type" {
 }
 
 variable "static_nodes" {
-  description = <<-EOT
-    Named worker node groups keyed by group name (e.g. "platform"), each created via
-    aws-static-node with this cluster's identity, join address and security groups wired in
-    automatically. For capacity the cluster must always have; elastic capacity belongs in
-    autoscaled_nodes. Empty map (the default) creates none.
-
-    subnet_id defaults to the control plane's own, keeping the cluster in one availability zone.
-  EOT
+  description = "Named worker node groups keyed by group name (e.g. 'platform'), each created through aws-static-node with the cluster's identity, join address and security groups. For capacity the cluster must always have. subnet_id defaults to the control plane's. Empty (the default) creates none."
   type = map(object({
     node_count            = optional(number, 1)
     instance_type         = optional(string, "m7g.medium")
@@ -312,7 +305,7 @@ variable "static_nodes" {
 }
 
 variable "platform_node_group" {
-  description = "static_nodes key of the group that runs the platform stack, ingress included. The platform Application pins its components to that group's node-group label, the group alone takes the ingress security group, the wildcard DNS record points at its nodes, and platform_node_iam_role_name resolves to its role. Null leaves all of that on the control plane."
+  description = "static_nodes key of the group that runs the platform stack, ingress included. That group's node-group label pins the platform components, it alone takes the ingress security group, and the wildcard DNS record points at it. Null keeps all of that on the control plane."
   type        = string
   default     = null
 
@@ -323,18 +316,7 @@ variable "platform_node_group" {
 }
 
 variable "power_schedule" {
-  description = <<-EOT
-    When the cluster's nodes run. days names the days it runs, in EventBridge Scheduler's form
-    (MON-FRI, MON,WED,FRI); on the other days it is off. Unset, every day.
-
-    At stop_time on each of those days, stops the control plane and static nodes and scales every
-    autoscaled group to zero. With start_time, starts the control plane and static nodes again: on
-    the same day when start_time is earlier than stop_time, or on the evening before when it is
-    later, for hours that cross midnight. Without start_time nothing starts the cluster; it stays
-    stopped until started by hand. Times are HH:MM on a 24-hour clock, in timezone.
-
-    Null leaves the cluster running.
-  EOT
+  description = "When the nodes run. days uses EventBridge Scheduler form (MON-FRI, MON,WED,FRI); unset means every day. At stop_time the control plane and static nodes stop and autoscaled groups scale to zero. start_time starts them again. Times are HH:MM in timezone. Null leaves the cluster running."
   type = object({
     stop_time  = string
     timezone   = string
@@ -365,20 +347,7 @@ variable "power_schedule" {
 }
 
 variable "autoscaled_nodes" {
-  description = <<-EOT
-    Roles cluster-autoscaler adds nodes to, keyed by role name (e.g. "workers"). Each instance type
-    of a role is an EC2 Auto Scaling group from zero, in the control plane's subnet; for a pending
-    pod the autoscaler picks the size that leaves the least capacity idle. Every node of a role
-    carries kube-compute.io/node-group=<role>, its labels and its taints, whatever its size.
-
-    max_cpu_cores and max_memory_gib cap what the role's nodes may add up to. cluster-autoscaler
-    limits only cluster-wide totals, so with several roles it enforces the sum of their caps; each
-    role's own groups are held to as many instances as fit its caps.
-
-    The platform Application runs the autoscaler, and the platform node's IAM role gets its
-    permissions. Every node of an autoscaled cluster registers its instance as its providerID, so
-    adding the first role or removing the last replaces the control plane and static nodes.
-  EOT
+  description = "Roles cluster-autoscaler adds nodes to, keyed by role name (e.g. 'workers'). Each instance type of a role is an EC2 Auto Scaling group from zero, in the control plane's subnet. Nodes carry kube-compute.io/node-group=<role>. max_cpu_cores and max_memory_gib cap each role."
   type = map(object({
     instance_types      = list(string)
     max_cpu_cores       = number
@@ -408,27 +377,13 @@ variable "autoscaled_nodes" {
 }
 
 variable "orphan_volume_cleanup" {
-  description = <<-EOT
-    Delete the cluster's dynamically provisioned EBS volumes when the cluster is destroyed.
-
-    The CSI driver only releases a volume when its PVC is deleted through the API server, which
-    a destroy never does -- the nodes go first and the volume is left detached and billed. This
-    sweeps whatever still carries the cluster's ClusterName tag once the nodes are gone, so the
-    platform chart must tag volumes with it (kube-platform's aws-ebs provisioner does).
-
-    Turn it off where a volume is meant to outlive its cluster: a PersistentVolume kept with
-    reclaimPolicy Retain is tagged the same as any other and would be swept. With it off, a
-    destroy deletes only the nodes' root volumes and keeps every data volume, attached or not.
-
-    Keep it on to delete data volumes tagged with the cluster's ClusterName. Callers of
-    aws-control-plane without aws-cluster keep every data volume on destroy.
-  EOT
+  description = "Delete the cluster's dynamically provisioned EBS volumes on destroy, found by their ClusterName tag. Turn it off where a volume must outlive the cluster, for example a Retain PersistentVolume. With it off, a destroy keeps every data volume."
   type        = bool
   default     = true
 }
 
 variable "graceful_shutdown" {
-  description = "How long kubelet holds up an OS shutdown to evict pods, so a node stopped by power_schedule -- or terminated by the autoscaler -- stops its workloads instead of having them killed with it. critical_seconds is the part of that reserved for critical pods, and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables the feature. Keep the total well under the two minutes a cloud gives an instance before it pulls the power."
+  description = "How long kubelet delays an OS shutdown to evict pods. critical_seconds is the part reserved for critical pods and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. Keep the total well under 2 minutes."
   type = object({
     seconds          = optional(number, 90)
     critical_seconds = optional(number, 30)
@@ -443,13 +398,13 @@ variable "os_auto_updates" {
 }
 
 variable "control_plane_node_name_template" {
-  description = "Name for each control-plane node: its hostname, Kubernetes node name and Name tag. {zone} becomes the last letter of the node's availability zone, and {number} the node's number as two digits (01, 02, ...). Null keeps cp-<cluster_name>-<n>. Each static_nodes group has its own node_name_template; autoscaled nodes keep the names AWS gives them."
+  description = "Name for each control-plane node: hostname, Kubernetes node name and Name tag. {zone} is the last letter of the availability zone. {number} is the node number as two digits. Null keeps cp-<cluster_name>-<n>."
   type        = string
   default     = null
 }
 
 variable "boot_scripts" {
-  description = "Bash scripts run on every control-plane and static node at its first boot, in order, before RKE2 is installed, for example to join a directory. Each sees CLUSTER_NAME, NODE_ROLE (control-plane or worker) and NODE_NAME in its environment. Autoscaled nodes do not run them. Empty (the default) runs none."
+  description = "Bash scripts run on every control-plane and static node at first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE and NODE_NAME. Autoscaled nodes do not run them. Empty (the default) runs none."
   type        = list(string)
   default     = []
 }

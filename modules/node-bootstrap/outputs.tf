@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 output "cloud_init_user_data" {
-  description = "Complete '#cloud-config' document for this one node: hostname, the RKE2 config/registries/CA/manifest payloads as base64 write_files, and a runcmd invoking the bootstrap script. The caller delivers it verbatim as its provider's user-data (on Proxmox, a proxmox_virtual_environment_file snippet wired to initialization.user_data_file_id). This module executes nothing itself — there is no bootstrap resource to depend on; a caller needing ordering must depend on its own VM resource instead. Sensitive: carries the join tokens, the trusted CA and any sensitive provider file."
+  description = "Complete '#cloud-config' document for this node: hostname, base64 write_files payloads (RKE2 config, registries, CA, manifests) and a runcmd that runs the bootstrap script. Deliver it verbatim as user data. Sensitive: it carries the join tokens and the CA."
   value       = local.cloud_init_user_data
   sensitive   = true
 
@@ -16,7 +16,7 @@ output "node_name" {
 }
 
 output "user_data" {
-  description = "The final user data for this node: cloud_init_user_data alone when there are no boot scripts, otherwise a MIME multipart/mixed document with those shell-script parts ahead of the cloud-config. The caller delivers it verbatim (gzip and base64 it for EC2). Sensitive, for the same reasons as cloud_init_user_data."
+  description = "Final user data for this node: cloud_init_user_data alone when there are no boot scripts, otherwise a MIME multipart document with the scripts ahead of the cloud-config. Deliver it verbatim (gzip and base64 for EC2). Sensitive."
   value       = local.user_data
 
   precondition {

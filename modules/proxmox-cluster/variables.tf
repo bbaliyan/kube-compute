@@ -47,7 +47,7 @@ variable "genesis_apply_manifests" {
 }
 
 variable "extra_server_manifests" {
-  description = "Arbitrary RKE2 auto-deploy manifest files (filename => full YAML content), forwarded verbatim through proxmox-control-plane to node-bootstrap's own identically-named variable, which writes them to /var/lib/rancher/rke2/server/manifests/ on the genesis control-plane node only. This module does not interpret the content — e.g. a HelmChartConfig overriding the packaged rke2-coredns chart's Corefile to add an internal-DNS forward zone, a Proxmox-only need since (unlike AWS/Azure's cloud DNS) there is no network-layer resolution for a homelab/on-prem private zone. Empty by default, so callers that don't need this are unaffected."
+  description = "RKE2 auto-deploy manifest files (filename => YAML), passed through proxmox-control-plane to node-bootstrap, which writes them to /var/lib/rancher/rke2/server/manifests/ on the genesis node only. Content is not interpreted. Empty (the default) adds none."
   type        = map(string)
   default     = {}
 }
@@ -99,7 +99,7 @@ variable "cluster_type" {
 }
 
 variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (default) resolves to 'cilium' regardless of topology — Canal/flannel's iptables/ipset dataplane ('default') is broken on AlmaLinux 10, this project's only supported OS (its kernel dropped modules flannel and Felix require). 'default' remains an escape hatch for a consumer-supplied playbook targeting a different OS."
+  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
   type        = string
   default     = null
   validation {
@@ -211,7 +211,7 @@ variable "cpu_units" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every control-plane node from. The template carries OS prep, the RKE2 binaries (server and agent units; the role is chosen at launch), SELinux policy, kernel modules and the guest agent. No check compares this ID with what is baked into the template. A new value reaches only new VMs and VMs you replace on purpose: existing VMs keep their disks. See the README for the rolling replacement."
+  description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. Existing VMs keep their disks."
   type        = number
   nullable    = false
 }
@@ -223,7 +223,7 @@ variable "ssh_authorized_keys" {
 }
 
 variable "dns_servers" {
-  description = "DNS nameserver addresses written into every control-plane VM's cloud-init network-config, and passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf (see node-bootstrap's dns_servers variable: kubelet's default DNS policy otherwise propagates this node's hostname-derived search domain into every pod, colliding with the wildcard cluster DNS record for that zone)."
+  description = "DNS nameserver addresses written into the cloud-init network-config of every VM. They also give kubelet a resolv-conf with no search domain, so a node search domain cannot match the wildcard cluster record."
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
 }
@@ -239,7 +239,7 @@ variable "control_plane_count" {
 }
 
 variable "control_plane_ip_addresses" {
-  description = "Static IPv4 addresses in CIDR notation (e.g. '192.168.1.10/24'), one per control-plane node, in order. Optional at any control_plane_count: when null, every control-plane node gets its IP via DHCP, resolved post-apply through the Proxmox guest agent (used for join tokens, TLS SANs, the etcd firewall ipset, and the dns-registration record). Static IPs remain the practical default for HA — genesis must be reachable before joiners' node-bootstrap runs, and DHCP-assigned IPs are only known after each VM boots."
+  description = "Static IPv4 addresses in CIDR form (e.g. '192.168.1.10/24'), one per control-plane node, in order. Null (the default) uses DHCP. Static addresses are advised for HA, because genesis must be reachable before joiners boot."
   type        = list(string)
   default     = null
 
@@ -256,7 +256,7 @@ variable "vm_gateway" {
 }
 
 variable "cluster_network_cidr" {
-  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'), used as the sole member of the cluster-wide firewall ipset. Proxmox multi-node is a single flat L2 subnet, and bpg/proxmox's ipset resource is owned monolithically by one Terraform state, so exact per-VM membership (AWS's self-referencing security group) can't span the control plane's and each node pool's separate states — this CIDR is the pragmatic Proxmox equivalent of 'this cluster's own members'. Required when control_plane_count > 1 or any node pool will attach; optional for a single-node cluster with no pools."
+  description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'). It is the only member of the cluster firewall ipset. Required when control_plane_count > 1 or when any node pool attaches."
   type        = string
   default     = null
 
@@ -282,7 +282,7 @@ variable "ingress_ports" {
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
 variable "cluster_dns_name" {
-  description = "Name to use in DNS in place of cluster_name, so that the FQDN is api.<cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name. Set this where cluster_name carries something the domain already says: with cluster_name = \"app-red\" and cluster_domain = \"red.example.internal\", cluster_dns_name = \"app\" keeps the name api.app.red.example.internal while VM names, node names and firewall ipsets stay unique to that cluster."
+  description = "Name used in DNS in place of cluster_name, so the FQDN is api.<cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name."
   type        = string
   default     = null
   validation {
@@ -292,7 +292,7 @@ variable "cluster_dns_name" {
 }
 
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'cluster.example'). When set, FQDN = api.<cluster_name>.<cluster_domain> and wildcard = *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Required when control_plane_count > 1: Proxmox has no load-balancer/VIP primitive, so cluster_fqdn is the only address that names every control-plane node."
+  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>; cluster_dns_name replaces cluster_name if set. Required when control_plane_count > 1."
   type        = string
   default     = null
 
@@ -328,7 +328,7 @@ variable "dns_transport" {
 }
 
 variable "dns_record_ttl" {
-  description = "TTL in seconds for the published cluster_fqdn record, and for the genesis node's own self-registered record. Ignored when dns_server_address is null. Kept low by default — see proxmox-control-plane's dns_record_ttl for why a low TTL matters here (downstream resolver caching can otherwise stale-block a fresh apply's join for up to a full TTL)."
+  description = "TTL in seconds for the published cluster_fqdn record and the genesis node's self-registered record. Ignored when dns_server_address is null. Keep it low; see proxmox-boot-steps' dns_self_register_ttl."
   type        = number
   default     = 30
 }
@@ -358,17 +358,7 @@ variable "tsig_key_secret" {
 
 # ---- Worker pools (optional, merged into this same directory/state) ----
 variable "node_pools" {
-  description = <<-EOT
-    Static worker pools joining this cluster, keyed by pool name (e.g. "platform"), each created via
-    proxmox-node-pool with this cluster's identity and join token wired in. Empty map (the default)
-    creates none.
-
-    Every worker of a pool is named <cluster_name>-<pool>-<n> and carries
-    kube-compute.io/node-group=<pool>. node_taints keeps other pods off.
-
-    Fields left null take the cluster's own value: trusted_ca_pem, registry_mirror_url,
-    ssh_authorized_keys, dns_servers, vm_gateway, and the DNS registration settings.
-  EOT
+  description = "Static worker pools joining this cluster, keyed by pool name (e.g. 'platform'), each created through proxmox-node-pool with the cluster's identity and join token. Workers are named <cluster_name>-<pool>-<n>. A null field takes the cluster's value. Empty (the default) creates none."
   type = map(object({
     trusted_ca_pem         = optional(string)
     registry_mirror_url    = optional(string)
@@ -414,7 +404,7 @@ variable "node_pools" {
 }
 
 variable "platform_node_group" {
-  description = "node_pools key of the pool that runs the platform stack, ingress included. The platform Application pins its components to that pool's node-group label, the pool alone opens ingress_ports (the control plane keeps 6443), and the wildcard DNS record points at its workers. Null leaves all of that on the control plane, or on every pool of a dedicated_control_plane cluster."
+  description = "node_pools key of the pool that runs the platform stack, ingress included. That pool's node-group label pins the platform components, it alone opens ingress_ports, and the wildcard DNS record points at its workers. Null keeps all of that on the control plane."
   type        = string
   default     = null
 
@@ -425,7 +415,7 @@ variable "platform_node_group" {
 }
 
 variable "graceful_shutdown" {
-  description = "How long kubelet holds up an OS shutdown to evict pods, so a VM shut down from Proxmox -- or by a host reboot -- stops its workloads instead of having them killed with it. critical_seconds is the part of that reserved for critical pods, and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. See node-bootstrap's own variable."
+  description = "How long kubelet delays an OS shutdown to evict pods. critical_seconds is the part reserved for critical pods and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. Keep the total well under 2 minutes."
   type = object({
     seconds          = optional(number, 90)
     critical_seconds = optional(number, 30)
@@ -434,7 +424,7 @@ variable "graceful_shutdown" {
 }
 
 variable "os_auto_updates" {
-  description = "Installs OS updates with dnf-automatic on every node, daily and 15 minutes after each boot, without rebooting; a node whose updates need a reboot reports it through needs-restarting (yum-utils). RKE2's own packages are excluded from dnf, since system-upgrade-controller upgrades them. False leaves nodes' packages as baked."
+  description = "Install OS updates with dnf-automatic on every node, daily and 15 minutes after each boot, without rebooting. RKE2 packages are excluded, because system-upgrade-controller upgrades them. needs-restarting (yum-utils) reports a due reboot. False leaves packages as baked."
   type        = bool
   default     = true
 }
@@ -446,13 +436,13 @@ variable "control_plane_node_name_template" {
 }
 
 variable "boot_scripts" {
-  description = "Bash scripts run on every control-plane node and every node_pools worker at its first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (control-plane or worker) and NODE_NAME in its environment. Nodes created by the cluster autoscaler do not run them. Empty (the default) runs none."
+  description = "Bash scripts run on every control-plane and pool node at first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE and NODE_NAME. Autoscaled nodes do not run them. Empty (the default) runs none."
   type        = list(string)
   default     = []
 }
 
 variable "cloud_init_upload_mode" {
-  description = "How the provider copies cloud-init snippet files to the Proxmox host over SSH. Null keeps the provider default, 'stream', which opens a shell and tries sudo. Use 'sftp' when the SSH user is limited to the SFTP subsystem: it needs write permission on the snippets directory and does not use sudo. Has no effect on ISO or image downloads, which use the API."
+  description = "How the provider copies cloud-init snippets to the Proxmox host over SSH. Null keeps the provider default, 'stream', which uses sudo. 'sftp' needs write access to the snippets directory and no sudo. It does not affect ISO or image downloads."
   type        = string
   default     = null
 

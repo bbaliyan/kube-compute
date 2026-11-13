@@ -16,13 +16,13 @@ variable "node_fqdn_label" {
 }
 
 variable "iscsi_initiator_enabled" {
-  description = "Write a deterministic iSCSI InitiatorName (iqn.2026.lan.<cluster_name>:<node_fqdn_label, or node_name if unset>) to /etc/iscsi/initiatorname.iscsi and restart iscsid, replacing the OS-generated random one. The image must already have iscsi-initiator-utils (kube-images' Proxmox template does). Exists so an iSCSI target's initiator allow-list can be registered once, ahead of time, and not re-registered by hand after every VM rebuild."
+  description = "Write a fixed iSCSI InitiatorName (iqn.2026.lan.<cluster_name>:<node_fqdn_label, or node_name if unset>) to /etc/iscsi/initiatorname.iscsi and restart iscsid. The image must have iscsi-initiator-utils. A target can then allow-list the initiator once, before any VM rebuild."
   type        = bool
   default     = true
 }
 
 variable "dns_self_register_zone" {
-  description = "DNS zone (FQDN, trailing dot, e.g. 'lan.') the genesis node self-registers a single-target A record into via RFC2136/nsupdate, as soon as it knows its own IP. Null or empty (the default) disables self-registration, and every dns_self_register_*, dns_server_* and tsig_* variable is then ignored. Set it on the genesis node only."
+  description = "DNS zone (FQDN, trailing dot, e.g. 'lan.') the genesis node registers a single-target A record in through RFC2136 nsupdate. Null or empty (the default) disables it, and every dns_self_register_*, dns_server_* and tsig_* variable is ignored. Set it on the genesis node only."
   type        = string
   default     = null
 }
@@ -39,7 +39,7 @@ variable "dns_self_register_record_name" {
 }
 
 variable "dns_self_register_ttl" {
-  description = "TTL in seconds for the self-registered record. Only meaningful when dns_self_register_zone is set. Kept low by default: this record is republished on every apply via authoritative RFC2136 update, but a downstream caching resolver (e.g. a LAN router forwarding to the authoritative server) has no way to know that and keeps serving whatever it last cached for up to this TTL — on a reused cluster/record name that stale window directly delays every joining node."
+  description = "TTL in seconds for the self-registered record. Used only when dns_self_register_zone is set. Keep it low: a downstream caching resolver serves a stale record for up to this TTL."
   type        = number
   default     = 30
 }

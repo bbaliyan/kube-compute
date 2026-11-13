@@ -95,7 +95,7 @@ variable "cpu_units" {
 }
 
 variable "proxmox_template_vm_id" {
-  description = "VM ID of a pre-baked kube-images Proxmox VM template to full-clone every worker from. The template carries OS prep, the RKE2 binaries (server and agent units; this pool enables only rke2-agent at launch), SELinux policy, kernel modules and the guest agent. No check compares this ID with what is baked into the template. A new value reaches only new VMs and VMs you replace on purpose: existing VMs keep their disks. See the README for the rolling replacement."
+  description = "VM ID of the kube-images Proxmox template to full-clone every worker from. A new value reaches only new or replaced VMs. Existing VMs keep their disks."
   type        = number
   nullable    = false
 }
@@ -107,7 +107,7 @@ variable "ssh_authorized_keys" {
 }
 
 variable "dns_servers" {
-  description = "DNS nameserver addresses written into every worker's cloud-init network-config, and passed through to node-bootstrap to give kubelet a search-domain-free resolv-conf — defense in depth against any node-inherited DNS search domain colliding with a wildcard cluster DNS record, on top of node-bootstrap's own prefer_fqdn_over_hostname fix for the specific hostname-derived case (see node-bootstrap's dns_servers variable for the full picture)."
+  description = "DNS nameserver addresses written into the cloud-init network-config of every VM. They also give kubelet a resolv-conf with no search domain, so a node search domain cannot match the wildcard cluster record."
   type        = list(string)
   default     = ["1.1.1.1", "8.8.8.8"]
 }
@@ -140,13 +140,13 @@ variable "desired_count" {
 }
 
 variable "registration_address" {
-  description = "The address workers join through. Null (the default) self-computes the genesis node's single-target self-registered DNS name (genesis.<cluster_name>.<cluster_domain>) — requires cluster_domain and dns_server_address to both be set. Pass an explicit value only when DNS isn't configured (the operator must then know and pin genesis's actual address themselves, e.g. a literal IP, matching how worker_ip_addresses is already a literal in this same file). Prefer the self-computed DNS name over cluster_fqdn (the round-robin api.* record) — a round-robin record causes 10-20+ minute join hangs that a single-target name does not."
+  description = "The address workers join through. Null (the default) computes genesis.<cluster_name>.<cluster_domain>, which needs cluster_domain and dns_server_address. Set a literal IP only when DNS is not configured. Do not use cluster_fqdn: a round-robin record can hang joins for 10 minutes or more."
   type        = string
   default     = null
 }
 
 variable "cluster_agent_token" {
-  description = "The agent join token for this cluster. Embedded directly into this pool's cloud-init (no managed secret store on Proxmox). Sourced from the control plane's own cluster_agent_token output at the consumer's Terragrunt layer — there is no Terraform-level dependency between this module and proxmox-control-plane, only a value handed through. Sensitive."
+  description = "Agent join token for this cluster, embedded in this pool's cloud-init. Take it from the cluster_agent_token output of the control plane at the consumer layer. Sensitive."
   type        = string
   sensitive   = true
 }
@@ -293,7 +293,7 @@ variable "boot_scripts" {
 }
 
 variable "cloud_init_upload_mode" {
-  description = "How the provider copies cloud-init snippet files to the Proxmox host over SSH. Null keeps the provider default, 'stream', which opens a shell and tries sudo. Use 'sftp' when the SSH user is limited to the SFTP subsystem: it needs write permission on the snippets directory and does not use sudo. Has no effect on ISO or image downloads, which use the API."
+  description = "How the provider copies cloud-init snippets to the Proxmox host over SSH. Null keeps the provider default, 'stream', which uses sudo. 'sftp' needs write access to the snippets directory and no sudo. It does not affect ISO or image downloads."
   type        = string
   default     = null
 
