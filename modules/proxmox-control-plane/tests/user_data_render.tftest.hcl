@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Pins the rendered user data of every control-plane node to a known hash, so a
 # refactor of how it is built cannot change what a node boots with. The tokens
-# are fixed, and the addresses are static, so the render is stable.
+# and the mocked addresses are fixed, so the render is stable.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/demo.yaml" }
@@ -36,28 +36,26 @@ override_resource {
 }
 
 variables {
-  cluster_name               = "demo"
-  proxmox_node               = "pve"
-  vm_cores                   = 4
-  vm_memory_mb               = 8192
-  vm_disk_gb                 = 50
-  control_plane_count        = 3
-  control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-  cluster_domain             = "example.test"
-  cluster_network_cidr       = "192.168.1.0/24"
-  vm_gateway                 = "192.168.1.1"
-  allowed_ingress_cidrs      = ["192.168.1.0/24"]
-  proxmox_template_vm_id     = 9000
-  dns_server_address         = "192.168.1.53"
-  tsig_key_name              = "kube-compute"
-  tsig_key_secret            = "ZmFrZXNlY3JldA=="
+  cluster_name           = "demo"
+  proxmox_node           = "pve"
+  vm_cores               = 4
+  vm_memory_mb           = 8192
+  vm_disk_gb             = 50
+  control_plane_count    = 3
+  cluster_domain         = "example.test"
+  cluster_network_cidr   = "192.168.1.0/24"
+  allowed_ingress_cidrs  = ["192.168.1.0/24"]
+  proxmox_template_vm_id = 9000
+  dns_server_address     = "192.168.1.53"
+  tsig_key_name          = "kube-compute"
+  tsig_key_secret        = "ZmFrZXNlY3JldA=="
 }
 
 run "user_data_is_unchanged" {
   command = apply
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "c6ca4451cfef9a18b7199dcf9ed4ff8825940c69ad72e74053a806e4c0b1c9a9"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "d09ca02fec780ebc60a38c560be4e59ebad4ef0abc5343aedf3131717929a13f"
     error_message = "the genesis user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
   }
 

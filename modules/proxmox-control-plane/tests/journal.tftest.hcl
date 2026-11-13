@@ -33,13 +33,11 @@ variables {
   control_plane_count    = 3
   proxmox_template_vm_id = 9000
 
-  control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-  cluster_domain             = "example.com"
-  cluster_network_cidr       = "192.168.1.0/24"
-  vm_gateway                 = "192.168.1.1"
-  dns_server_address         = "192.168.1.53"
-  tsig_key_name              = "kube-compute"
-  tsig_key_secret            = "ZmFrZXNlY3JldA=="
+  cluster_domain       = "example.com"
+  cluster_network_cidr = "192.168.1.0/24"
+  dns_server_address   = "192.168.1.53"
+  tsig_key_name        = "kube-compute"
+  tsig_key_secret      = "ZmFrZXNlY3JldA=="
 }
 
 run "journal_is_persistent" {

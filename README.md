@@ -78,11 +78,9 @@ The address comes from the provider:
 
 On a multi-node cluster, the first control-plane node probes the live cluster at boot. If the
 cluster answers, the node joins it. If not, the node initializes a new cluster. On AWS it probes
-`registration_address`. On Proxmox it probes the static IP of every other control-plane node, in
-order (`rejoin_probe_addresses`), because its own join address points back at itself. It joins
-through the first one that answers. A Proxmox cluster whose control-plane nodes use DHCP has no
-addresses to list. There the first node resolves the cluster name `api.<cluster>.<cluster_domain>`
-and probes each IP that remains after it skips its own. It repeats the probe for about 60 seconds.
+`registration_address`. On Proxmox its own join address points back at itself, so the first node
+resolves the cluster name `api.<cluster>.<cluster_domain>` and probes each IP that remains after
+it skips its own. It repeats the probe for about 60 seconds.
 
 If no probed address answers, the node initializes a new cluster. So do not replace the first
 node in the same apply as every other control-plane node. Any HTTPS service that answers at a

@@ -5,8 +5,6 @@ locals {
   # only references the ipset by name; it never creates one.
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
 
-  static_ips = var.worker_ip_addresses != null
-
   # Wildcard DNS registration (RFC2136): publishes *.<cluster_name> -> every
   # resolved worker IP, for the pool that runs ingress (manage_wildcard_dns_record).
   dns_registration_enabled = var.manage_wildcard_dns_record && var.cluster_domain != null && var.dns_server_address != null
@@ -38,29 +36,14 @@ locals {
     var.dns_server_address != null ? local.genesis_dns_name : null
   )
 
-  _dns_list = join(", ", var.dns_servers)
-  # "to: 0.0.0.0/0", not Netplan's "to: default", and "eth0" as the ethernets key with
-  # no `match` block. See proxmox-control-plane's matching local for the reasons.
-  network_data_static = { for i in range(var.desired_count) : tostring(i) => local.static_ips ? <<-EOT
-    version: 2
-    ethernets:
-      eth0:
-        addresses:
-          - ${var.worker_ip_addresses[i]}
-        routes:
-          - to: 0.0.0.0/0
-            via: ${var.vm_gateway}
-        nameservers:
-          addresses: [${local._dns_list}]
-        dhcp4: false
-    EOT
-    : <<-EOT
+  # "eth0" as the ethernets key with no `match` block. See proxmox-control-plane's
+  # network_data for the reason.
+  network_data = <<-EOT
     version: 2
     ethernets:
       eth0:
         dhcp4: true
     EOT
-  }
 }
 
 module "vendor_data" {
@@ -81,16 +64,14 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
 }
 
 resource "proxmox_virtual_environment_file" "network_data" {
-  for_each = { for i in range(var.desired_count) : tostring(i) => i }
-
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
   overwrite    = true
 
   source_raw {
-    file_name = "${var.cluster_name}-${var.pool_name}-${each.key}-network-data.yaml"
-    data      = local.network_data_static[each.key]
+    file_name = "${var.cluster_name}-${var.pool_name}-network-data.yaml"
+    data      = local.network_data
   }
 }
 
@@ -159,7 +140,7 @@ resource "proxmox_virtual_environment_vm" "worker" {
     datastore_id         = var.disk_datastore_id
     user_data_file_id    = proxmox_virtual_environment_file.node_init[each.key].id
     vendor_data_file_id  = proxmox_virtual_environment_file.vendor_data.id
-    network_data_file_id = proxmox_virtual_environment_file.network_data[each.key].id
+    network_data_file_id = proxmox_virtual_environment_file.network_data.id
   }
 
   lifecycle {
@@ -175,10 +156,10 @@ resource "proxmox_virtual_environment_vm" "worker" {
 }
 
 locals {
-  # Resolved IP per worker VM, static or via guest agent — same pattern proxmox-control-plane uses.
+  # Resolved IP per worker VM, via the guest agent — same pattern proxmox-control-plane uses.
   worker_ips = {
     for k, vm in proxmox_virtual_environment_vm.worker :
-    k => local.static_ips ? split("/", var.worker_ip_addresses[tonumber(k)])[0] : try(
+    k => try(
       [for ip in flatten(vm.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
     )
   }
@@ -273,7 +254,7 @@ resource "proxmox_virtual_environment_firewall_options" "worker" {
   node_name = var.proxmox_node
   vm_id     = each.value
   enabled   = true
-  dhcp      = !local.static_ips
+  dhcp      = true
   # IPv6 neighbour discovery and router advertisements, which Proxmox allows
   # by default but bpg turns off unless set: without them the VMs lose IPv6
   # routing once the firewall is enforced.

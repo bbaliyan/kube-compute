@@ -26,21 +26,19 @@ override_resource {
 }
 
 variables {
-  cluster_name               = "steps"
-  proxmox_node               = "pve"
-  vm_cores                   = 4
-  vm_memory_mb               = 8192
-  vm_disk_gb                 = 50
-  control_plane_count        = 3
-  control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-  cluster_domain             = "example.test"
-  cluster_network_cidr       = "192.168.1.0/24"
-  vm_gateway                 = "192.168.1.1"
-  allowed_ingress_cidrs      = ["192.168.1.0/24"]
-  proxmox_template_vm_id     = 9000
-  dns_server_address         = "192.168.1.53"
-  tsig_key_name              = "kube-compute"
-  tsig_key_secret            = "ZmFrZXNlY3JldA=="
+  cluster_name           = "steps"
+  proxmox_node           = "pve"
+  vm_cores               = 4
+  vm_memory_mb           = 8192
+  vm_disk_gb             = 50
+  control_plane_count    = 3
+  cluster_domain         = "example.test"
+  cluster_network_cidr   = "192.168.1.0/24"
+  allowed_ingress_cidrs  = ["192.168.1.0/24"]
+  proxmox_template_vm_id = 9000
+  dns_server_address     = "192.168.1.53"
+  tsig_key_name          = "kube-compute"
+  tsig_key_secret        = "ZmFrZXNlY3JldA=="
 }
 
 run "genesis_and_joining_server_steps" {
@@ -97,11 +95,10 @@ run "without_a_dns_server_genesis_does_not_self_register" {
   command = plan
 
   variables {
-    control_plane_count        = 1
-    control_plane_ip_addresses = ["192.168.1.10/24"]
-    dns_server_address         = null
-    tsig_key_name              = null
-    tsig_key_secret            = null
+    control_plane_count = 1
+    dns_server_address  = null
+    tsig_key_name       = null
+    tsig_key_secret     = null
   }
 
   assert {

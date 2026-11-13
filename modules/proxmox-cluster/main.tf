@@ -53,8 +53,6 @@ module "control_plane" {
   ssh_authorized_keys               = var.ssh_authorized_keys
   dns_servers                       = var.dns_servers
   control_plane_count               = var.control_plane_count
-  control_plane_ip_addresses        = var.control_plane_ip_addresses
-  vm_gateway                        = var.vm_gateway
   cluster_network_cidr              = var.cluster_network_cidr
   allowed_ingress_cidrs             = var.allowed_ingress_cidrs
   ingress_ports                     = local.control_plane_ingress_ports
@@ -111,8 +109,6 @@ module "node_pools" {
   vm_cpu_type            = each.value.vm_cpu_type
   pool_id                = each.value.pool_id != null ? each.value.pool_id : var.pool_id
   proxmox_template_vm_id = coalesce(each.value.proxmox_template_vm_id, var.proxmox_template_vm_id)
-  worker_ip_addresses    = each.value.worker_ip_addresses
-  vm_gateway             = each.value.vm_gateway != null ? each.value.vm_gateway : var.vm_gateway
   desired_count          = each.value.desired_count
   registration_address   = each.value.registration_address
   extra_node_labels      = each.value.extra_node_labels

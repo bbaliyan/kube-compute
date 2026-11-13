@@ -101,23 +101,6 @@ variable "dns_servers" {
   default     = ["1.1.1.1", "8.8.8.8"]
 }
 
-variable "worker_ip_addresses" {
-  description = "Static IPv4 addresses in CIDR notation, one per worker (length must equal desired_count). Null = DHCP for every worker."
-  type        = list(string)
-  default     = null
-
-  validation {
-    condition     = var.worker_ip_addresses == null || length(var.worker_ip_addresses) == var.desired_count
-    error_message = "worker_ip_addresses, if set, must have exactly desired_count entries."
-  }
-}
-
-variable "vm_gateway" {
-  description = "IPv4 default gateway for every worker VM. Required when worker_ip_addresses is set."
-  type        = string
-  default     = null
-}
-
 variable "desired_count" {
   description = "Fixed pool size — every worker VM this pool creates."
   type        = number

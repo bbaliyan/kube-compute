@@ -38,7 +38,7 @@ Every worker of a pool is named `<cluster_name>-<pool>-<n>` and carries
 `kube-compute.io/node-group=<pool>`. `node_taints` keeps other pods off; pods that
 belong there need a matching toleration. A pool field left null takes the cluster's own
 value: `trusted_ca_pem`, `registry_mirror_url`, `ssh_authorized_keys`, `dns_servers`,
-`vm_gateway`, and the DNS registration settings.
+and the DNS registration settings.
 
 `pool_id` applies to the control plane and to every pool in `node_pools`. A `node_pools` entry may set its own `pool_id` to override it. Unset, there is no Proxmox pool. Do not confuse `pool_id` (a Proxmox resource pool) with a `node_pools` key (a node group).
 
@@ -221,9 +221,6 @@ addresses and the steps. `node_pools` workers keep running in the same way.
 
 These notes hold the reasons behind some input descriptions.
 
-- `control_plane_ip_addresses`: with DHCP, the module reads each address from the guest
-  agent after the VM boots. Static addresses suit HA better, because genesis must be
-  reachable before the joiners boot.
 - `cluster_network_cidr`: Proxmox has one flat subnet and one state owns the firewall ipset. The
   ipset cannot list each VM, because the control plane and each pool have separate states.
   The subnet CIDR stands in for "the members of this cluster".

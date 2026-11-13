@@ -22,8 +22,7 @@ computes the same formula independently to reference the cluster ipset by name.
 
 On a multi-node cluster, the first node looks for a live cluster at boot, before it starts etcd. If a peer answers, a replaced first node joins through it instead of starting a new etcd cluster.
 
-- With static IPs, the first node probes the IP of every other control-plane node.
-- With DHCP, the first node probes the cluster name `api.<cluster>.<domain>`. It resolves the name, skips its own IP, and probes each IP that remains.
+The first node probes the cluster name `api.<cluster>.<domain>`. It resolves the name, skips its own IP, and probes each IP that remains.
 
 This matches the AWS modules, where the first node probes `registration_address`.
 
@@ -33,7 +32,7 @@ The wait costs time on every fresh multi-node boot, not only on a replacement. A
 
 If no peer answers, the first node starts a new cluster. This happens when you replace the first node while every peer is down. Replace the first node last, with every peer healthy.
 
-Any HTTPS service that answers at a probed IP can start a join attempt. A dead IP that DHCP hands to a different RKE2 cluster on the same network also answers. The join then loops on the token. There is no split brain, but the node does not form.
+Any HTTPS service that answers at a probed IP can start a join attempt. A dead IP that the DHCP server hands to a different RKE2 cluster on the same network also answers. The join then loops on the token. There is no split brain, but the node does not form.
 
 ## Rolling to a new template
 

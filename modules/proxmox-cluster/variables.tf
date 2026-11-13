@@ -193,23 +193,6 @@ variable "control_plane_count" {
   }
 }
 
-variable "control_plane_ip_addresses" {
-  description = "Static IPv4 addresses in CIDR form (e.g. '192.168.1.10/24'), one per control-plane node, in order. Null (the default) uses DHCP. Static addresses are advised for HA, because genesis must be reachable before joiners boot."
-  type        = list(string)
-  default     = null
-
-  validation {
-    condition     = var.control_plane_ip_addresses == null || length(var.control_plane_ip_addresses) == var.control_plane_count
-    error_message = "When set, control_plane_ip_addresses must have exactly control_plane_count entries."
-  }
-}
-
-variable "vm_gateway" {
-  description = "IPv4 default gateway for every control-plane VM (e.g. '192.168.1.1'). Required when control_plane_ip_addresses is set; ignored for DHCP."
-  type        = string
-  default     = null
-}
-
 variable "cluster_network_cidr" {
   description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'). It is the only member of the cluster firewall ipset. Required when control_plane_count > 1 or when any node pool attaches."
   type        = string
@@ -319,8 +302,6 @@ variable "node_pools" {
     proxmox_template_vm_id = optional(number)
     ssh_authorized_keys    = optional(list(string))
     dns_servers            = optional(list(string))
-    worker_ip_addresses    = optional(list(string))
-    vm_gateway             = optional(string)
     desired_count          = optional(number, 2)
     registration_address   = optional(string)
     extra_node_labels      = optional(map(string), {})

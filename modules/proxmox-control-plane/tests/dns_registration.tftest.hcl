@@ -12,18 +12,16 @@ mock_provider "proxmox" {
 }
 
 variables {
-  cluster_name               = "example"
-  proxmox_node               = "pve"
-  vm_cores                   = 4
-  vm_memory_mb               = 8192
-  vm_disk_gb                 = 50
-  control_plane_count        = 3
-  control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-  cluster_domain             = "lan"
-  cluster_network_cidr       = "192.168.1.0/24"
-  vm_gateway                 = "192.168.1.1"
-  allowed_ingress_cidrs      = ["192.168.1.0/24"]
-  proxmox_template_vm_id     = 9000
+  cluster_name           = "example"
+  proxmox_node           = "pve"
+  vm_cores               = 4
+  vm_memory_mb           = 8192
+  vm_disk_gb             = 50
+  control_plane_count    = 3
+  cluster_domain         = "lan"
+  cluster_network_cidr   = "192.168.1.0/24"
+  allowed_ingress_cidrs  = ["192.168.1.0/24"]
+  proxmox_template_vm_id = 9000
 }
 
 run "dns_registration_enabled_when_server_supplied" {
@@ -51,8 +49,7 @@ run "dns_registration_enabled_when_server_supplied" {
 run "dns_registration_disabled_without_server" {
   command = plan
   variables {
-    control_plane_count        = 1
-    control_plane_ip_addresses = ["192.168.1.10/24"]
+    control_plane_count = 1
   }
 
   assert {
