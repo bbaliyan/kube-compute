@@ -191,6 +191,13 @@ variable "cluster_network_cidr" {
   description = "CIDR of the cluster's L2 subnet (e.g. '192.168.1.0/24'). It is the only member of the cluster firewall ipset. Required when control_plane_count > 1 or when any node pool attaches."
   type        = string
   default     = null
+
+  # Every VM's firewall admits cluster traffic only from this CIDR; without it
+  # the ipset falls back to genesis alone and joining nodes can't reach it.
+  validation {
+    condition     = var.cluster_network_cidr != null || var.control_plane_count == 1
+    error_message = "cluster_network_cidr is required when control_plane_count > 1: it is the firewall ipset every node admits cluster traffic from."
+  }
 }
 
 variable "allowed_ingress_cidrs" {

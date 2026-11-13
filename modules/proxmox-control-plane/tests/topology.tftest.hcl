@@ -229,3 +229,16 @@ run "five_node_control_plane_creates_five_vms" {
     error_message = "a five-node genesis must probe the cluster name so a replaced first node finds its peers"
   }
 }
+
+run "multi_node_without_cluster_network_cidr_is_rejected" {
+  command = plan
+  variables {
+    control_plane_count = 3
+    cluster_domain      = "example.com"
+    dns_server_address  = "192.168.1.53"
+    tsig_key_name       = "kube-compute"
+    tsig_key_secret     = "ZmFrZXNlY3JldA=="
+  }
+
+  expect_failures = [var.cluster_network_cidr]
+}
