@@ -21,12 +21,12 @@ to `depends_on`.
 `cloud_init_user_data` is the final user data of the node. It is a plain `#cloud-config` document.
 
 The image must already hold OS prep, the RKE2 binaries, the SELinux policy, the kernel
-modules, the guest agent and these tools: git, curl, getent, ip, awk, systemctl
-and update-ca-trust. Build it with kube-images. The image holds neither Cilium
-nor Argo CD: the first server reads both from the platform ref (see below).
-This module renders only the per-cluster identity, secrets and join logic.
-Every provider module calls it: `aws-control-plane`, `aws-static-node`, `aws-node-pool`,
-`proxmox-control-plane` and `proxmox-node-pool`.
+modules and the guest agent. It must also hold these tools: git, curl, getent, ip, awk,
+systemctl and update-ca-trust. Build it with kube-images. The image holds neither Cilium
+nor Argo CD: the first server reads both from the platform ref (see below). This module
+renders only the per-cluster identity, secrets and join logic. Every provider module calls
+it: `aws-control-plane`, `aws-static-node`, `aws-node-pool`, `proxmox-control-plane` and
+`proxmox-node-pool`.
 
 ## Cilium and Argo CD come from the platform ref
 
@@ -80,13 +80,13 @@ Existing clusters do not change until a node is replaced.
 
 ## Watching progress
 
-Terraform/OpenTofu returns as soon as the cloud-init payload is attached to
-the VM — it has no way to know when (or whether) the node actually joins the
-cluster, since nothing in this module executes anything. That all happens
-asynchronously on the node, after `apply` has already returned. The node
-writes its own progress to `/var/log/kube-compute-bootstrap.log`; that log
-is the only place to watch bootstrap progress. There is no Terraform-visible
-signal, no provisioner output, and no `bootstrap_log_path`-style output.
+Terraform/OpenTofu returns as soon as the cloud-init payload is attached to the VM. It has
+no way to know when (or whether) the node actually joins the cluster, since nothing in
+this module executes anything. That all happens asynchronously on the node, after `apply`
+has already returned. The node writes its own progress to
+`/var/log/kube-compute-bootstrap.log`; that log is the only place to watch bootstrap
+progress. There is no Terraform-visible signal, no provisioner output, and no
+`bootstrap_log_path`-style output.
 
 ## The program travels in user data
 
@@ -96,15 +96,15 @@ apply to the node's role and writes the result to `/opt/kube-compute/bootstrap.s
 (0755) as one `write_files` entry. `runcmd` runs it. A step that does not apply to the
 role is never in the file:
 
-- Core steps depend on the role. A server runs `node-config-server`, the start and
-  wait steps for servers and the skew check. An agent runs `node-config-agent`,
-  `start-agent` and `wait-ready-agent`.
+- Core steps depend on the role. A server runs `node-config-server`, the start and wait
+  steps for servers and the skew check. An agent runs `node-config-agent`, `start-agent`
+  and `wait-ready-agent`.
 - Genesis steps (`platform-clone`, `genesis-cilium-manifest`, `genesis-cilium-handoff`,
-  `genesis-argocd`, `genesis-extra-manifests`) are in the
-  program only on the first server, and only when the feature is on.
+  `genesis-argocd`, `genesis-extra-manifests`) are in the program only on the first
+  server, and only when the feature is on.
 - Provider steps are not here. The provider modules pass them in `provider_steps` and
-  `provider_files`: DNS self-registration and the iSCSI initiator name on Proxmox, SSM
-  Agent and the provider ID on AWS.
+  `provider_files`. These are DNS self-registration and the iSCSI initiator name on
+  Proxmox, and SSM Agent and the provider ID on AWS.
 
 The `boot_steps` output lists every step in the order it runs. The provider modules
 assert the exact list in their tests, so a step of one provider cannot reach the other.
@@ -115,15 +115,15 @@ body line that starts with `#` would be dropped. A test fails if a step has one.
 
 The module also writes the files the program reads:
 
-- **`/etc/rancher/rke2/config.yaml`** (0600) — the RKE2 config known at plan time: the
-  join server and tokens, labels, taints, extra SANs, the server flags and kubelet's
-  resolv-conf pointer. cloud-init writes it. The program adds only what the node alone
-  knows, as the drop-in `config.yaml.d/20-node.yaml`: its own IP, the server that the
-  rejoin probe found and, on an agent, the fetched token.
+- **`/etc/rancher/rke2/config.yaml`** (0600) — the RKE2 config known at plan time. It
+  holds the join server and tokens, labels, taints, extra SANs, the server flags and
+  kubelet's resolv-conf pointer. cloud-init writes it. The program adds only what the node
+  alone knows, as the drop-in `config.yaml.d/20-node.yaml`. That is its own IP, the server
+  that the rejoin probe found and, on an agent, the fetched token.
 - **`node.env`** (0644) — configuration for the program. Every key is always defined,
   empty where a role does not use it, so the program runs under `set -u`.
-- **`secrets.env`** (0600), on an agent only — the agent token fetch command. The program
-  deletes it when the boot succeeds. If the boot fails, it stays for diagnosis.
+- **`secrets.env`** (0600), on an agent only — the agent token fetch command. The
+  program deletes it when the boot succeeds. If the boot fails, it stays for diagnosis.
 
 The trusted CA is a `write_files` entry and a `runcmd` entry (`update-ca-trust extract`).
 There is no registry mirror check at boot.
@@ -171,13 +171,12 @@ On Proxmox, also replace the firewall of an additional control-plane VM. See "Ro
 
 ## `set_hostname` (for shared, byte-identical cloud-init payloads)
 
-Every caller gets `set_hostname = true` (the default): `hostname`/`fqdn` are
-written into cloud-config from `node_name`, required because RKE2/kubelet
-registers the node by OS hostname. `set_hostname = false` omits both keys
-entirely — the only reason to do this is when the exact same rendered
-`cloud_init_user_data` is shared across multiple VMs that cannot each get
-their own render (e.g. every instance of an AWS Auto Scaling group, via one
-launch template). The platform's per-instance metadata then supplies a unique hostname.
+Every caller gets `set_hostname = true` (the default): `hostname`/`fqdn` are written into
+cloud-config from `node_name`, required because RKE2/kubelet registers the node by OS
+hostname. `set_hostname = false` omits both keys entirely. Do this only when VMs share one
+rendered `cloud_init_user_data` and cannot each get their own render (e.g. every instance
+of an AWS Auto Scaling group, via one launch template). The platform's per-instance
+metadata then supplies a unique hostname.
 
 ## DNS search domains
 
@@ -198,13 +197,13 @@ The provider steps run first. A failed `runcmd` command does not stop the later 
 
 ## Resources reserved for the node
 
-Every node reserves CPU and memory for kubelet, containerd, RKE2 and the OS, so pods
-can never take all of it. Without a reservation a crowded node doesn't evict pods: it
-reclaims memory until containerd stops answering kubelet and the node goes NotReady.
-The node sizes the reservation from its own memory and cores and writes it as an RKE2
-`config.yaml.d` drop-in before RKE2 starts. Memory follows EKS's per-pod formula, capped
-by GKE's older tiers as GKE and AKS now do, since kubelet and containerd grow with the
-number of pods rather than with the node's memory:
+Every node reserves CPU and memory for kubelet, containerd, RKE2 and the OS, so pods can
+never take all of it. Without a reservation a crowded node doesn't evict pods: it reclaims
+memory until containerd stops answering kubelet and the node goes NotReady. The node sizes
+the reservation from its own memory and cores and writes it as an RKE2 `config.yaml.d`
+drop-in before RKE2 starts. Memory follows EKS's per-pod formula, capped by GKE's older
+tiers as GKE and AKS now do. Kubelet and containerd grow with the number of pods rather
+than with the node's memory:
 
 | | Reserved |
 |---|---|
@@ -217,14 +216,14 @@ An 8 GiB node, for example, keeps about 5.8 GiB for pods and a 16 GiB node about
 
 The control plane runs as static pods, so server nodes give them requests through
 `control-plane-resource-requests` (kube-apiserver 1024Mi, etcd 512Mi,
-kube-controller-manager 256Mi, kube-scheduler 128Mi) and the scheduler counts their
-memory instead of the reservation having to cover it.
+kube-controller-manager 256Mi, kube-scheduler 128Mi). The scheduler then counts their
+memory, so the reservation does not have to cover it.
 
 ## Graceful shutdown
 
-`graceful_shutdown` gives kubelet a window to evict pods when the OS is shutting
-down, so a node that is stopped or terminated stops its workloads instead of having
-them killed with it. Three files carry it, all written before RKE2 starts:
+`graceful_shutdown` gives kubelet a window to evict pods when the OS is shutting down. A
+node that is stopped or terminated then stops its workloads instead of having them killed
+with it. Three files carry it, all written before RKE2 starts:
 
 | File | Why |
 |---|---|
@@ -233,30 +232,30 @@ them killed with it. Three files carry it, all written before RKE2 starts:
 | `/etc/systemd/logind.conf.d/99-kube-compute-inhibit.conf` | `InhibitDelayMaxSec`, five seconds by default, is the longest logind lets kubelet hold the shutdown. Left alone it silently caps the grace period to five seconds |
 
 `runcmd` restarts `systemd-logind` so the last of those applies to the node's first
-shutdown, not just later ones. The total must stay under whatever the platform allows
-an instance before it cuts the power — about two minutes on AWS — and must leave room
-for the longest `terminationGracePeriodSeconds` among the pods that land here. Null
-disables all of it.
+shutdown, not just later ones. The total must stay under whatever the platform allows an
+instance before it cuts the power, about two minutes on AWS. It must also leave room for
+the longest `terminationGracePeriodSeconds` among the pods that land here. Null disables
+all of it.
 
 ## OS updates
 
 `os_auto_updates` installs `dnf-automatic` and `yum-utils` once the node has joined,
 and enables `dnf-automatic-install.timer`, which installs updates daily and never
-reboots. The timer runs at 06:00 and also 15 minutes after every boot, so a node that
-is powered off at 06:00, such as one on a power schedule, still updates. `rke2-server`, `rke2-agent` and `rke2-common` are excluded in `dnf.conf`, so
+reboots. The timer runs at 06:00 and also 15 minutes after every boot. So a node that is powered off at 06:00, such as one on a power schedule, still updates. `rke2-server`, `rke2-agent` and `rke2-common` are excluded in `dnf.conf`, so
 RKE2 only moves through system-upgrade-controller; `rke2-selinux` still updates.
 `needs-restarting -r` from `yum-utils` is what kube-platform's os-updates collector
 reads to report that a node needs a reboot. False leaves the node's packages as baked.
 
 ## Interface notes
 
-- The CNI is always Cilium. On a
-  genesis node, the boot program applies the Cilium manifest from the platform ref, and
-  `config.yaml` sets `disable: [rke2-cilium]` so RKE2's own Cilium chart never runs.
-- `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command` and `trusted_ca_pem`
-  are `sensitive = true`. They reach the node only in the base64 `write_files` of the
-  payload, such as the 0600 `/etc/rancher/rke2/config.yaml`.
+- The CNI is always Cilium. On a genesis node, the boot program applies the Cilium
+  manifest from the platform ref. `config.yaml` sets `disable: [rke2-cilium]` so RKE2's
+  own Cilium chart never runs.
+- `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command` and
+  `trusted_ca_pem` are `sensitive = true`. They reach the node only in the base64
+  `write_files` of the payload, such as the 0600 `/etc/rancher/rke2/config.yaml`.
   `server-join` receives `cluster_token` the same way `server-init` does. Only `worker`
-  runs `agent_token_fetch_command`, to read the agent token from the provider's secret store.
+  runs `agent_token_fetch_command`, to read the agent token from the provider's secret
+  store.
 - `aws-node-pool` sets `set_hostname = false`, because every member of a pool shares one
   rendered payload.

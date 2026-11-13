@@ -1,20 +1,19 @@
 # proxmox-cluster
 
 A thin wrapper that composes [`proxmox-control-plane`](../proxmox-control-plane/README.md)
-and [`proxmox-node-pool`](../proxmox-node-pool/README.md) into a single Terraform state,
-for operators who want one Terragrunt directory per cluster instead of today's split
-`control-plane/` + `node-pools/*` layout. It changes nothing about either composed
-module internally — it only calls them from one place.
+and [`proxmox-node-pool`](../proxmox-node-pool/README.md) into a single Terraform state.
+It suits operators who want one Terragrunt directory per cluster instead of today's split
+`control-plane/` + `node-pools/*` layout. It changes nothing about either composed module
+internally — it only calls them from one place.
 
 ## Single state, single lock
 
-This module puts the control plane and every worker pool in **one Terraform state
-with one lock**. That buys a single `terragrunt apply` per cluster, at a real cost:
-you can no longer apply `control-plane` and a node pool concurrently from separate
-terminals — every change serializes through the one state/lock. If your workflow
-depends on applying a worker pool while a separate control-plane change is in
-flight, stay on the split `proxmox-control-plane` + `proxmox-node-pool` layout
-instead (see below).
+This module puts the control plane and every worker pool in **one Terraform state with one
+lock**. That buys a single `terragrunt apply` per cluster, at a real cost. You can no
+longer apply `control-plane` and a node pool concurrently from separate terminals. Every
+change serializes through the one state/lock. If your workflow depends on applying a
+worker pool while a separate control-plane change is in flight, stay on the split layout
+instead (see below). The split layout is `proxmox-control-plane` + `proxmox-node-pool`.
 
 ## Inputs
 
@@ -26,7 +25,7 @@ re-document them.
 
 The first control-plane node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes the Cilium and Argo CD manifests from `bootstrap/rendered/` in the clone. The template must hold git. If `gitops_platform_enabled` is false, set `gitops_platform_repo_url`, because the node still reads the Cilium manifest from it. See [`node-bootstrap`](../node-bootstrap/README.md).
 
-After Cilium is Ready, the first server removes the Cilium file from the RKE2 manifests directory even when GitOps is off, so a later server restart no longer applies it again.
+After Cilium is Ready, the first server removes the Cilium file from the RKE2 manifests directory, even when GitOps is off. A later server restart then no longer applies it again.
 
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
 entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
@@ -62,12 +61,11 @@ With `cluster_name = "app-red"` and `cluster_domain = "red.example.internal"`, t
 
 ### DNS registration
 
-Unlike some earlier revisions of this module, there's no `provider "dns" {}` to
-wire up — DNS registration (`dns_server_address`/`tsig_key_*`) is plain module
-input, and the underlying `dns-registration` module shells out to `nsupdate`
-rather than using a Terraform provider (see its README for why). It just needs
-`nsupdate` (`bind-utils`/`dnsutils`) installed on whatever machine runs
-`tofu apply`/`tofu destroy`.
+There is no `provider "dns" {}` to wire up. DNS registration
+(`dns_server_address`/`tsig_key_*`) is plain module input. The underlying
+`dns-registration` module shells out to `nsupdate` rather than using a Terraform provider
+(see its README for why). It just needs `nsupdate` (`bind-utils`/`dnsutils`) installed on
+whatever machine runs `tofu apply`/`tofu destroy`.
 
 ## Firewall
 
@@ -79,17 +77,16 @@ Each VM gets a Proxmox firewall that drops inbound traffic except:
 The rule admits the whole subnet, so etcd (2379-2380), its plain-HTTP metrics (2381),
 SSH and every other port are open to every member of `cluster_network_cidr`.
 
-Proxmox enforces it only when **the datacenter firewall is enabled**
-(Datacenter → Firewall → Options). kube-compute doesn't manage that setting.
-Before turning it on:
-- **Host access:** it also switches on every host's own firewall. Proxmox
-  automatically allows the web UI (8006) and SSH from the hosts' own subnet;
-  allow them from anywhere else you administer from.
-- **Proxmox API from the cluster:** if `cluster_network_cidr` isn't the hosts'
-  own subnet (the cluster has its own VLAN, say), allow 8006 to the hosts from
-  it too. Otherwise the cluster can't reach the Proxmox API.
-- **Other VMs:** any other VM that already has a firewall-enabled NIC starts
-  being filtered too.
+Proxmox enforces it only when **the datacenter firewall is enabled** (Datacenter →
+Firewall → Options). kube-compute doesn't manage that setting. Before turning it on:
+- **Host access:** it also switches on every host's own firewall. Proxmox automatically
+  allows the web UI (8006) and SSH from the hosts' own subnet; allow them from anywhere
+  else you administer from.
+- **Proxmox API from the cluster:** if `cluster_network_cidr` isn't the hosts' own
+  subnet, allow 8006 to the hosts from it too. An example is a cluster with its own VLAN.
+  Otherwise the cluster can't reach the Proxmox API.
+- **Other VMs:** any other VM that already has a firewall-enabled NIC starts being
+  filtered too.
 
 With it off, every port on every VM is reachable from any network that routes
 to it.
@@ -183,11 +180,11 @@ when that node is rebuilt.
 ## Graceful shutdown
 
 `graceful_shutdown`, on by default at 90 seconds with the last 30 for critical pods, has
-kubelet evict pods when a node's OS shuts down, so a VM shut down from Proxmox or by a host
-reboot stops its workloads instead of having them killed. Raise it for workloads with a
-long `terminationGracePeriodSeconds`, but keep it under what Proxmox gives a guest before
-stopping it: 180 seconds by default when the host shuts down. Null turns it off. See
-[`node-bootstrap`'s README](../node-bootstrap/README.md#graceful-shutdown). Like
+kubelet evict pods when a node's OS shuts down. A VM shut down from Proxmox or by a host
+reboot then stops its workloads instead of having them killed. Raise it for workloads with
+a long `terminationGracePeriodSeconds`. Keep it under what Proxmox gives a guest before
+stopping it, which is 180 seconds by default when the host shuts down. Null turns it off.
+See [`node-bootstrap`'s README](../node-bootstrap/README.md#graceful-shutdown). Like
 `os_auto_updates`, it reaches a node only when that node is rebuilt.
 
 ## New template
@@ -235,8 +232,8 @@ These notes hold the reasons behind some input descriptions.
 
 ## Existing standalone modules remain fully supported
 
-`proxmox-control-plane` and `proxmox-node-pool` are unchanged and continue to work
-exactly as before, applied as separate Terragrunt units with a `dependency` block
-carrying `cluster_agent_token` between them. `proxmox-cluster` is an additional
-option for consumers who want a single directory/state per cluster — it does not
-deprecate, replace, or require migrating the split layout.
+`proxmox-control-plane` and `proxmox-node-pool` are unchanged and continue to work exactly
+as before, applied as separate Terragrunt units with a `dependency` block carrying
+`cluster_agent_token` between them. `proxmox-cluster` is an additional option for
+consumers who want a single directory/state per cluster. It does not deprecate, replace,
+or require migrating the split layout.

@@ -1,17 +1,17 @@
 # aws-control-plane
 
-Provisions the AWS control plane for an RKE2 cluster — its control-plane node(s) plus the
-cluster-wide resources — consuming `node-bootstrap` for per-cluster identity, join tokens, and
-GitOps bootstrap. A control plane with `control_plane_count = 1` is a complete single-node
-cluster.
+Provisions the AWS control plane for an RKE2 cluster: its control-plane node(s) plus the
+cluster-wide resources. It consumes `node-bootstrap` for per-cluster identity, join
+tokens, and GitOps bootstrap. A control plane with `control_plane_count = 1` is a complete
+single-node cluster.
 
 ## Boot flow: pre-baked AMI + lean cloud-init, no live connection
 
 This module runs **no live Ansible** at `apply` time. It renders `node-bootstrap`'s
 `#cloud-config` payload (node identity, join tokens, registries/CA, GitOps Application
-manifests — see `modules/node-bootstrap/README.md`) and attaches it as `user_data_base64`.
-Nothing in this module connects to the node, waits on it, or observes it converge; `apply`
-returns as soon as the instance and its user-data exist.
+manifests — see `modules/node-bootstrap/README.md`) and attaches it as
+`user_data_base64`. Nothing in this module connects to the node, waits on it, or observes
+it converge. `apply` returns as soon as the instance and its user-data exist.
 
 The heavy half of RKE2 bootstrap (binaries, SELinux policy, kernel modules) is expected to
 already be baked into the AMI, via `kube-images`' `kube-node/packer/aws/`
@@ -24,9 +24,7 @@ matching build. This mirrors `proxmox-control-plane`'s `proxmox_template_vm_id`.
 
 ### Keeping user data under EC2's limit
 
-EC2 rejects `RunInstances` when decoded user data exceeds 16384 bytes. Static content
-therefore stays out of the payload: the genesis node reads the Cilium and Argo CD manifests
-from a clone of the platform ref, and with `trusted_ca_in_image` a CA is baked into the image. The bootstrap program travels in the payload
+EC2 rejects `RunInstances` when decoded user data exceeds 16384 bytes. Static content therefore stays out of the payload. The genesis node reads the Cilium and Argo CD manifests from a clone of the platform ref. With `trusted_ca_in_image`, a CA is baked into the image. The bootstrap program travels in the payload
 with its comments removed. A precondition on the instance names the levers when the
 limit is exceeded.
 
@@ -67,27 +65,28 @@ Do not replace several nodes in one apply: etcd loses its quorum.
 
 ## Scope
 
-The module provisions the **node and only what is intrinsic to it** — the EC2 instance, its
-own security group, its IAM role/instance-profile, and (optionally) a DNS record. It **never
-creates network fabric** (VPC, subnet, internet gateway, NAT, route tables); you plug in
-existing networking, or it falls back to the account's default VPC.
+The module provisions the **node and only what is intrinsic to it**. That is the EC2
+instance, its own security group, its IAM role/instance-profile, and (optionally) a DNS
+record. It **never creates network fabric** (VPC, subnet, internet gateway, NAT, route
+tables). You plug in existing networking, or it falls back to the account's default VPC.
 
 ## Topology
 
 - **`control_plane_count`** — `1` (default), `3`, or `5`. `2` and `4` are rejected (no
   fault-tolerance benefit, split-brain risk). `3`/`5` place one control-plane node per
-  availability zone (requires `control_plane_subnets`, a map of AZ -> subnet id, spanning at
-  least 3 distinct AZs; fewer fails plan with a clear error) behind an internal NLB on 6443;
-  `registration_address` becomes the NLB's DNS name. The first control-plane node probes that
-  address at boot: reachable → join the existing quorum; unreachable → initialize (RKE2 has no
-  `--cluster-init` flag — the first server is simply the one whose config omits a `server:`
-  join address — so replacing it is always a safe rejoin, never a second initialization).
+  availability zone behind an internal NLB on 6443. They require `control_plane_subnets`,
+  a map of AZ -> subnet id spanning at least 3 distinct AZs. Fewer fails plan with a clear
+  error. `registration_address` becomes the NLB's DNS name. The first control-plane node
+  probes that address at boot. If it is reachable, the node joins the existing quorum. If
+  not, it initializes. RKE2 has no `--cluster-init` flag. The first server is simply the
+  one whose config omits a `server:` join address. So replacing it is always a safe
+  rejoin, never a second initialization.
 - **`cluster_type`** — `all_in_one` (default; control-plane node stays schedulable) or
-  `dedicated_control_plane` (tainted `CriticalAddonsOnly=true:NoExecute`; for use once node
-  pools exist). Derived from this explicit intent, never from node counts — node pools are
-  separate Terraform state this module cannot see.
-- **Datastore** — always embedded etcd (RKE2's only supported datastore), including for
-  `control_plane_count = 1`, for one consistent datastore and uniform snapshots.
+  `dedicated_control_plane` (tainted `CriticalAddonsOnly=true:NoExecute`; for use once
+  node pools exist). Derived from this explicit intent, never from node counts — node
+  pools are separate Terraform state this module cannot see.
+- **Datastore** — always embedded etcd (RKE2's only supported datastore), including
+  for `control_plane_count = 1`, for one consistent datastore and uniform snapshots.
 
 ## Networking
 
@@ -105,9 +104,9 @@ DNS is a convenience, not a hard dependency:
 
 - Set `cluster_domain` to get a named FQDN (`api.<cluster>.<domain>`) and a wildcard
   (`*.<cluster>.<domain>`). Omit it and the node is reachable by IP only.
-- Additionally set `hosted_zone_id` to have the module create the wildcard A record in that
-  Route53 zone.
-- If you don't pass `hosted_zone_id`, the module creates **no** DNS record — register the
+- Additionally set `hosted_zone_id` to have the module create the wildcard A record in
+  that Route53 zone.
+- If you don't pass `hosted_zone_id`, the module creates **no** DNS record. Register the
   `wildcard_dns_name` output at the `cluster_ip` in whatever DNS you run (Route53, a local
   resolver, RFC2136, external-dns, or an `sslip.io`-style fallback).
 
@@ -120,11 +119,12 @@ IMDSv2 is enforced. Operator access to the node is via AWS SSM (the IAM role att
 ## Join flow (workers and, later, additional control-plane nodes)
 
 This module generates its own join tokens directly (`random_password.server_token` /
-`random_password.agent_token`), matching `proxmox-control-plane`'s precedent. `cluster_token`
-(the **server token**, used by both genesis and every `server-join` node) and
-`cluster_agent_token` (the **agent token**, mirrored into an SSM `SecureString` workers fetch via
-their own instance IAM role) are never exposed as raw values outside the module. Workers receive
-only the agent token, so a compromised worker cannot rejoin as control-plane/etcd.
+`random_password.agent_token`), matching `proxmox-control-plane`'s precedent. Two tokens
+are never exposed as raw values outside the module. `cluster_token` is the **server
+token**, used by both genesis and every `server-join` node. `cluster_agent_token` is the
+**agent token**, mirrored into an SSM `SecureString` that workers fetch via their own
+instance IAM role. Workers receive only the agent token, so a compromised worker cannot
+rejoin as control-plane/etcd.
 
 One security group carries east-west traffic: `aws_security_group.cluster` (self-referencing,
 every member, exposed as `cluster_security_group_id` for an `aws-node-pool` unit to attach
@@ -141,16 +141,17 @@ accidentally supply two subnets in the same AZ. Pass at least 3 entries spanning
 distinct AZs; fewer fails plan explicitly rather than silently forming a weaker quorum.
 
 Once `control_plane_count > 1`, the single `subnet_id`/`subnet_name` above is unused for
-control-plane placement — the module's own VPC (for its security groups and the NLB target
-group) is derived from `control_plane_subnets` itself, so it can never disagree with where the
-instances actually launch.
+control-plane placement. The module's own VPC (for its security groups and the NLB target
+group) is derived from `control_plane_subnets` itself. So it can never disagree with where
+the instances actually launch.
 
-The genesis node is unchanged in shape from `control_plane_count = 1`. Additional control-plane
-nodes (`server-join`) bootstrap concurrently with it and join via the NLB, retrying the
-registration endpoint the same way a worker retries its join target; node-bootstrap's own
-staggered, self-healing retry handles the one genuine etcd constraint (one non-voting learner at
-a time) among the joining siblings. Argo/platform GitOps inputs are only ever passed to the
-genesis node, so platform bootstrap manifests never race on more than one server.
+The genesis node is unchanged in shape from `control_plane_count = 1`. Additional
+control-plane nodes (`server-join`) bootstrap concurrently with it and join via the NLB.
+They retry the registration endpoint the same way a worker retries its join target.
+node-bootstrap's own staggered, self-healing retry handles the one genuine etcd constraint
+(one non-voting learner at a time) among the joining siblings. Argo/platform GitOps inputs
+are only ever passed to the genesis node, so platform bootstrap manifests never race on
+more than one server.
 
 ## Cilium and Argo CD manifests
 
@@ -158,8 +159,7 @@ The genesis node clones the platform ref (`gitops_platform_repo_url` at `gitops_
 
 ## Container Network Interface (CNI)
 
-The CNI is always Cilium. The Canal variant does not work on AlmaLinux 10, this project's only supported OS: its kernel dropped the legacy `br_netfilter`, `xt_conntrack` and `xt_comment` modules. The Cilium manifest from the platform ref sets the operator to `1`
-replica (chart default `2`) on every topology, so a single-node cluster has no `Pending` replica. The cluster security group's
+The CNI is always Cilium. The Canal variant does not work on AlmaLinux 10, this project's only supported OS: its kernel dropped the legacy `br_netfilter`, `xt_conntrack` and `xt_comment` modules. The Cilium manifest from the platform ref sets the operator to `1` replica (chart default `2`) on every topology. So a single-node cluster has no `Pending` replica. The cluster security group's
 self-referencing all-protocol rule already covers the CNI traffic.
 
 ## Registration endpoint modes (`endpoint_mode`)
@@ -167,15 +167,16 @@ self-referencing all-protocol rule already covers the CNI traffic.
 Only relevant once `control_plane_count > 1` — a single control-plane node has no registration
 endpoint at all.
 
-- **`loadbalancer`** (default) — an internal NLB across all control-plane nodes on 6443.
+- **`loadbalancer`** (default) — an internal NLB across all control-plane nodes on
+  6443.
 - **`dns`** — one Route53 A record per control-plane node under a shared name
-  (`cp.<cluster_name>.<cluster_domain>`), multivalue-answer routing, each backed by a
-  `CLOUDWATCH_METRIC` health check on that instance's own EC2 status-check alarm (Route53's
-  public health checkers can't reach a private VPC IP directly, so the alarm is the bridge).
-  Requires `cluster_domain` and a resolvable hosted zone. Cheaper than an NLB; failover is
-  TTL-bound (`ttl = 10`), not instant.
-- **`static`** — creates no load balancer or DNS record; `static_registration_address` is used
-  verbatim. For a consumer that already runs its own front end.
+  (`cp.<cluster_name>.<cluster_domain>`), with multivalue-answer routing. Each record is
+  backed by a `CLOUDWATCH_METRIC` health check on that instance's own EC2 status-check
+  alarm. Route53's public health checkers can't reach a private VPC IP directly, so the
+  alarm is the bridge. Requires `cluster_domain` and a resolvable hosted zone. Cheaper
+  than an NLB; failover is TTL-bound (`ttl = 10`), not instant.
+- **`static`** — creates no load balancer or DNS record; `static_registration_address`
+  is used verbatim. For a consumer that already runs its own front end.
 
 ## Inputs
 

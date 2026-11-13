@@ -30,11 +30,11 @@ and taints.
 
 - **Discovery.** Each group is tagged `k8s.io/cluster-autoscaler/enabled` and
   `k8s.io/cluster-autoscaler/<cluster_name>`.
-- **Scale from zero.** With no nodes to inspect, the autoscaler reads the
-  instance type from the launch template, and the labels and taints from
+- **Scale from zero.** With no nodes to inspect, the autoscaler reads the instance type
+  from the launch template. It reads the labels and taints from
   `k8s.io/cluster-autoscaler/node-template/*` tags.
-- **Matching nodes to instances.** Every node registers
-  `aws:///<zone>/<instance-id>` as its providerID.
+- **Matching nodes to instances.** Every node registers `aws:///<zone>/<instance-id>` as
+  its providerID.
 - **Desired capacity.** The autoscaler owns it, so Terraform never sets it.
 
 The autoscaler terminates instances but does not delete their Node objects.
