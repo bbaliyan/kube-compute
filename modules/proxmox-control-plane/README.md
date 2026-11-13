@@ -75,16 +75,6 @@ Roll the control plane before the workers: a kubelet must not be newer than the 
 
 - `pool_id`: the Proxmox resource pool every control-plane VM joins. Set it when the API token is scoped to one pool.
 
-## Cloud-init snippet upload
-
-`cloud_init_upload_mode` is optional. It sets how the provider copies the cloud-init snippet files to the Proxmox host over SSH.
-
-- Unset, the provider default (`stream`) applies. It opens a shell on the host and tries `sudo`.
-- `sftp` uses the SFTP subsystem only. It does not use `sudo`, so the SSH user must have write permission on the snippets directory. Use it when the SSH user has no shell.
-- Any other value is rejected.
-
-The setting has no effect on image downloads, which use the API.
-
 ## Operational note: SSH connection bursts on apply
 
 The `proxmox_virtual_environment_file` resources here (`vendor_data`, `node_init`,

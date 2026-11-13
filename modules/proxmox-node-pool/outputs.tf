@@ -27,7 +27,3 @@ output "pool_id" {
   value       = var.pool_id
 }
 
-output "cloud_init_upload_mode" {
-  description = "How cloud-init snippets are copied to the Proxmox host for the workers, or null for the provider default (stream)."
-  value       = var.cloud_init_upload_mode
-}

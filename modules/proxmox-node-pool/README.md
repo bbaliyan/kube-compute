@@ -46,16 +46,6 @@ creates. This pool never creates the ipset itself, only references it by name.
 
 - `pool_id`: the Proxmox resource pool every worker joins. Set it when the API token is scoped to one pool. It is not `pool_name`, which names the node group.
 
-## Cloud-init snippet upload
-
-`cloud_init_upload_mode` is optional. It sets how the provider copies the cloud-init snippet files to the Proxmox host over SSH.
-
-- Unset, the provider default (`stream`) applies. It opens a shell on the host and tries `sudo`.
-- `sftp` uses the SFTP subsystem only. It does not use `sudo`, so the SSH user must have write permission on the snippets directory. Use it when the SSH user has no shell.
-- Any other value is rejected.
-
-The setting has no effect on image downloads, which use the API.
-
 ## Operational note: SSH connection bursts on apply
 
 See [proxmox-control-plane's README](../proxmox-control-plane/README.md#operational-note-ssh-connection-bursts-on-apply)

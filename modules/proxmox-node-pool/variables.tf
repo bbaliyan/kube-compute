@@ -260,13 +260,3 @@ variable "node_name_template" {
   }
 }
 
-variable "cloud_init_upload_mode" {
-  description = "How the provider copies cloud-init snippets to the Proxmox host over SSH. Null keeps the provider default, 'stream', which uses sudo. 'sftp' needs write access to the snippets directory and no sudo. It does not affect ISO or image downloads."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.cloud_init_upload_mode == null ? true : contains(["stream", "sftp"], var.cloud_init_upload_mode)
-    error_message = "cloud_init_upload_mode must be null, \"stream\" or \"sftp\"."
-  }
-}
