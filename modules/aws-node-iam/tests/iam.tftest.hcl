@@ -2,6 +2,11 @@
 
 mock_provider "aws" {}
 
+override_data {
+  target = data.aws_caller_identity.current
+  values = { account_id = "mock-account" }
+}
+
 variables {
   name_prefix = "kube-compute-example-"
   tags        = { ManagedBy = "kube-compute" }
@@ -56,12 +61,39 @@ run "agent_token_policy_reads_only_the_named_parameter" {
   }
 
   assert {
-    condition     = endswith(jsondecode(aws_iam_role_policy.agent_token[0].policy).Statement[0].Resource, ":parameter/kube-compute/example/agent-token")
-    error_message = "ssm:GetParameter must be scoped to the one parameter"
+    condition = jsondecode(aws_iam_role_policy.agent_token[0].policy).Statement[0] == {
+      Effect   = "Allow"
+      Action   = "ssm:GetParameter"
+      Resource = "arn:aws:ssm:eu-west-1:mock-account:parameter/kube-compute/example/agent-token"
+    }
+    error_message = "the role must read exactly the agent token parameter, in this region and account"
   }
 
   assert {
     condition     = jsondecode(aws_iam_role_policy.agent_token[0].policy).Statement[1].Condition.StringEquals["kms:ViaService"] == "ssm.eu-west-1.amazonaws.com"
     error_message = "kms:Decrypt must be limited to calls made through SSM in the region"
   }
+}
+
+run "a_name_prefix_of_38_characters_is_accepted" {
+  command = plan
+
+  variables {
+    name_prefix = "c0123456789012345678901234567890123456"
+  }
+
+  assert {
+    condition     = length(aws_iam_role.node.name_prefix) == 38
+    error_message = "a 38-character name_prefix must be accepted"
+  }
+}
+
+run "a_name_prefix_over_38_characters_is_rejected" {
+  command = plan
+
+  variables {
+    name_prefix = "c01234567890123456789012345678901234567"
+  }
+
+  expect_failures = [var.name_prefix]
 }

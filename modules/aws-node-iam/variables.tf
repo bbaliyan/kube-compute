@@ -3,6 +3,11 @@
 variable "name_prefix" {
   description = "Name prefix of the IAM role and the instance profile. AWS caps it at 38 characters."
   type        = string
+
+  validation {
+    condition     = length(var.name_prefix) <= 38
+    error_message = "name_prefix must be 38 characters or fewer: AWS rejects a longer IAM name_prefix at apply time."
+  }
 }
 
 variable "tags" {

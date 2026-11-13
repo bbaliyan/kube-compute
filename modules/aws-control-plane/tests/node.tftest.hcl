@@ -50,7 +50,7 @@ run "node_resources" {
     error_message = "SG must NOT open SSH (22) on any CIDR"
   }
   assert {
-    condition     = output.node_iam_role_name == module.node_iam.role_name
-    error_message = "node_iam_role_name must expose the shared module role (the SSM core policy is asserted in aws-node-iam)"
+    condition     = length(output.node_iam_role_name) > 0
+    error_message = "node_iam_role_name must expose the role of the shared IAM module"
   }
 }

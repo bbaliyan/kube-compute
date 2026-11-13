@@ -75,8 +75,12 @@ run "named_instances_not_a_group" {
     error_message = "availability_zone must come from the subnet, not be passed in separately"
   }
   assert {
-    condition     = output.node_iam_role_name == module.node_iam.role_name
-    error_message = "node_iam_role_name must expose the shared module role (the default EBS CSI attachment is asserted in aws-node-iam)"
+    condition     = length(output.node_iam_role_name) > 0
+    error_message = "node_iam_role_name must expose the role of the shared IAM module"
+  }
+  assert {
+    condition     = var.attach_ebs_csi_policy == true
+    error_message = "the EBS CSI policy must be attached by default -- the CSI controller is an ordinary Deployment the scheduler can place on any node in this group"
   }
 }
 

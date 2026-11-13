@@ -16,11 +16,6 @@ override_data {
   values = { availability_zone = "eu-west-1a", vpc_id = "vpc-mock" }
 }
 
-override_data {
-  target = data.aws_caller_identity.current
-  values = { account_id = "mock-account" }
-}
-
 variables {
   os_image_ami_id           = "ami-0123456789abcdef0"
   cluster_name              = "example"
@@ -31,40 +26,6 @@ variables {
   cluster_security_group_id = "sg-cluster123"
   subnet_id                 = "subnet-worker-a"
   instance_type_max_sizes   = { "t3a.large" = 3 }
-}
-
-run "the_agent_token_policy_reads_only_its_own_parameter" {
-  command = plan
-
-  assert {
-    condition = jsondecode(aws_iam_role_policy.agent_token.policy).Statement[0] == {
-      Effect   = "Allow"
-      Action   = "ssm:GetParameter"
-      Resource = "arn:aws:ssm:eu-west-1:mock-account:parameter/kube-compute/example/agent-token"
-    }
-    error_message = "the role must read exactly the agent token parameter, in this region and account"
-  }
-  assert {
-    condition     = jsondecode(aws_iam_role_policy.agent_token.policy).Statement[1].Condition.StringEquals["kms:ViaService"] == "ssm.eu-west-1.amazonaws.com"
-    error_message = "kms:Decrypt must be allowed only through SSM in the group's region"
-  }
-}
-
-run "the_node_role_carries_only_the_managed_policies_it_needs" {
-  command = plan
-
-  assert {
-    condition     = aws_iam_role_policy_attachment.ssm_core.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-    error_message = "the node must be SSM-managed"
-  }
-  assert {
-    condition     = aws_iam_role_policy_attachment.ebs_csi.policy_arn == "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-    error_message = "the node must be able to run the EBS CSI driver"
-  }
-  assert {
-    condition     = jsondecode(aws_iam_role.node.assume_role_policy).Statement[0].Principal.Service == "ec2.amazonaws.com"
-    error_message = "only EC2 may assume the node role"
-  }
 }
 
 run "an_empty_taint_list_renders_no_taint_tag" {
@@ -174,8 +135,8 @@ run "the_longest_valid_names_keep_the_iam_prefix_within_38_characters" {
   }
 
   assert {
-    condition     = length(aws_iam_role.node.name_prefix) <= 38 && length(aws_iam_instance_profile.node.name_prefix) <= 38
-    error_message = "an IAM name_prefix must stay within 38 characters"
+    condition     = length(local.iam_name_prefix) <= 38
+    error_message = "the IAM name_prefix must stay within 38 characters, or aws-node-iam rejects it"
   }
 }
 

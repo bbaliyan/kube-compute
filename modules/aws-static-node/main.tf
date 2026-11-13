@@ -48,7 +48,6 @@ locals {
 }
 
 # One role per group, not per node: every node reads the same SSM parameter.
-# One role per group, not per node: every node reads the same SSM parameter.
 module "node_iam" {
   source = "../aws-node-iam"
 
