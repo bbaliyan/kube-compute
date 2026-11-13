@@ -174,8 +174,8 @@ On Proxmox, also replace the firewall of an additional control-plane VM. See "Ro
 Every caller gets `set_hostname = true` (the default): `hostname`/`fqdn` are written into
 cloud-config from `node_name`, required because RKE2/kubelet registers the node by OS
 hostname. `set_hostname = false` omits both keys entirely. Do this only when VMs share one
-rendered `cloud_init_user_data` and cannot each get their own render (e.g. every instance
-of an AWS Auto Scaling group, via one launch template). The platform's per-instance
+rendered `cloud_init_user_data` and cannot each get their own render. An example is every
+instance of an AWS Auto Scaling group, via one launch template. The platform's per-instance
 metadata then supplies a unique hostname.
 
 ## DNS search domains

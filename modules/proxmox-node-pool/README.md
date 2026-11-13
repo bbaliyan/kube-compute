@@ -48,9 +48,13 @@ creates. This pool never creates the ipset itself, only references it by name.
 
 ## Operational note: SSH connection bursts on apply
 
-See [proxmox-control-plane's README](../proxmox-control-plane/README.md#operational-note-ssh-connection-bursts-on-apply)
-— this module uploads the same kind of cloud-init snippets via the same `bpg/proxmox` SSH mechanism. It is equally subject to the SSH connection burst / `MaxStartups` interaction described there. It's most likely to surface when this module's apply
-overlaps with `proxmox-control-plane`'s for the same cluster.
+See [proxmox-control-plane's
+README](../proxmox-control-plane/README.md#operational-note-ssh-connection-bursts-on-apply)
+— this module uploads the same kind of cloud-init snippets via the same `bpg/proxmox`
+SSH mechanism. It is equally subject to the SSH connection burst / `MaxStartups`
+interaction described there. It's most likely to surface when this module's apply overlaps
+with `proxmox-control-plane`'s for the same cluster.
+
 
 ### Booting from a kube-images template
 

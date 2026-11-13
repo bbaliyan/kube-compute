@@ -49,8 +49,8 @@ A cluster name may start with a letter or a digit: `app-red` and `7c-demo` both 
 
 ### Your own node names
 
-Where nodes must follow a naming rule of their own, pass a template. An example is a
-Windows domain, whose computer names are at most 15 characters.
+Where nodes must follow a naming rule of their own, for example to join a Windows
+domain, whose computer names are at most 15 characters, pass a template.
 `control_plane_node_name_template` names the control-plane nodes, and each `static_nodes`
 group takes its own `node_name_template`. In a template, `{zone}` becomes the last letter
 of the node's availability zone and `{number}` the node's number as two digits:
@@ -137,8 +137,10 @@ runs:
   Node object of a terminated instance so its pods and volumes can move. The autoscaler
   never deletes Node objects itself.
 
-Each authenticates as the node it runs on. These nodes are the platform node, the control plane and the first node back after a stop. This module gives each role its permissions, and scaling is limited to this
+The autoscaler runs on the platform node. The cloud controller manager runs on the control
+plane. This module gives each role its permissions, and scaling is limited to this
 cluster's own groups.
+
 
 Both find a node's instance through its providerID, so every node of an autoscaled cluster
 registers `aws:///<zone>/<instance-id>`. **Adding the first group, or removing the last,

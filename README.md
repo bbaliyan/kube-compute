@@ -67,16 +67,18 @@ Joining nodes use a stable `registration_address`. The providers differ in where
 
 The address comes from the provider:
 
-- **AWS** — an internal Network Load Balancer on port 6443; `registration_address` is its DNS
-  name.
-- **Azure** — not implemented (see `modules/azure-control-plane`'s README); an internal Standard
-  `azurerm_lb` on port 6443 is the intended design.
-- **Proxmox** — no managed load-balancer primitive, so joining control-plane nodes dial the
-  `genesis.<cluster>.<cluster_domain>` DNS name (`registration_address`). DNS is required for
-  more than one control-plane node, so set `cluster_domain` and `dns_server_address`.
-  `cluster_fqdn` is the stable multi-node address for clients outside the join flow. See
-  `modules/dns-registration`'s README. `tofu test` against a mocked provider and a rolling template
-  update of a three-node cluster on DHCP have validated the join flow and the DNS registration.
+- **AWS** — an internal Network Load Balancer on port 6443; `registration_address` is
+  its DNS name.
+- **Azure** — not implemented (see `modules/azure-control-plane`'s README); an internal
+  Standard `azurerm_lb` on port 6443 is the intended design.
+- **Proxmox** — no managed load-balancer primitive, so joining control-plane nodes dial
+  the `genesis.<cluster>.<cluster_domain>` DNS name (`registration_address`). DNS is
+  required for more than one control-plane node, so set `cluster_domain` and
+  `dns_server_address`. `cluster_fqdn` is the stable multi-node address for clients
+  outside the join flow. See `modules/dns-registration`'s README. `tofu test` against a
+  mocked provider has validated the join flow and the DNS registration. So has a rolling
+  template update of a three-node cluster on DHCP.
+
 
 On a multi-node cluster, the first control-plane node probes the live cluster at boot. If
 the cluster answers, the node joins it. If not, the node initializes a new cluster. On AWS

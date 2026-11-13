@@ -8,9 +8,10 @@ This module generates its own cluster join tokens (`random_password` resources) 
 exposes them as the `cluster_token`/`cluster_agent_token` outputs. There is no separate
 cluster-facts unit to pre-generate them. `cluster_token` is consumed by this module's own
 `node-bootstrap` calls (server-init and server-join alike). The consumer's Terragrunt
-config hands `cluster_agent_token` to `proxmox-node-pool`'s own `cluster_agent_token`
-input. There is no Terraform-level dependency between the two sibling modules — only a
-value passed through at that layer.
+config is meant to hand `cluster_agent_token` to `proxmox-node-pool`'s own
+`cluster_agent_token` input. There is no Terraform-level dependency between the two
+sibling modules — only a value passed through at that layer.
+
 
 Similarly, the cluster-wide firewall ipset name
 (`kube-compute-<cluster_name>-cluster`) is a plain deterministic-string
@@ -109,13 +110,14 @@ only configures and starts it, assuming the binaries are already on disk. A stoc
 image has no RKE2, so the node would fail at `systemctl enable --now rke2-server.service`
 while `tofu apply` reported success.
 
-Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID. Nodes are **full**-cloned from it, so they never
-depend on the template surviving. The template carries OS prep, the RKE2 binaries, the SELinux policy, the
-kernel modules, and the guest agent. It holds both the server and agent units, because the
-role is chosen at launch. This module supplies only per-cluster identity,
-secrets, and join logic, as a cloud-init payload rendered by `node-bootstrap`.
-Bootstrap runs asynchronously after `tofu apply` returns — tail
-`/var/log/kube-compute-bootstrap.log` on the node to watch it.
+Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID. Nodes are
+**full**-cloned from it, so they never depend on the template surviving. The template
+carries OS prep, the RKE2 binaries, the SELinux policy, the kernel modules, and the guest
+agent. It holds both the server and agent units, because the role is chosen at launch.
+This module supplies only per-cluster identity, secrets, and join logic, as a cloud-init
+payload rendered by `node-bootstrap`. Bootstrap runs asynchronously after `tofu apply`
+returns — tail `/var/log/kube-compute-bootstrap.log` on the node to watch it.
+
 
 The first control-plane node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes the Cilium and Argo CD manifests from `bootstrap/rendered/` in the clone. The template holds neither, but it must hold git. See [`node-bootstrap`](../node-bootstrap/README.md).
 

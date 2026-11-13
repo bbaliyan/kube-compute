@@ -83,7 +83,7 @@ Firewall → Options). kube-compute doesn't manage that setting. Before turning 
   allows the web UI (8006) and SSH from the hosts' own subnet; allow them from anywhere
   else you administer from.
 - **Proxmox API from the cluster:** if `cluster_network_cidr` isn't the hosts' own
-  subnet, allow 8006 to the hosts from it too. An example is a cluster with its own VLAN.
+  subnet (for example, the cluster has its own VLAN), allow 8006 to the hosts from it too.
   Otherwise the cluster can't reach the Proxmox API.
 - **Other VMs:** any other VM that already has a firewall-enabled NIC starts being
   filtered too.

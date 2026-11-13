@@ -43,8 +43,8 @@ running the `nsupdate` transaction and a `when = destroy` provisioner running th
 corresponding delete. The non-secret connection details (zone, name, addresses, TTL,
 server, TSIG key *name*/ *algorithm*) go through `terraform_data`'s `input`/`output`,
 which Terraform does persist to state. That is fine, since none of it is secret. It also
-lets the destroy-time provisioner still know what to delete after the resources that
-originally supplied those values (e.g. a VM's IP) are already gone.
+lets the destroy-time provisioner know what to delete after the resources that supplied
+those values (e.g. a VM's IP) are gone.
 
 `tsig_key_secret` is deliberately **not** part of `input`, matching this project's hard
 rule that secrets never touch state in plaintext. The create-time provisioner gets it

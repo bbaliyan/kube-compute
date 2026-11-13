@@ -75,18 +75,19 @@ tables). You plug in existing networking, or it falls back to the account's defa
 - **`control_plane_count`** — `1` (default), `3`, or `5`. `2` and `4` are rejected (no
   fault-tolerance benefit, split-brain risk). `3`/`5` place one control-plane node per
   availability zone behind an internal NLB on 6443. They require `control_plane_subnets`,
-  a map of AZ -> subnet id spanning at least 3 distinct AZs. Fewer fails plan with a clear
-  error. `registration_address` becomes the NLB's DNS name. The first control-plane node
-  probes that address at boot. If it is reachable, the node joins the existing quorum. If
-  not, it initializes. RKE2 has no `--cluster-init` flag. The first server is simply the
-  one whose config omits a `server:` join address. So replacing it is always a safe
-  rejoin, never a second initialization.
+  a map of AZ -> subnet id spanning at least 3 distinct AZs. Fewer than 3 AZs fails the
+  plan with a clear error. `registration_address` becomes the NLB's DNS name. The first
+  control-plane node probes that address at boot. If it is reachable, the node joins the
+  existing quorum. If not, it initializes. RKE2 has no `--cluster-init` flag. The first
+  server is simply the one whose config omits a `server:` join address. So replacing it is
+  always a safe rejoin, never a second initialization.
 - **`cluster_type`** — `all_in_one` (default; control-plane node stays schedulable) or
   `dedicated_control_plane` (tainted `CriticalAddonsOnly=true:NoExecute`; for use once
   node pools exist). Derived from this explicit intent, never from node counts — node
   pools are separate Terraform state this module cannot see.
-- **Datastore** — always embedded etcd (RKE2's only supported datastore), including
-  for `control_plane_count = 1`, for one consistent datastore and uniform snapshots.
+- **Datastore** — always embedded etcd (RKE2's only supported datastore), including for
+  `control_plane_count = 1`, for one consistent datastore and uniform snapshots.
+
 
 ## Networking
 
