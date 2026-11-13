@@ -4,8 +4,6 @@ data "aws_subnet" "selected" {
   id = var.subnet_id
 }
 
-data "aws_caller_identity" "current" {}
-
 data "aws_ec2_instance_type" "selected" {
   for_each      = var.instance_type_max_sizes
   instance_type = each.key
