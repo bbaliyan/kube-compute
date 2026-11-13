@@ -469,7 +469,7 @@ resource "aws_instance" "control_plane" {
       # size is not knowable until apply -- it carries a generated token -- so this
       # runs at apply and names the input that fixes it.
       condition     = local.inline_user_data_bytes[each.key] <= 16384
-      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: set trusted_ca_in_image if the node image bakes the CA, and look at the boot scripts and at what the platform Application's Helm values are carrying."
+      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: set trusted_ca_in_image if the node image bakes the CA, and look at what the platform Application's Helm values are carrying."
     }
 
     precondition {

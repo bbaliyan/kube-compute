@@ -13,7 +13,7 @@ Ansible, and no `data.external` Helm render at plan time. `cloud_init_user_data`
 is a complete cloud-init document (hostname, RKE2
 `config.yaml`/`registries.yaml`/trusted-CA/manifest payloads as base64
 `write_files`, and a `runcmd` that invokes an on-node bootstrap script). The
-caller attaches the `user_data` output to its VM; this module has no resource
+caller attaches the `cloud_init_user_data` output to its VM; this module has no resource
 to `depends_on`.
 
 ## User data
