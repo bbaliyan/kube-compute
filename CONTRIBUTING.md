@@ -35,6 +35,7 @@ when you change a required input.
 - The version is 0.x. A breaking change raises the minor number. Any other change
   raises the patch number.
 - A change is breaking if it removes or renames a module, an input or an output,
-  changes a default, or forces a node to be replaced.
+  changes a default, adds an input that has no default, changes the type of an
+  input or an output, makes a validation stricter, or forces a node to be replaced.
 - Mark a breaking commit with `!`, as in `feat!:` or `refactor!:`, and say in the
   body what a user must change.

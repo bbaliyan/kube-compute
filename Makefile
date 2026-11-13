@@ -7,7 +7,10 @@
 #   PROVIDERS            providers whose release mirror test-integration builds
 #   TF_PLUGIN_CACHE_DIR  where the platform keeps downloaded providers
 #   JOBS                 parallel jobs of test-commit (default: the CPUs it may use)
-#   WORK                 copy of modules/ and examples/ where validate and tests run
+#   WORK                 copy of modules/ and examples/ where validate and tests run.
+#                        test-commit makes its own temporary directory and removes it.
+#                        A direct `make validate` uses the fixed default, so do not run
+#                        two of them at once.
 #
 # test-commit runs its checks, each module and each test file in parallel,
 # and prints the output of one job at a time. For another target, pass -j.
@@ -43,7 +46,8 @@ endif
 	work $(UNITS:%=init/%) $(UNITS:%=validate/%) $(TESTS:%=test/%)
 
 test-commit:
-	$(MAKE) --jobs=$(JOBS) --output-sync=target --no-print-directory \
+	work=$$(mktemp -d) && trap 'rm -rf "$$work"' EXIT && \
+	$(MAKE) --jobs=$(JOBS) --output-sync=target --no-print-directory WORK="$$work" \
 		validate scan test-fast lint-scripts lint-pipelines trivyignore-expiry commit-messages
 
 test-fast: fmt lint-bootstrap secrets
@@ -87,7 +91,8 @@ $(UNITS:%=validate/%): validate/%: init/%
 $(TESTS:%=test/%): test/%: init/$$(call module_of,$$*)
 	cd $(WORK)/$(call module_of,$*) && tofu test -filter=tests/$(notdir $*)
 
-# Skips .terraform, which a parallel init may be writing while trivy walks the tree.
+# Scans modules/ only. examples/ hold placeholder calls to those modules, so they add no
+# findings of their own. Skips .terraform, which a local tofu init can leave in the tree.
 scan:
 	trivy config --skip-dirs '**/.terraform' --severity HIGH,CRITICAL --exit-code 1 --ignorefile .trivyignore modules/
 
