@@ -20,6 +20,8 @@ from the OpenTofu Registry, from its mirror repo, or from here by git SHA -- see
 
 Each provider has one cluster module that composes the others. Use it when you want one state for a whole cluster. Use the provider modules directly when you want a separate state for the control plane and each pool.
 
+Both cluster modules exist because each registry mirror needs a root module, and the two providers must look alike. They differ in size. `aws-cluster` holds logic of its own: autoscaling limits, node IAM and the orphaned volume sweep. `proxmox-cluster` is mostly a forwarder: it passes its inputs to `proxmox-control-plane` and `proxmox-node-pool`. When you add an input to one of those modules, forward it in the cluster module in the same change.
+
 | Layer | Module | Purpose |
 |-------|--------|---------|
 | Cluster | `modules/aws-cluster` | One state for a whole AWS cluster: the control plane, named workers and autoscaled workers. It is the root of the AWS registry release. |
