@@ -21,8 +21,7 @@ locals {
 
   # A replaced genesis node must probe its peers, not registration_address: that address
   # resolves to genesis itself, and genesis rewrites the genesis DNS record to itself before the
-  # probe runs, so the probe would never see the live cluster. No peer IP is known before
-  # genesis exists (a peer IP would close a dependency cycle),
+  # probe runs, so the probe would never see the live cluster. A DHCP peer IP is unknown until the VM boots,
   # so it probes cluster_fqdn when DNS registration publishes it: the node resolves the name
   # and skips its own IP. This is the same probe the AWS modules make of their registration
   # address.
@@ -247,7 +246,7 @@ resource "proxmox_virtual_environment_file" "network_data" {
   overwrite    = true
 
   source_raw {
-    file_name = "${var.cluster_name}-cp-0-network-data.yaml"
+    file_name = "${var.cluster_name}-cp-network-data.yaml"
     data      = local.network_data
   }
 }
