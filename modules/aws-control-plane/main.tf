@@ -129,11 +129,6 @@ locals {
     try(aws_lb.control_plane[0].dns_name, null)
   )
 
-  # Cilium is standard regardless of topology — Canal/flannel's iptables/ipset dataplane is
-  # broken on AlmaLinux 10 (this project's only supported OS; see node-bootstrap's cni
-  # variable). null = default.
-  effective_cni = coalesce(var.cni, "cilium")
-
   # dns mode's shared record name, distinct from cluster_fqdn (the kubeconfig/API-cert
   # name). Null unless a domain is configured; enforced by the precondition on
   # aws_instance.control_plane below.
@@ -232,7 +227,6 @@ module "node_bootstrap" {
   cluster_fqdn_suffix             = local.fqdn_suffix
   node_role                       = each.key == "0" ? "server-init" : "server-join"
   control_plane_taint             = local.control_plane_taint
-  cni                             = local.effective_cni
   cluster_token                   = random_password.server_token.result
   cluster_agent_token             = each.key == "0" ? random_password.agent_token.result : null
   registration_address            = local.registration_address

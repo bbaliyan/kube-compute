@@ -87,16 +87,6 @@ variable "extra_tls_sans" {
   default     = []
 }
 
-variable "cni" {
-  description = "CNI to install: 'cilium' (the default) or 'default' (Canal, not viable on AlmaLinux 10). On a genesis node 'cilium' disables rke2-cilium, so the Cilium manifest from the platform ref is the only install. It needs gitops_platform_repo_url."
-  type        = string
-  default     = "cilium"
-  validation {
-    condition     = contains(["default", "cilium"], var.cni)
-    error_message = "cni must be 'default' or 'cilium'."
-  }
-}
-
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
   type        = string

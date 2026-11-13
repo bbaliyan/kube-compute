@@ -160,14 +160,9 @@ The genesis node clones the platform ref (`gitops_platform_repo_url` at `gitops_
 
 ## Container Network Interface (CNI)
 
-`cni` is `null` by default, resolving to `"cilium"` regardless of topology. `"default"`
-(Canal/flannel+Calico) remains selectable as an escape hatch for a consumer-supplied image
-that ships a different CNI, but is not viable on AlmaLinux 10 (this project's only supported OS):
-its kernel dropped the legacy `br_netfilter`/`xt_conntrack`/`xt_comment` modules flannel and
-Felix's iptables dataplane require. The Cilium manifest from the platform ref sets the operator to `1`
+The CNI is always Cilium. The Canal variant does not work on AlmaLinux 10, this project's only supported OS: its kernel dropped the legacy `br_netfilter`, `xt_conntrack` and `xt_comment` modules. The Cilium manifest from the platform ref sets the operator to `1`
 replica (chart default `2`) on every topology, so a single-node cluster has no `Pending` replica. The cluster security group's
-self-referencing all-protocol rule already covers every CNI's traffic, so switching `cni` never
-requires a security-group change.
+self-referencing all-protocol rule already covers the CNI traffic.
 
 ## Registration endpoint modes (`endpoint_mode`)
 

@@ -36,7 +36,6 @@ locals {
   )
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
-  effective_cni       = coalesce(var.cni, "cilium")
   # Cilium operator replica count isn't a per-cluster knob here: kube-images bakes the
   # genesis manifest with a fixed replicas: 1, matching kube-platform's own
   # cilium-app.yaml default (which Argo CD's selfHeal would overwrite anyway) — already
@@ -183,7 +182,6 @@ module "node_bootstrap" {
   cluster_fqdn_suffix             = local.fqdn_suffix
   node_role                       = each.key == "0" ? "server-init" : "server-join"
   control_plane_taint             = local.control_plane_taint
-  cni                             = local.effective_cni
   cluster_token                   = random_password.server_token.result
   cluster_agent_token             = each.key == "0" ? random_password.agent_token.result : null
   registration_address            = each.key == "0" ? null : local.registration_address

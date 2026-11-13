@@ -135,7 +135,6 @@ module "control_plane" {
   workloads_extra_helm_parameters   = var.workloads_extra_helm_parameters
   workloads_helm_values_object      = var.workloads_helm_values_object
   cluster_type                      = var.cluster_type
-  cni                               = var.cni
   cert_mode                         = var.cert_mode
   platform_extra_helm_parameters    = local.platform_extra_helm_parameters
   platform_helm_values_object       = local.platform_helm_values_object

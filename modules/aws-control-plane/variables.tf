@@ -87,16 +87,6 @@ variable "cluster_type" {
   }
 }
 
-variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
-    error_message = "cni must be null, 'default', or 'cilium'."
-  }
-}
-
 variable "control_plane_count" {
   description = "Number of control-plane nodes. Must be 1, 3, or 5 — 2 and 4 give no fault-tolerance benefit and risk split-brain. 3 or 5 places one control-plane node per availability zone behind an internal NLB (see control_plane_subnets)."
   type        = number

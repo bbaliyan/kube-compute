@@ -80,16 +80,6 @@ variable "cluster_type" {
   }
 }
 
-variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
-    error_message = "cni must be null, 'default', or 'cilium'."
-  }
-}
-
 variable "cert_mode" {
   description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' (default), 'byo', or 'acme'."
   type        = string

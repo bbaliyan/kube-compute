@@ -49,7 +49,7 @@ On the first server, before RKE2 starts, the boot program does these steps:
    - For a 40-digit hex commit, it runs `git clone --filter=blob:none --no-checkout` and then `git checkout`.
 3. If `bootstrap/rendered/cilium.yaml` or `bootstrap/rendered/argocd.yaml` is missing, it stops with one line that names the repo, the ref and the path.
 4. It reads `k8sVersion` from `platform/platform-versions/values.yaml`. If the minor version of the RKE2 in the image is newer, it stops. A newer patch of the same minor version is fine.
-5. With `cni = "cilium"`, it copies `cilium.yaml` into the RKE2 manifests directory.
+5. On the first server, it copies `cilium.yaml` into the RKE2 manifests directory.
 6. After the node is Ready and CoreDNS is up, it applies `argocd.yaml` with server-side apply.
 7. It waits for the Argo CD workloads to roll out.
 
@@ -256,10 +256,9 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 
 ## Interface notes
 
-- `cni` defaults to `"cilium"`. It is the only variant verified on AlmaLinux 10. On a
+- The CNI is always Cilium. On a
   genesis node, the boot program applies the Cilium manifest from the platform ref, and
   `config.yaml` sets `disable: [rke2-cilium]` so RKE2's own Cilium chart never runs.
-  `"default"` is for a consumer-supplied image that ships a different CNI.
 - `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command` and `trusted_ca_pem`
   are `sensitive = true`. They reach the node only in the base64 `write_files` of the
   payload, such as the 0600 `/etc/rancher/rke2/config.yaml`.

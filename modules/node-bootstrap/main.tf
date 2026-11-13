@@ -36,7 +36,7 @@ locals {
   # Whether bootstrap.sh applies the Cilium manifest and the Argo CD manifest. It
   # takes both from bootstrap/rendered/ in a clone of the platform ref. This module
   # renders neither: Argo CD is too big for Proxmox's 1 MiB cicustom snippet cap.
-  render_cilium = var.cni == "cilium" && var.node_role == "server-init"
+  render_cilium = var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
   # The genesis node clones the platform ref when it needs either manifest. With
@@ -233,7 +233,7 @@ locals {
     ], var.control_plane_taint ? [
     "node-taint:",
     "  - \"CriticalAddonsOnly=true:NoExecute\"",
-    ] : [], var.cni == "cilium" ? [
+    ] : [], [
     "cni: cilium",
     "disable-kube-proxy: true",
     # Without this, RKE2 installs its own bundled rke2-cilium addon (a separate
@@ -241,7 +241,7 @@ locals {
     # fighting over the same cilium-operator/cilium objects in kube-system.
     "disable:",
     "  - rke2-cilium",
-  ] : []))
+  ]))
 
   node_label_block = length(var.node_labels) == 0 ? "" : join("\n", concat(
     ["node-label:"],

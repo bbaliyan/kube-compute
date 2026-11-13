@@ -52,33 +52,6 @@ run "genesis_node_steps" {
   }
 }
 
-run "genesis_node_without_cni_or_platform_has_no_genesis_step" {
-  command = plan
-
-  variables {
-    node_role                 = "server-init"
-    cluster_token             = "tok"
-    cni                       = "default"
-    gitops_platform_enabled   = false
-    gitops_workloads_repo_url = null
-    os_auto_updates           = false
-  }
-
-  assert {
-    condition = output.boot_steps == [
-      "kubelet-reserved",
-      "graceful-shutdown",
-      "prelude",
-      "skew-check",
-      "node-config-server",
-      "start-server-init",
-      "wait-ready-server",
-      "finish",
-    ]
-    error_message = "with no Cilium and no Argo CD a genesis node must run no step that reads the platform ref"
-  }
-}
-
 run "genesis_node_that_can_rejoin_and_has_every_option" {
   command = plan
 
