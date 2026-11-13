@@ -248,14 +248,6 @@ module "autoscaled_nodes" {
   extra_tags          = var.extra_tags
 }
 
-removed {
-  from = terraform_data.autoscaling_limits
-
-  lifecycle {
-    destroy = false
-  }
-}
-
 # The platform's controllers authenticate as the node they run on.
 resource "aws_iam_role_policy" "autoscaling" {
   count = local.autoscaling_enabled ? 1 : 0
