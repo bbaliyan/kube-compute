@@ -247,7 +247,7 @@ resource "proxmox_virtual_environment_file" "network_data" {
   overwrite    = true
 
   source_raw {
-    file_name = "${var.cluster_name}-cp-0-network-data.yaml"
+    file_name = "${var.cluster_name}-cp-network-data.yaml"
     data      = local.network_data
   }
 }
