@@ -102,7 +102,7 @@ output "agent_token_ssm_parameter" {
 }
 
 output "connectivity_user_data_base64" {
-  description = "base64gzip of the genesis node's combined user-data (the AWS-only SSM-agent-enable script MIME-multipart-joined with node-bootstrap's #cloud-config payload). Exposed for tests and debugging."
+  description = "base64gzip of the genesis node's user data. Exposed for tests and debugging."
   value       = base64gzip(local.combined_user_data["0"])
   sensitive   = true
 }

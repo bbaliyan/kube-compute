@@ -214,15 +214,6 @@ the VM name, hostname, Kubernetes node name and the key in `control_plane_node_r
 Setting a template on an existing cluster changes the VM names and the keys of those
 outputs. It has not been tried on a running cluster, so plan it before applying.
 
-## Boot scripts
-
-`boot_scripts` is a list of bash scripts that every control-plane node and every
-`node_pools` worker runs once, at first boot, before RKE2 is installed, for example to join
-a directory. Each sees `CLUSTER_NAME`, `NODE_ROLE` (`control-plane` or `worker`) and
-`NODE_NAME`. A script that fails is logged by cloud-init and does not stop the node.
-Unset, a node's cloud-init is
-unchanged. The scripts are part of the node's first-boot cloud-init,.
-
 ## User data changes
 
 A changed input in a node's cloud-init does not touch a running VM. The node does not

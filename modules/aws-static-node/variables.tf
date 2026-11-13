@@ -187,13 +187,3 @@ variable "node_name_template" {
   }
 }
 
-variable "boot_scripts" {
-  description = "Bash scripts run on each node of the group at its first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (worker) and NODE_NAME in its environment. A script that fails is logged by cloud-init and does not stop the node. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for script in var.boot_scripts : !can(regex("(?m)^KUBE_COMPUTE_BOOT_SCRIPT$", script))])
-    error_message = "A boot script must not have a line that is just KUBE_COMPUTE_BOOT_SCRIPT."
-  }
-}

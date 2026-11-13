@@ -246,12 +246,6 @@ variable "os_auto_updates" {
   default     = true
 }
 
-variable "boot_scripts" {
-  description = "Bash scripts run at the node's first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (control-plane or worker) and NODE_NAME in its environment. They travel as MIME shell-script parts of user_data. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-}
-
 variable "provider_steps" {
   description = "Boot steps owned by one provider. The provider module builds them, so this module holds no provider logic. Each has a name and cloud-init runcmd commands (a command is a list of strings). They run in order before the module's own commands."
   type = list(object({

@@ -9,9 +9,7 @@ cluster.
 
 This module runs **no live Ansible** at `apply` time. It renders `node-bootstrap`'s
 `#cloud-config` payload (node identity, join tokens, registries/CA, GitOps Application
-manifests — see `modules/node-bootstrap/README.md`) and attaches it as `user_data_base64`,
-combined by `node-bootstrap` into a cloud-init MIME multipart document with a small AWS-only
-shell-script part that enables the SSM Agent (SSM stays this module's operator-access path, independent of bootstrap).
+manifests — see `modules/node-bootstrap/README.md`) and attaches it as `user_data_base64`.
 Nothing in this module connects to the node, waits on it, or observes it converge; `apply`
 returns as soon as the instance and its user-data exist.
 

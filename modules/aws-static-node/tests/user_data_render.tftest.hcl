@@ -22,7 +22,6 @@ variables {
   security_group_ids        = ["sg-cluster123"]
   subnet_id                 = "subnet-cp-a"
   node_count                = 2
-  boot_scripts              = ["echo one", "echo two"]
 }
 
 run "user_data_is_unchanged" {

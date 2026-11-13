@@ -27,7 +27,6 @@ variables {
   tsig_key_name          = "kube-compute"
   tsig_key_secret        = "ZmFrZXNlY3JldA=="
   proxmox_template_vm_id = 9000
-  boot_scripts           = ["echo one", "echo two"]
 }
 
 run "user_data_is_unchanged" {
@@ -44,15 +43,3 @@ run "user_data_is_unchanged" {
   }
 }
 
-run "user_data_without_boot_scripts_is_unchanged" {
-  command = plan
-
-  variables {
-    boot_scripts = []
-  }
-
-  assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "e31a66097184e42139d49e52962fc019810e474745b01d0bcf5bd6e7f488c7bc"
-    error_message = "the first worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
-  }
-}

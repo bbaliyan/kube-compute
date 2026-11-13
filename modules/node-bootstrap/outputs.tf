@@ -15,17 +15,6 @@ output "node_name" {
   value       = var.node_name
 }
 
-output "user_data" {
-  description = "Final user data for this node: cloud_init_user_data alone when there are no boot scripts, otherwise a MIME multipart document with the scripts ahead of the cloud-config. Deliver it verbatim (gzip and base64 for EC2). Sensitive."
-  value       = local.user_data
-
-  precondition {
-    condition     = !local.platform_clone_needed || local.boot_platform_repo_url != ""
-    error_message = "gitops_platform_repo_url is required on the first server when gitops_platform_enabled is false and the node still needs Cilium or Argo CD: the first server clones that repo for bootstrap/rendered/. Set it to the platform repo, or use cni = \"default\" and no Application."
-  }
-  sensitive = true
-}
-
 output "boot_steps" {
   description = "Every step of this node's boot, in the order it runs: the provider steps, the module's cloud-init commands, the steps of the boot program, then the commands that follow it. The names say what the node does, so a test can assert the exact list."
   value       = local.boot_steps

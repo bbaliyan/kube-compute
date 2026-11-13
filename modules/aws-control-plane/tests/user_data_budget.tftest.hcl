@@ -44,7 +44,6 @@ variables {
   platform_helm_values_object = {
     tolerations = [for i in range(6) : { key = "key-${i}", operator = "Exists", effect = "NoSchedule" }]
   }
-  boot_scripts = [for i in range(2) : join("\n", [for j in range(4) : "echo step ${i}-${j} ${base64sha512("s${i}${j}")}"])]
 }
 
 run "genesis_user_data_stays_under_the_ec2_limit" {

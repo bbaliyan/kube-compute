@@ -13,9 +13,8 @@ resource "random_password" "agent_token" {
 }
 
 locals {
-  # node-bootstrap renders each node's whole user data: the SSM Agent part, the boot
-  # scripts and the cloud-config, joined as MIME multipart/mixed.
-  combined_user_data = { for k, m in module.node_bootstrap : k => m.user_data }
+  # node-bootstrap renders each node's whole user data.
+  combined_user_data = { for k, m in module.node_bootstrap : k => m.cloud_init_user_data }
 
   # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes. Static
   # content is kept out of the payload for that reason: the genesis node reads the
@@ -250,7 +249,6 @@ module "node_bootstrap" {
   provider_steps                  = module.boot_steps.steps
   graceful_shutdown               = var.graceful_shutdown
   os_auto_updates                 = var.os_auto_updates
-  boot_scripts                    = var.boot_scripts
 }
 
 # No registration endpoint for control_plane_count = 1. Internal NLB is the default HA mode

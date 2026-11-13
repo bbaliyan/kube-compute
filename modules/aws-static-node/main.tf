@@ -89,7 +89,6 @@ module "node_bootstrap" {
   provider_steps            = module.boot_steps.steps
   graceful_shutdown         = var.graceful_shutdown
   os_auto_updates           = var.os_auto_updates
-  boot_scripts              = var.boot_scripts
 }
 
 # No depends_on: RKE2's agent retries its join indefinitely, so a worker booting
@@ -122,7 +121,7 @@ resource "aws_instance" "node" {
     tags                  = merge(local.common_tags, { Name = "${local.node_names[each.key]}-root" })
   }
 
-  user_data_base64 = base64gzip(module.node_bootstrap[each.key].user_data)
+  user_data_base64 = base64gzip(module.node_bootstrap[each.key].cloud_init_user_data)
 
   tags = merge(local.common_tags, { Name = local.node_names[each.key] })
 

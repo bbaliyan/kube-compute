@@ -33,7 +33,6 @@ variables {
     "eu-west-1b" = "subnet-az-b"
     "eu-west-1c" = "subnet-az-c"
   }
-  boot_scripts = ["echo one", "echo two"]
 }
 
 run "user_data_is_unchanged" {

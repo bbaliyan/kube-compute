@@ -393,8 +393,3 @@ variable "control_plane_node_name_template" {
   default     = null
 }
 
-variable "boot_scripts" {
-  description = "Bash scripts run on every control-plane and static node at first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE and NODE_NAME. Autoscaled nodes do not run them. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-}

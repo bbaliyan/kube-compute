@@ -401,12 +401,6 @@ variable "control_plane_node_name_template" {
   default     = null
 }
 
-variable "boot_scripts" {
-  description = "Bash scripts run on every control-plane and pool node at first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE and NODE_NAME. Autoscaled nodes do not run them. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-}
-
 variable "cloud_init_upload_mode" {
   description = "How the provider copies cloud-init snippets to the Proxmox host over SSH. Null keeps the provider default, 'stream', which uses sudo. 'sftp' needs write access to the snippets directory and no sudo. It does not affect ISO or image downloads."
   type        = string

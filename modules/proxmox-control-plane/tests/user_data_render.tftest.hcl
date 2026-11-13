@@ -51,7 +51,6 @@ variables {
   dns_server_address         = "192.168.1.53"
   tsig_key_name              = "kube-compute"
   tsig_key_secret            = "ZmFrZXNlY3JldA=="
-  boot_scripts               = ["echo one", "echo two"]
 }
 
 run "user_data_is_unchanged" {
@@ -73,20 +72,3 @@ run "user_data_is_unchanged" {
   }
 }
 
-run "user_data_without_boot_scripts_is_unchanged" {
-  command = apply
-
-  variables {
-    boot_scripts = []
-  }
-
-  assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "90e96eaaaf5973316617950a582458055c7f89f83c7967b90afb73af2e9ac4ec"
-    error_message = "the genesis user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
-  }
-
-  assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "a157a0e4a82f620b9131487fbb34cea184f7c7ecc7e596d09aca8ee169b0f8a1"
-    error_message = "the second node user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data)), "?")}"
-  }
-}

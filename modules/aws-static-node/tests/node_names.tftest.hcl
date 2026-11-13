@@ -44,20 +44,6 @@ run "the_template_gives_the_zone_and_number" {
   }
 }
 
-run "boot_scripts_plan" {
-  command = plan
-
-  variables {
-    node_name_template = "demo-{zone}-wk{number}"
-    boot_scripts       = ["echo first", "echo second"]
-  }
-
-  assert {
-    condition     = length(aws_instance.node) == 2
-    error_message = "boot scripts must not change how many nodes there are"
-  }
-}
-
 run "a_template_without_number_is_refused" {
   command = plan
 

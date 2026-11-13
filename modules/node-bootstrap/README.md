@@ -18,13 +18,7 @@ to `depends_on`.
 
 ## User data
 
-`user_data` is the final user data of the node. It is `cloud_init_user_data`
-alone, or a MIME multipart/mixed document when shell-script parts run first.
-Each entry of `boot_scripts` becomes a part. The script sees `CLUSTER_NAME`,
-`NODE_ROLE` (`control-plane` or `worker`) and `NODE_NAME`.
-
-cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
-With no parts, `user_data` is the plain cloud-config.
+`cloud_init_user_data` is the final user data of the node. It is a plain `#cloud-config` document.
 
 The image must already hold OS prep, the RKE2 binaries, the SELinux policy, the kernel
 modules, the guest agent and these tools: git, curl, getent, ip, awk, systemctl

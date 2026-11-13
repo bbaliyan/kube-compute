@@ -201,7 +201,6 @@ module "node_bootstrap" {
   platform_extra_helm_parameters  = each.key == "0" ? var.platform_extra_helm_parameters : {}
   platform_helm_values_object     = each.key == "0" ? var.platform_helm_values_object : null
   extra_tags                      = var.extra_tags
-  boot_scripts                    = var.boot_scripts
   provider_steps                  = module.boot_steps[each.key].steps
   provider_files                  = module.boot_steps[each.key].files
 
@@ -228,7 +227,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
   overwrite    = true
 
   source_raw {
-    data      = module.node_bootstrap[each.key].user_data
+    data      = module.node_bootstrap[each.key].cloud_init_user_data
     file_name = "${var.cluster_name}-cp-${each.key}-node-init.yaml"
   }
 }

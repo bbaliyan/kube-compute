@@ -232,7 +232,6 @@ module "node_bootstrap" {
   provider_files    = module.boot_steps[each.key].files
   graceful_shutdown = var.graceful_shutdown
   os_auto_updates   = var.os_auto_updates
-  boot_scripts      = var.boot_scripts
 }
 
 # The hostname is a key in node-bootstrap's own cloud-config, so it cannot drift from the
@@ -247,7 +246,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
   overwrite    = true
 
   source_raw {
-    data      = module.node_bootstrap[each.key].user_data
+    data      = module.node_bootstrap[each.key].cloud_init_user_data
     file_name = "${var.cluster_name}-${var.pool_name}-${each.key}-node-init.yaml"
   }
 }

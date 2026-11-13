@@ -102,7 +102,7 @@ run "genesis_with_cilium_and_no_platform_needs_a_repo" {
     gitops_platform_enabled   = false
     gitops_workloads_repo_url = null
   }
-  expect_failures = [output.cloud_init_user_data, output.user_data]
+  expect_failures = [output.cloud_init_user_data]
 }
 
 run "genesis_with_argocd_for_workloads_and_no_platform_needs_a_repo" {
@@ -111,7 +111,7 @@ run "genesis_with_argocd_for_workloads_and_no_platform_needs_a_repo" {
     gitops_platform_enabled   = false
     gitops_workloads_repo_url = "https://example.test/workloads.git"
   }
-  expect_failures = [output.cloud_init_user_data, output.user_data]
+  expect_failures = [output.cloud_init_user_data]
 }
 
 run "genesis_with_cilium_and_no_platform_accepts_a_named_repo" {

@@ -76,19 +76,6 @@ availability zone's name, so `control_plane_subnets` must be keyed by zone names
 Changing a template changes the user data of the nodes. A running node keeps its old
 hostname and Kubernetes node name until it is replaced. See "User data changes".
 
-### Boot scripts
-
-`boot_scripts` is a list of bash scripts that every control-plane and static node runs once, at
-its first boot, before RKE2 is installed. Each script sees `CLUSTER_NAME`, `NODE_ROLE`
-(`control-plane` or `worker`) and `NODE_NAME` in its environment, which is enough to, for
-example, join the node to a directory under its own name. Autoscaled nodes do not run them.
-
-Each script is saved to a file and run with no input, so a command that reads from standard
-input cannot swallow the rest of it. The scripts become part of every node's user data, so
-a changed script runs only on a new node (see "User data changes"). A script that fails is logged by cloud-init (`/var/log/cloud-init-output.log`) and does not stop the node
-from joining the cluster. EC2 user data is limited to 16 KB, so keep the scripts short, or have
-them fetch the real work from somewhere the node can read.
-
 ## Nodes
 
 | Kind | Input | For |
@@ -280,7 +267,7 @@ data volume on destroy.
 
 ## User data changes
 
-Most inputs end up in a node's user data: Helm parameters, names, boot scripts,
+Most inputs end up in a node's user data: Helm parameters, names,
 `graceful_shutdown`, `os_auto_updates`, and whether the cluster autoscales. A
 module upgrade can change it too. cloud-init reads user data only at the first
 boot, so a running node never applies a change.
