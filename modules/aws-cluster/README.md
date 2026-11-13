@@ -42,11 +42,8 @@ node names such as `cp-example-1` and `platform-example-1`. It has to be unique 
 and region, so where one cluster design is deployed more than once, what tells the copies apart
 belongs in the name: `app-red`, `app-blue`.
 
-That distinction then repeats itself in DNS whenever the domain already carries it.
-`cluster_dns_name` takes the repetition out: with `cluster_name = "app-red"` and
-`cluster_domain = "red.example.internal"`, setting `cluster_dns_name = "app"` serves the cluster
-at `app.red.example.internal` while every name in AWS stays `app-red`. Unset, DNS uses
-`cluster_name`.
+The DNS name is `cluster_name` too, so `cluster_name = "app-red"` and `cluster_domain = "red.example.internal"`
+serve the cluster at `app-red.red.example.internal`.
 
 A cluster name may start with a letter or a digit: `app-red` and `7c-demo` both work.
 

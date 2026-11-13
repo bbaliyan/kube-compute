@@ -30,7 +30,7 @@ After Cilium is Ready, the first server removes the Cilium file from the RKE2 ma
 
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
 entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
-supplies: `cluster_name`, `cluster_agent_token`, the cluster-wide `cluster_dns_name`,
+supplies: `cluster_name`, `cluster_agent_token`,
 `graceful_shutdown` and `os_auto_updates`, and the key itself as `pool_name`. An empty map (the default) creates no worker pools, the same shape as applying
 `proxmox-control-plane` alone.
 
@@ -58,11 +58,9 @@ Without it, ingress and the wildcard record stay on the control plane of an
 
 ### Names in DNS
 
-`cluster_name` is the cluster's identity: VM names, node names and firewall ipsets. Where
-the domain already says what tells clusters apart, `cluster_dns_name` stops the name
-repeating it: with `cluster_name = "app-red"` and `cluster_domain = "red.example.internal"`,
-`cluster_dns_name = "app"` serves the cluster at `api.app.red.example.internal` while every
-VM stays `app-red-*`. Unset, DNS uses `cluster_name`.
+`cluster_name` is the cluster's identity: VM names, node names, firewall ipsets and DNS.
+With `cluster_name = "app-red"` and `cluster_domain = "red.example.internal"`, the API name is
+`api.app-red.red.example.internal`.
 
 ### DNS registration
 
@@ -239,9 +237,6 @@ These notes hold the reasons behind some input descriptions.
 - Worker join address: a pool joins through the single-target `genesis.` name and not
   through the round-robin `api.` name. A round-robin name can hang a join for 10 minutes or
   more.
-- `cluster_dns_name`: with `cluster_name = "app-red"`, `cluster_domain = "red.example.internal"`
-  and `cluster_dns_name = "app"`, the API name is `api.app.red.example.internal`. VM names,
-  node names and ipsets keep the full cluster name.
 
 ## Existing standalone modules remain fully supported
 

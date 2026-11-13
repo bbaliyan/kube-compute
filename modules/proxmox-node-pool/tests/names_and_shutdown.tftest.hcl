@@ -27,22 +27,18 @@ variables {
   proxmox_template_vm_id = 9000
 }
 
-run "cluster_dns_name_names_the_join_address" {
+run "workers_join_through_the_genesis_name" {
   command = plan
-
-  variables {
-    cluster_dns_name = "app"
-  }
 
   assert {
     condition = alltrue([
       for snippet in values(proxmox_virtual_environment_file.node_init) :
       anytrue([
         for f in yamldecode(snippet.source_raw[0].data).write_files :
-        strcontains(base64decode(f.content), "genesis.app.red.lan")
+        strcontains(base64decode(f.content), "genesis.app-red.red.lan")
       ])
     ])
-    error_message = "workers must join through genesis.<cluster_dns_name>.<cluster_domain>"
+    error_message = "workers must join through genesis.<cluster_name>.<cluster_domain>"
   }
   assert {
     condition     = alltrue([for vm in values(proxmox_virtual_environment_vm.worker) : startswith(vm.name, "app-red-")])

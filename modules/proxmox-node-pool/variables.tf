@@ -188,16 +188,6 @@ variable "manage_wildcard_dns_record" {
 # null/default = no record published, same "DNS is optional, name-only by
 # default" rule as every other provider module. Mirrors
 # proxmox-control-plane's identical dns_server_address/tsig_* block.
-variable "cluster_dns_name" {
-  description = "Name to use in DNS in place of cluster_name. See proxmox-cluster's own variable."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
   description = "DNS suffix matching the control plane's own cluster_domain (e.g. 'cluster.example'). Required to compute the wildcard record's zone; ignored when dns_server_address is null."
   type        = string

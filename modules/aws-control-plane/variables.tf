@@ -182,18 +182,8 @@ variable "subnet_min_free_ips" {
 # DNS: optional convenience. The module never owns DNS as a hard dependency — if you don't pass a
 # zone, it creates no record and you register the wildcard (see the wildcard_dns_name output) in
 # whatever DNS you run (Route53, a local resolver, RFC2136, external-dns, sslip.io fallback...).
-variable "cluster_dns_name" {
-  description = "Name used in DNS in place of cluster_name, so the FQDN is <cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z0-9][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter or digit, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
-  description = "Optional DNS suffix for the cluster, e.g. 'example.internal'. When set, the FQDN is <cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Null = node is reachable by IP only."
+  description = "Optional DNS suffix for the cluster, e.g. 'example.internal'. When set, the FQDN is <cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>. Null = node is reachable by IP only."
   type        = string
   default     = null
 }

@@ -247,18 +247,8 @@ variable "ingress_ports" {
 
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
-variable "cluster_dns_name" {
-  description = "Name used in DNS in place of cluster_name, so the FQDN is api.<cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>; cluster_dns_name replaces cluster_name if set. Required when control_plane_count > 1."
+  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1."
   type        = string
   default     = null
 
