@@ -3,6 +3,7 @@
 # show is the input it reads at that point -- the cluster whose volumes it matches and whether
 # it is switched on -- and that the switch never lands in count, where turning it off would
 # destroy the resource and so run the sweep against a cluster that is still running.
+# Not tested: the shell script itself -- the wait for volumes to detach, the volume lookup and the delete calls -- because a mock provider cannot run it.
 
 mock_provider "aws" {
   mock_resource "aws_launch_template" {
