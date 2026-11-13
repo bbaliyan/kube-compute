@@ -84,11 +84,6 @@ output "cpu_units" {
   value       = var.cpu_units
 }
 
-output "genesis_apply_manifest_paths" {
-  description = "Paths of the genesis_apply_manifests entries written to the genesis node, in apply order. Empty when there are none."
-  value       = [for m in var.genesis_apply_manifests : m.path]
-}
-
 output "cloud_init_upload_mode" {
   description = "How cloud-init snippets are copied to the Proxmox host for the control plane, or null for the provider default (stream)."
   value       = var.cloud_init_upload_mode

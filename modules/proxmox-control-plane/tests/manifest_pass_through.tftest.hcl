@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Guards the genesis_apply_manifests/extra_server_manifests pass-throughs: this
+# Guards the extra_server_manifests pass-through: this
 # module is a pure forward of these variables into its own genesis module
 # "node_bootstrap" call, the same pattern every other node-bootstrap variable
 # already gets here.
@@ -23,55 +23,6 @@ variables {
   vm_disk_gb             = 50
   allowed_ingress_cidrs  = ["192.168.1.0/24"]
   proxmox_template_vm_id = 9000
-}
-
-run "defaults_produce_no_genesis_apply_content" {
-  command = apply
-
-  assert {
-    condition = !contains(
-      [for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files : f.path],
-      "/opt/kube-compute/manifests/20-extra-manifest.yaml"
-    )
-    error_message = "genesis_apply_manifests defaults to empty — nothing extra should be written"
-  }
-}
-
-run "genesis_apply_manifests_thread_through_to_node_bootstrap" {
-  command = apply
-
-  variables {
-    genesis_apply_manifests = [
-      {
-        path    = "/opt/kube-compute/manifests/20-extra-manifest.yaml"
-        content = "kind: Cluster\nname: example-extra\n"
-      }
-    ]
-  }
-
-  assert {
-    condition = contains(
-      [for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files : f.path],
-      "/opt/kube-compute/manifests/20-extra-manifest.yaml"
-    )
-    error_message = "a genesis_apply_manifests entry passed to this module must reach its own genesis node_bootstrap call's write_files"
-  }
-  assert {
-    condition = output.genesis_apply_manifest_paths == ["/opt/kube-compute/manifests/20-extra-manifest.yaml"] && alltrue([
-      for p in output.genesis_apply_manifest_paths :
-      contains([for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files : f.path], p)
-    ])
-    error_message = "genesis_apply_manifest_paths must list exactly the manifests written to the genesis node"
-  }
-  assert {
-    condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
-      f.encoding == "gz+b64" &&
-      f.content == base64gzip("kind: Cluster\nname: example-extra\n")
-      if f.path == "/opt/kube-compute/manifests/20-extra-manifest.yaml"
-    ])
-    error_message = "the entry's content must be forwarded verbatim, unmodified by this module -- node-bootstrap writes a genesis manifest gz+b64, so byte equality against base64gzip is the check, HCL having no gunzip"
-  }
 }
 
 run "extra_server_manifests_thread_through_to_node_bootstrap" {
@@ -99,66 +50,4 @@ run "extra_server_manifests_thread_through_to_node_bootstrap" {
     ])
     error_message = "the entry's content must be forwarded verbatim, unmodified by this module"
   }
-}
-
-# The wrapper rejects the same bad paths node-bootstrap does, at the input.
-
-run "genesis_apply_manifests_rejects_whitespace_in_a_path" {
-  command = plan
-
-  variables {
-    genesis_apply_manifests = [
-      {
-        path    = "/opt/kube-compute/manifests/20 extra.yaml"
-        content = "kind: Cluster\n"
-      }
-    ]
-  }
-
-  expect_failures = [var.genesis_apply_manifests]
-}
-
-run "genesis_apply_manifests_rejects_relative_path" {
-  command = plan
-
-  variables {
-    genesis_apply_manifests = [
-      {
-        path    = "manifests/20-extra.yaml"
-        content = "kind: Cluster\n"
-      }
-    ]
-  }
-
-  expect_failures = [var.genesis_apply_manifests]
-}
-
-run "genesis_apply_manifests_rejects_dotdot_segment" {
-  command = plan
-
-  variables {
-    genesis_apply_manifests = [
-      {
-        path    = "/opt/kube-compute/manifests/../../etc/20-extra.yaml"
-        content = "kind: Cluster\n"
-      }
-    ]
-  }
-
-  expect_failures = [var.genesis_apply_manifests]
-}
-
-run "genesis_apply_manifests_rejects_path_outside_the_directory" {
-  command = plan
-
-  variables {
-    genesis_apply_manifests = [
-      {
-        path    = "/etc/20-extra.yaml"
-        content = "kind: Cluster\n"
-      }
-    ]
-  }
-
-  expect_failures = [var.genesis_apply_manifests]
 }

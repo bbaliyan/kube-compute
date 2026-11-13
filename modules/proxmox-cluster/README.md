@@ -28,8 +28,6 @@ The first control-plane node clones the platform ref (`gitops_platform_repo_url`
 
 After Cilium is Ready, the first server removes the Cilium file from the RKE2 manifests directory even when GitOps is off, so a later server restart no longer applies it again.
 
-`genesis_apply_manifests` is optional. It is a list of `{path, content}` manifests that the first control-plane node applies once, at bootstrap. Unset, nothing extra is applied.
-
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
 entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
 supplies: `cluster_name`, `cluster_agent_token`, the cluster-wide `cluster_dns_name`,

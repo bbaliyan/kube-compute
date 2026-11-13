@@ -70,8 +70,7 @@ set, the plan fails with a message that names the input. The pinned default
 
 A first server probes `REJOIN_PROBE_ADDRESSES` for a live cluster before it starts etcd
 (the `rejoin_probe_addresses` input). If it finds one, it becomes a joining server. It
-skips Cilium, the extra server manifests, Argo CD, the Applications and
-`genesis_apply_manifests`.
+skips Cilium, the extra server manifests, Argo CD and the Applications.
 
 1. Rebuild the node image with git, and without a baked Cilium or Argo CD manifest.
 2. Move the module to the new version.
@@ -107,7 +106,7 @@ role is never in the file:
   wait steps for servers and the skew check. An agent runs `node-config-agent`,
   `start-agent` and `wait-ready-agent`.
 - Genesis steps (`platform-clone`, `genesis-cilium-manifest`, `genesis-cilium-handoff`,
-  `genesis-argocd`, `genesis-extra-manifests`, `genesis-apply-manifests`) are in the
+  `genesis-argocd`, `genesis-extra-manifests`) are in the
   program only on the first server, and only when the feature is on.
 - Provider steps are not here. The provider modules pass them in `provider_steps` and
   `provider_files`: DNS self-registration and the iSCSI initiator name on Proxmox, SSM
@@ -137,25 +136,6 @@ There is no registry mirror check at boot.
 
 EC2 limits user data to 16384 bytes after gzip. A test renders a heavy AWS genesis
 node and asserts it stays at least 1024 bytes under that limit.
-
-## Genesis-apply manifests
-
-`genesis_apply_manifests` is an ordered list of `{path, content}` entries. This module
-writes each one verbatim under `/opt/kube-compute/manifests/` with `write_files`.
-`bootstrap.sh` then runs `kubectl apply -f` on each one in order. This module does not
-interpret `content` at all.
-
-Every `path` must be absolute, must name a file under `/opt/kube-compute/manifests/`,
-must not contain whitespace and must not contain a `..` segment. `bootstrap.sh` word-splits
-the list of paths, so a path with a space would break the apply. The plan fails with a
-message that names the rule. `proxmox-control-plane` and `proxmox-cluster` check the same
-rules on their own input.
-
-A first server that finds a live cluster before it starts etcd does not apply these
-manifests. It joins the cluster as a joining server.
-
-The input is genesis-only (`server-init` only). It does not depend on
-`gitops_platform_enabled`. `proxmox-control-plane` and `proxmox-cluster` expose it as an input. The AWS modules do not.
 
 ## Workloads repo parameters on the `platform` Application
 

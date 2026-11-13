@@ -207,8 +207,7 @@ module "node_bootstrap" {
   provider_steps                  = module.boot_steps[each.key].steps
   provider_files                  = module.boot_steps[each.key].files
 
-  genesis_apply_manifests = each.key == "0" ? var.genesis_apply_manifests : []
-  extra_server_manifests  = each.key == "0" ? var.extra_server_manifests : {}
+  extra_server_manifests = each.key == "0" ? var.extra_server_manifests : {}
 
   # Same list this module's own VM network config (network_data_dhcp above)
   # uses — gives kubelet a resolv-conf with no search domain, avoiding a

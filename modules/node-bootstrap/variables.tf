@@ -231,30 +231,6 @@ variable "dns_servers" {
   default     = null
 }
 
-variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests written under /opt/kube-compute/manifests/ and applied by bootstrap.sh. This module does not interpret content. Empty (the default) applies none. Only for node_role = server-init."
-  type = list(object({
-    path    = string
-    content = string
-  }))
-  default = []
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !can(regex("[[:space:]]", m.path))])
-    error_message = "genesis_apply_manifests: a path must not contain whitespace. bootstrap.sh word-splits the list of paths."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : startswith(m.path, "/opt/kube-compute/manifests/") && length(m.path) > length("/opt/kube-compute/manifests/")])
-    error_message = "genesis_apply_manifests: a path must be absolute and name a file under /opt/kube-compute/manifests/."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !contains(split("/", m.path), "..")])
-    error_message = "genesis_apply_manifests: a path must not contain a .. segment."
-  }
-}
-
 variable "graceful_shutdown" {
   description = "How long kubelet delays an OS shutdown to evict pods. critical_seconds is the part reserved for critical pods and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. Keep the total well under 2 minutes."
   type = object({

@@ -91,7 +91,6 @@ run "genesis_node_that_can_rejoin_and_has_every_option" {
     trusted_ca_pem           = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
     graceful_shutdown        = {}
     extra_server_manifests   = { "one.yaml" = "kind: ConfigMap\n" }
-    genesis_apply_manifests  = [{ path = "/opt/kube-compute/manifests/20-one.yaml", content = "kind: ConfigMap\n" }]
     provider_steps           = [{ name = "provider-step", commands = [["true"]] }]
   }
 
@@ -114,7 +113,6 @@ run "genesis_node_that_can_rejoin_and_has_every_option" {
       "wait-ready-server",
       "genesis-cilium-handoff",
       "genesis-argocd",
-      "genesis-apply-manifests",
       "finish",
       "os-auto-updates",
     ]

@@ -22,30 +22,6 @@ variable "registry_mirror_url" {
   default     = null
 }
 
-variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests forwarded verbatim through proxmox-control-plane to node-bootstrap's own identically-named variable, on the genesis control-plane node only. See node-bootstrap's description for the full contract. Empty by default."
-  type = list(object({
-    path    = string
-    content = string
-  }))
-  default = []
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !can(regex("[[:space:]]", m.path))])
-    error_message = "genesis_apply_manifests: a path must not contain whitespace. bootstrap.sh word-splits the list of paths."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : startswith(m.path, "/opt/kube-compute/manifests/") && length(m.path) > length("/opt/kube-compute/manifests/")])
-    error_message = "genesis_apply_manifests: a path must be absolute and name a file under /opt/kube-compute/manifests/."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !contains(split("/", m.path), "..")])
-    error_message = "genesis_apply_manifests: a path must not contain a .. segment."
-  }
-}
-
 variable "extra_server_manifests" {
   description = "RKE2 auto-deploy manifest files (filename => YAML), passed through proxmox-control-plane to node-bootstrap, which writes them to /var/lib/rancher/rke2/server/manifests/ on the genesis node only. Content is not interpreted. Empty (the default) adds none."
   type        = map(string)
