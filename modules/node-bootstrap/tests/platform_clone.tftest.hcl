@@ -96,40 +96,22 @@ run "a_worker_clones_nothing" {
   }
 }
 
-run "genesis_without_cilium_or_argocd_clones_nothing" {
-  command = plan
-  variables {
-    cni                       = "default"
-    gitops_platform_enabled   = false
-    gitops_workloads_repo_url = null
-  }
-  assert {
-    condition = anytrue([
-      for f in yamldecode(output.cloud_init_user_data).write_files :
-      strcontains(base64decode(f.content), "PLATFORM_REPO_URL=''") && strcontains(base64decode(f.content), "PLATFORM_REVISION=''")
-      if f.path == "/opt/kube-compute/node.env"
-    ])
-    error_message = "with no Cilium and no Argo CD there is nothing to read from the platform ref"
-  }
-}
-
 run "genesis_with_cilium_and_no_platform_needs_a_repo" {
   command = plan
   variables {
     gitops_platform_enabled   = false
     gitops_workloads_repo_url = null
   }
-  expect_failures = [output.cloud_init_user_data, output.user_data]
+  expect_failures = [output.cloud_init_user_data]
 }
 
 run "genesis_with_argocd_for_workloads_and_no_platform_needs_a_repo" {
   command = plan
   variables {
-    cni                       = "default"
     gitops_platform_enabled   = false
     gitops_workloads_repo_url = "https://example.test/workloads.git"
   }
-  expect_failures = [output.cloud_init_user_data, output.user_data]
+  expect_failures = [output.cloud_init_user_data]
 }
 
 run "genesis_with_cilium_and_no_platform_accepts_a_named_repo" {

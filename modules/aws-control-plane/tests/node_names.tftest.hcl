@@ -74,20 +74,6 @@ run "each_ha_node_gets_its_own_zone_and_number" {
   }
 }
 
-run "boot_scripts_make_the_user_data_bigger" {
-  command = apply
-
-  variables {
-    node_name_template = "demo-{zone}-cp{number}"
-    boot_scripts       = ["echo \"joining as $NODE_NAME\" > /var/log/boot-script.log"]
-  }
-
-  assert {
-    condition     = length(aws_instance.control_plane["0"].user_data_base64) > 0
-    error_message = "the node must still get its user data"
-  }
-}
-
 run "a_template_without_number_is_refused" {
   command = plan
 
@@ -128,12 +114,3 @@ run "a_misspelled_placeholder_is_refused" {
   expect_failures = [var.node_name_template]
 }
 
-run "a_boot_script_with_the_end_marker_is_refused" {
-  command = plan
-
-  variables {
-    boot_scripts = ["echo one\nKUBE_COMPUTE_BOOT_SCRIPT\necho two"]
-  }
-
-  expect_failures = [var.boot_scripts]
-}

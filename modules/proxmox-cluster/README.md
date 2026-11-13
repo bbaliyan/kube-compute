@@ -28,11 +28,9 @@ The first control-plane node clones the platform ref (`gitops_platform_repo_url`
 
 After Cilium is Ready, the first server removes the Cilium file from the RKE2 manifests directory even when GitOps is off, so a later server restart no longer applies it again.
 
-`genesis_apply_manifests` is optional. It is a list of `{path, content}` manifests that the first control-plane node applies once, at bootstrap. Unset, nothing extra is applied.
-
 `node_pools` is a map of worker pools keyed by pool name (e.g. `"platform"`). Each
 entry's fields mirror `proxmox-node-pool`'s own `variables.tf`, minus what this module
-supplies: `cluster_name`, `cluster_agent_token`, the cluster-wide `cluster_dns_name`,
+supplies: `cluster_name`, `cluster_agent_token`,
 `graceful_shutdown` and `os_auto_updates`, and the key itself as `pool_name`. An empty map (the default) creates no worker pools, the same shape as applying
 `proxmox-control-plane` alone.
 
@@ -60,11 +58,9 @@ Without it, ingress and the wildcard record stay on the control plane of an
 
 ### Names in DNS
 
-`cluster_name` is the cluster's identity: VM names, node names and firewall ipsets. Where
-the domain already says what tells clusters apart, `cluster_dns_name` stops the name
-repeating it: with `cluster_name = "app-red"` and `cluster_domain = "red.example.internal"`,
-`cluster_dns_name = "app"` serves the cluster at `api.app.red.example.internal` while every
-VM stays `app-red-*`. Unset, DNS uses `cluster_name`.
+`cluster_name` is the cluster's identity: VM names, node names, firewall ipsets and DNS.
+With `cluster_name = "app-red"` and `cluster_domain = "red.example.internal"`, the API name is
+`api.app-red.red.example.internal`.
 
 ### DNS registration
 
@@ -216,15 +212,6 @@ the VM name, hostname, Kubernetes node name and the key in `control_plane_node_r
 Setting a template on an existing cluster changes the VM names and the keys of those
 outputs. It has not been tried on a running cluster, so plan it before applying.
 
-## Boot scripts
-
-`boot_scripts` is a list of bash scripts that every control-plane node and every
-`node_pools` worker runs once, at first boot, before RKE2 is installed, for example to join
-a directory. Each sees `CLUSTER_NAME`, `NODE_ROLE` (`control-plane` or `worker`) and
-`NODE_NAME`. A script that fails is logged by cloud-init and does not stop the node.
-Unset, a node's cloud-init is
-unchanged. The scripts are part of the node's first-boot cloud-init,.
-
 ## User data changes
 
 A changed input in a node's cloud-init does not touch a running VM. The node does not
@@ -250,9 +237,6 @@ These notes hold the reasons behind some input descriptions.
 - Worker join address: a pool joins through the single-target `genesis.` name and not
   through the round-robin `api.` name. A round-robin name can hang a join for 10 minutes or
   more.
-- `cluster_dns_name`: with `cluster_name = "app-red"`, `cluster_domain = "red.example.internal"`
-  and `cluster_dns_name = "app"`, the API name is `api.app.red.example.internal`. VM names,
-  node names and ipsets keep the full cluster name.
 
 ## Existing standalone modules remain fully supported
 

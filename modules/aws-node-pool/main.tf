@@ -125,7 +125,7 @@ resource "aws_launch_template" "node" {
     }
   }
 
-  user_data = base64gzip(module.node_bootstrap[each.key].user_data)
+  user_data = base64gzip(module.node_bootstrap[each.key].cloud_init_user_data)
 
   tag_specifications {
     resource_type = "volume"

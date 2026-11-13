@@ -36,7 +36,6 @@ module "control_plane" {
   workloads_extra_helm_parameters   = var.workloads_extra_helm_parameters
   workloads_helm_values_object      = var.workloads_helm_values_object
   cluster_type                      = var.cluster_type
-  cni                               = var.cni
   cert_mode                         = var.cert_mode
   platform_extra_helm_parameters    = var.platform_extra_helm_parameters
   platform_helm_values_object       = local.platform_helm_values_object
@@ -63,7 +62,6 @@ module "control_plane" {
   ingress_ports                     = local.control_plane_ingress_ports
   manage_wildcard_dns_record        = var.platform_node_group == null
   cluster_domain                    = var.cluster_domain
-  cluster_dns_name                  = var.cluster_dns_name
   dns_server_address                = var.dns_server_address
   dns_server_port                   = var.dns_server_port
   dns_transport                     = var.dns_transport
@@ -72,12 +70,10 @@ module "control_plane" {
   tsig_key_algorithm                = var.tsig_key_algorithm
   tsig_key_secret                   = var.tsig_key_secret
 
-  genesis_apply_manifests = var.genesis_apply_manifests
-  extra_server_manifests  = var.extra_server_manifests
-  graceful_shutdown       = var.graceful_shutdown
-  os_auto_updates         = var.os_auto_updates
-  node_name_template      = var.control_plane_node_name_template
-  boot_scripts            = var.boot_scripts
+  extra_server_manifests = var.extra_server_manifests
+  graceful_shutdown      = var.graceful_shutdown
+  os_auto_updates        = var.os_auto_updates
+  node_name_template     = var.control_plane_node_name_template
 }
 
 module "node_pools" {
@@ -99,7 +95,6 @@ module "node_pools" {
   registry_mirror_url    = each.value.registry_mirror_url != null ? each.value.registry_mirror_url : var.registry_mirror_url
   ssh_authorized_keys    = each.value.ssh_authorized_keys != null ? each.value.ssh_authorized_keys : var.ssh_authorized_keys
   dns_servers            = each.value.dns_servers != null ? each.value.dns_servers : var.dns_servers
-  cluster_dns_name       = var.cluster_dns_name
   cluster_domain         = each.value.cluster_domain != null ? each.value.cluster_domain : var.cluster_domain
   dns_server_address     = each.value.dns_server_address != null ? each.value.dns_server_address : var.dns_server_address
   dns_server_port        = each.value.dns_server_port != null ? each.value.dns_server_port : var.dns_server_port
@@ -128,5 +123,4 @@ module "node_pools" {
   graceful_shutdown      = var.graceful_shutdown
   os_auto_updates        = var.os_auto_updates
   node_name_template     = each.value.node_name_template
-  boot_scripts           = var.boot_scripts
 }

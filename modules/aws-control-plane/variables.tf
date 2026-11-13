@@ -87,16 +87,6 @@ variable "cluster_type" {
   }
 }
 
-variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
-    error_message = "cni must be null, 'default', or 'cilium'."
-  }
-}
-
 variable "control_plane_count" {
   description = "Number of control-plane nodes. Must be 1, 3, or 5 — 2 and 4 give no fault-tolerance benefit and risk split-brain. 3 or 5 places one control-plane node per availability zone behind an internal NLB (see control_plane_subnets)."
   type        = number
@@ -192,18 +182,8 @@ variable "subnet_min_free_ips" {
 # DNS: optional convenience. The module never owns DNS as a hard dependency — if you don't pass a
 # zone, it creates no record and you register the wildcard (see the wildcard_dns_name output) in
 # whatever DNS you run (Route53, a local resolver, RFC2136, external-dns, sslip.io fallback...).
-variable "cluster_dns_name" {
-  description = "Name used in DNS in place of cluster_name, so the FQDN is <cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z0-9][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter or digit, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
-  description = "Optional DNS suffix for the cluster, e.g. 'example.internal'. When set, the FQDN is <cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Null = node is reachable by IP only."
+  description = "Optional DNS suffix for the cluster, e.g. 'example.internal'. When set, the FQDN is <cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>. Null = node is reachable by IP only."
   type        = string
   default     = null
 }
@@ -355,13 +335,3 @@ variable "node_name_template" {
   }
 }
 
-variable "boot_scripts" {
-  description = "Bash scripts run on each control-plane node at its first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (control-plane) and NODE_NAME in its environment. A script that fails is logged by cloud-init and does not stop the node. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for script in var.boot_scripts : !can(regex("(?m)^KUBE_COMPUTE_BOOT_SCRIPT$", script))])
-    error_message = "A boot script must not have a line that is just KUBE_COMPUTE_BOOT_SCRIPT."
-  }
-}

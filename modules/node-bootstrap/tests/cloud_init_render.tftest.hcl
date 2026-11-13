@@ -71,7 +71,6 @@ run "server_init_payload_is_valid_cloud_config" {
     condition = alltrue([
       for k in keys(local.node_config_values) :
       strcontains(local.bootstrap_program, k)
-      if k != "GENESIS_APPLY_MANIFESTS"
     ])
     error_message = "every key node.env defines must be read by the bootstrap program, or the two halves of the boot have drifted apart"
   }

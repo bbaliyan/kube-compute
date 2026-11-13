@@ -13,9 +13,8 @@ resource "random_password" "agent_token" {
 }
 
 locals {
-  # node-bootstrap renders each node's whole user data: the SSM Agent part, the boot
-  # scripts and the cloud-config, joined as MIME multipart/mixed.
-  combined_user_data = { for k, m in module.node_bootstrap : k => m.user_data }
+  # node-bootstrap renders each node's whole user data.
+  combined_user_data = { for k, m in module.node_bootstrap : k => m.cloud_init_user_data }
 
   # EC2 rejects RunInstances when decoded user data exceeds 16384 bytes. Static
   # content is kept out of the payload for that reason: the genesis node reads the
@@ -68,7 +67,7 @@ locals {
 
   # DNS is optional and name-only. cluster_fqdn is the API/kubeconfig name; wildcard covers it + services.
   has_domain    = var.cluster_domain != null
-  fqdn_suffix   = local.has_domain ? "${coalesce(var.cluster_dns_name, var.cluster_name)}.${var.cluster_domain}" : null
+  fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
   # coalesce() errors if every argument is null (the common case: no DNS configured at
@@ -128,11 +127,6 @@ locals {
     var.endpoint_mode == "dns" ? local.dns_registration_name :
     try(aws_lb.control_plane[0].dns_name, null)
   )
-
-  # Cilium is standard regardless of topology — Canal/flannel's iptables/ipset dataplane is
-  # broken on AlmaLinux 10 (this project's only supported OS; see node-bootstrap's cni
-  # variable). null = default.
-  effective_cni = coalesce(var.cni, "cilium")
 
   # dns mode's shared record name, distinct from cluster_fqdn (the kubeconfig/API-cert
   # name). Null unless a domain is configured; enforced by the precondition on
@@ -232,7 +226,6 @@ module "node_bootstrap" {
   cluster_fqdn_suffix             = local.fqdn_suffix
   node_role                       = each.key == "0" ? "server-init" : "server-join"
   control_plane_taint             = local.control_plane_taint
-  cni                             = local.effective_cni
   cluster_token                   = random_password.server_token.result
   cluster_agent_token             = each.key == "0" ? random_password.agent_token.result : null
   registration_address            = local.registration_address
@@ -256,7 +249,6 @@ module "node_bootstrap" {
   provider_steps                  = module.boot_steps.steps
   graceful_shutdown               = var.graceful_shutdown
   os_auto_updates                 = var.os_auto_updates
-  boot_scripts                    = var.boot_scripts
 }
 
 # No registration endpoint for control_plane_count = 1. Internal NLB is the default HA mode
@@ -477,7 +469,7 @@ resource "aws_instance" "control_plane" {
       # size is not knowable until apply -- it carries a generated token -- so this
       # runs at apply and names the input that fixes it.
       condition     = local.inline_user_data_bytes[each.key] <= 16384
-      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: set trusted_ca_in_image if the node image bakes the CA, and look at the boot scripts and at what the platform Application's Helm values are carrying."
+      error_message = "This node's boot payload is larger than EC2 allows in user data (16384 decoded bytes). What travels in it should be per-cluster values, not static content: set trusted_ca_in_image if the node image bakes the CA, and look at what the platform Application's Helm values are carrying."
     }
 
     precondition {

@@ -80,16 +80,6 @@ variable "cluster_type" {
   }
 }
 
-variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
-    error_message = "cni must be null, 'default', or 'cilium'."
-  }
-}
-
 variable "cert_mode" {
   description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' (default), 'byo', or 'acme'."
   type        = string
@@ -203,18 +193,8 @@ variable "subnet_name" {
   default     = null
 }
 
-variable "cluster_dns_name" {
-  description = "Name used in DNS in place of cluster_name, so the FQDN is <cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z0-9][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter or digit, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
-  description = "Optional DNS suffix for the cluster, e.g. 'example.internal'. When set, the FQDN is <cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>, with cluster_dns_name in place of cluster_name where it is set. Null = node is reachable by IP only."
+  description = "Optional DNS suffix for the cluster, e.g. 'example.internal'. When set, the FQDN is <cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>. Null = node is reachable by IP only."
   type        = string
   default     = null
 }
@@ -403,8 +383,3 @@ variable "control_plane_node_name_template" {
   default     = null
 }
 
-variable "boot_scripts" {
-  description = "Bash scripts run on every control-plane and static node at first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE and NODE_NAME. Autoscaled nodes do not run them. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-}

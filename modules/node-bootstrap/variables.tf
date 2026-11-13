@@ -87,16 +87,6 @@ variable "extra_tls_sans" {
   default     = []
 }
 
-variable "cni" {
-  description = "CNI to install: 'cilium' (the default) or 'default' (Canal, not viable on AlmaLinux 10). On a genesis node 'cilium' disables rke2-cilium, so the Cilium manifest from the platform ref is the only install. It needs gitops_platform_repo_url."
-  type        = string
-  default     = "cilium"
-  validation {
-    condition     = contains(["default", "cilium"], var.cni)
-    error_message = "cni must be 'default' or 'cilium'."
-  }
-}
-
 variable "trusted_ca_pem" {
   description = "Optional PEM cert(s) to add to the OS trust store via update-ca-trust, and to pin containerd's TLS verification of a registry_mirror_url host. Effect, not use case: a private CA, or null to skip. Sensitive: written directly into the cloud-init payload as the anchors file, base64-encoded."
   type        = string
@@ -231,30 +221,6 @@ variable "dns_servers" {
   default     = null
 }
 
-variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests written under /opt/kube-compute/manifests/ and applied by bootstrap.sh. This module does not interpret content. Empty (the default) applies none. Only for node_role = server-init."
-  type = list(object({
-    path    = string
-    content = string
-  }))
-  default = []
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !can(regex("[[:space:]]", m.path))])
-    error_message = "genesis_apply_manifests: a path must not contain whitespace. bootstrap.sh word-splits the list of paths."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : startswith(m.path, "/opt/kube-compute/manifests/") && length(m.path) > length("/opt/kube-compute/manifests/")])
-    error_message = "genesis_apply_manifests: a path must be absolute and name a file under /opt/kube-compute/manifests/."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !contains(split("/", m.path), "..")])
-    error_message = "genesis_apply_manifests: a path must not contain a .. segment."
-  }
-}
-
 variable "graceful_shutdown" {
   description = "How long kubelet delays an OS shutdown to evict pods. critical_seconds is the part reserved for critical pods and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. Keep the total well under 2 minutes."
   type = object({
@@ -278,12 +244,6 @@ variable "os_auto_updates" {
   description = "Install OS updates daily with dnf-automatic, without rebooting, once the node has joined. RKE2 packages are excluded, because system-upgrade-controller upgrades them. Also installs yum-utils, whose needs-restarting reports a due reboot. False leaves packages as baked."
   type        = bool
   default     = true
-}
-
-variable "boot_scripts" {
-  description = "Bash scripts run at the node's first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (control-plane or worker) and NODE_NAME in its environment. They travel as MIME shell-script parts of user_data. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
 }
 
 variable "provider_steps" {

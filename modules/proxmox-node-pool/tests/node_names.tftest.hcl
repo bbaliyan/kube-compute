@@ -67,37 +67,3 @@ run "template_without_number_is_rejected" {
   expect_failures = [var.node_name_template]
 }
 
-run "no_boot_scripts_leaves_plain_cloud_config" {
-  command = plan
-
-  assert {
-    condition = alltrue([
-      for snippet in values(proxmox_virtual_environment_file.node_init) :
-      startswith(snippet.source_raw[0].data, "#cloud-config")
-    ])
-    error_message = "with no boot_scripts the snippet must stay a plain cloud-config"
-  }
-}
-
-run "boot_scripts_run_first_on_every_worker_with_its_name" {
-  command = plan
-
-  variables {
-    node_name_template = "wk-red-{number}"
-    boot_scripts       = ["echo one", "echo two"]
-  }
-
-  assert {
-    condition = alltrue([
-      for snippet in values(proxmox_virtual_environment_file.node_init) :
-      startswith(snippet.source_raw[0].data, "Content-Type: multipart/mixed")
-      && length(regexall("(?m)^echo (one|two)$", snippet.source_raw[0].data)) == 2
-      && strcontains(snippet.source_raw[0].data, "NODE_ROLE='worker'")
-    ])
-    error_message = "every worker must get both scripts, as a worker, ahead of its cloud-config"
-  }
-  assert {
-    condition     = strcontains(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data, "NODE_NAME='wk-red-02'")
-    error_message = "a script must see the worker's own name"
-  }
-}

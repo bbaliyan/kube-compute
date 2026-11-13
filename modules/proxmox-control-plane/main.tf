@@ -7,8 +7,7 @@ locals {
   cluster_ipset_name = "kube-compute-${var.cluster_name}-cluster"
 
   has_domain    = var.cluster_domain != null
-  dns_name      = coalesce(var.cluster_dns_name, var.cluster_name)
-  fqdn_suffix   = local.has_domain ? "${local.dns_name}.${var.cluster_domain}" : null
+  fqdn_suffix   = local.has_domain ? "${var.cluster_name}.${var.cluster_domain}" : null
   cluster_fqdn  = local.has_domain ? "api.${local.fqdn_suffix}" : null
   wildcard_name = local.has_domain ? "*.${local.fqdn_suffix}" : null
 
@@ -17,7 +16,7 @@ locals {
   # the dns-self-register boot step as soon as it knows its own IP. The
   # precondition on the VMs requires dns_server_address when control_plane_count > 1,
   # so this is a plain string with no dependency on any VM.
-  genesis_dns_name     = local.has_domain ? "genesis.${local.dns_name}.${trimsuffix(var.cluster_domain, ".")}" : null
+  genesis_dns_name     = local.has_domain ? "genesis.${var.cluster_name}.${trimsuffix(var.cluster_domain, ".")}" : null
   registration_address = local.genesis_dns_name
 
   # A replaced genesis node must probe its peers, not registration_address: that address
@@ -36,7 +35,6 @@ locals {
   )
 
   control_plane_taint = var.cluster_type == "dedicated_control_plane"
-  effective_cni       = coalesce(var.cni, "cilium")
   # Cilium operator replica count isn't a per-cluster knob here: kube-images bakes the
   # genesis manifest with a fixed replicas: 1, matching kube-platform's own
   # cilium-app.yaml default (which Argo CD's selfHeal would overwrite anyway) — already
@@ -48,7 +46,7 @@ locals {
   # this module's "DNS is optional and name-only" rule.
   dns_registration_enabled = local.has_domain && var.dns_server_address != null
   dns_zone                 = local.has_domain ? "${trimsuffix(var.cluster_domain, ".")}." : null
-  dns_record_name          = "api.${local.dns_name}"
+  dns_record_name          = "api.${var.cluster_name}"
 
   # Wildcard ingress record: only this module's job on an all_in_one cluster, where
   # the control-plane node is the only place ingress can run. On a
@@ -56,7 +54,7 @@ locals {
   # publishes the wildcard itself, against its own worker IPs. Registering it here too
   # would point at the wrong nodes and race node-pool's write.
   wildcard_registration_enabled = var.manage_wildcard_dns_record && local.dns_registration_enabled && var.cluster_type == "all_in_one"
-  dns_wildcard_record_name      = "*.${local.dns_name}"
+  dns_wildcard_record_name      = "*.${var.cluster_name}"
 
   # One IP per control-plane node; index 0 is genesis. DHCP works at any
   # control_plane_count — every additional control-plane VM shares the same
@@ -161,7 +159,7 @@ module "boot_steps" {
   node_fqdn_label = "cp-${each.key}"
 
   dns_self_register_zone        = each.key == "0" && var.dns_server_address != null ? local.dns_zone : null
-  dns_self_register_record_name = each.key == "0" ? "genesis.${local.dns_name}" : null
+  dns_self_register_record_name = each.key == "0" ? "genesis.${var.cluster_name}" : null
   dns_self_register_ttl         = each.key == "0" ? var.dns_record_ttl : 30
   dns_server_address            = each.key == "0" ? var.dns_server_address : null
   dns_server_port               = each.key == "0" ? var.dns_server_port : 53
@@ -183,7 +181,6 @@ module "node_bootstrap" {
   cluster_fqdn_suffix             = local.fqdn_suffix
   node_role                       = each.key == "0" ? "server-init" : "server-join"
   control_plane_taint             = local.control_plane_taint
-  cni                             = local.effective_cni
   cluster_token                   = random_password.server_token.result
   cluster_agent_token             = each.key == "0" ? random_password.agent_token.result : null
   registration_address            = each.key == "0" ? null : local.registration_address
@@ -203,12 +200,10 @@ module "node_bootstrap" {
   platform_extra_helm_parameters  = each.key == "0" ? var.platform_extra_helm_parameters : {}
   platform_helm_values_object     = each.key == "0" ? var.platform_helm_values_object : null
   extra_tags                      = var.extra_tags
-  boot_scripts                    = var.boot_scripts
   provider_steps                  = module.boot_steps[each.key].steps
   provider_files                  = module.boot_steps[each.key].files
 
-  genesis_apply_manifests = each.key == "0" ? var.genesis_apply_manifests : []
-  extra_server_manifests  = each.key == "0" ? var.extra_server_manifests : {}
+  extra_server_manifests = each.key == "0" ? var.extra_server_manifests : {}
 
   # Same list this module's own VM network config (network_data_dhcp above)
   # uses — gives kubelet a resolv-conf with no search domain, avoiding a
@@ -231,7 +226,7 @@ resource "proxmox_virtual_environment_file" "node_init" {
   overwrite    = true
 
   source_raw {
-    data      = module.node_bootstrap[each.key].user_data
+    data      = module.node_bootstrap[each.key].cloud_init_user_data
     file_name = "${var.cluster_name}-cp-${each.key}-node-init.yaml"
   }
 }

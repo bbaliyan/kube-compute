@@ -27,32 +27,19 @@ variables {
   tsig_key_name          = "kube-compute"
   tsig_key_secret        = "ZmFrZXNlY3JldA=="
   proxmox_template_vm_id = 9000
-  boot_scripts           = ["echo one", "echo two"]
 }
 
 run "user_data_is_unchanged" {
   command = plan
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "249552e4ef0c4d1dfebc672a639729c5fd6c47710c8f99de94e12fb1e0176cdc"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "cf6dd702a848584768ec6598771dbefc595b1bfda173e20b3ce351ad338441e4"
     error_message = "the first worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "bbcaecdcbf25933c8dc05ee7844cb1256a7b505477ffe8afb9d9cf9506d1d28f"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "4b809540fba188cb1b881c18746e97fa1dc74e54a2e4837dd735623bc7daec14"
     error_message = "the second worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data)), "?")}"
   }
 }
 
-run "user_data_without_boot_scripts_is_unchanged" {
-  command = plan
-
-  variables {
-    boot_scripts = []
-  }
-
-  assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "e31a66097184e42139d49e52962fc019810e474745b01d0bcf5bd6e7f488c7bc"
-    error_message = "the first worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
-  }
-}

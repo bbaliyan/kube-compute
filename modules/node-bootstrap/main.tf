@@ -36,7 +36,7 @@ locals {
   # Whether bootstrap.sh applies the Cilium manifest and the Argo CD manifest. It
   # takes both from bootstrap/rendered/ in a clone of the platform ref. This module
   # renders neither: Argo CD is too big for Proxmox's 1 MiB cicustom snippet cap.
-  render_cilium = var.cni == "cilium" && var.node_role == "server-init"
+  render_cilium = var.node_role == "server-init"
   render_argocd = local.argocd_needed && var.node_role == "server-init"
 
   # The genesis node clones the platform ref when it needs either manifest. With
@@ -50,17 +50,6 @@ locals {
     )
   )
   boot_platform_revision = local.platform_clone_needed ? local.effective_gitops_platform_revision : ""
-
-  # Genesis-only, same as render_cilium/render_argocd — but deliberately NOT
-  # gated on argocd_needed/render_argocd: an arbitrary genesis-apply manifest
-  # is applied by bootstrap.sh as a one-time genesis step, independent of
-  # whether this cluster also runs a platform or workloads Argo CD Application.
-  # Tying it to render_argocd would mean gitops_platform_enabled = false callers
-  # never get the write_files entries bootstrap.sh's apply step expects. This
-  # module does not render or interpret genesis_apply_manifests' content; the
-  # caller does.
-  effective_genesis_apply_manifests = var.node_role == "server-init" ? var.genesis_apply_manifests : []
-  genesis_apply_manifest_paths      = [for m in local.effective_genesis_apply_manifests : m.path]
 
   # Rendered by yamlencode() here, not on the node — keeps the node free of
   # any templating engine. Both Argo CD Applications are built as objects and
@@ -244,7 +233,7 @@ locals {
     ], var.control_plane_taint ? [
     "node-taint:",
     "  - \"CriticalAddonsOnly=true:NoExecute\"",
-    ] : [], var.cni == "cilium" ? [
+    ] : [], [
     "cni: cilium",
     "disable-kube-proxy: true",
     # Without this, RKE2 installs its own bundled rke2-cilium addon (a separate
@@ -252,7 +241,7 @@ locals {
     # fighting over the same cilium-operator/cilium objects in kube-system.
     "disable:",
     "  - rke2-cilium",
-  ] : []))
+  ]))
 
   node_label_block = length(var.node_labels) == 0 ? "" : join("\n", concat(
     ["node-label:"],
@@ -352,7 +341,6 @@ locals {
     { name = "wait-ready-agent", file = "61-wait-ready-agent.sh", enabled = local.is_agent },
     { name = "genesis-cilium-handoff", file = "70-genesis-cilium-handoff.sh", enabled = local.render_cilium },
     { name = "genesis-argocd", file = "71-genesis-argocd.sh", enabled = local.render_argocd },
-    { name = "genesis-apply-manifests", file = "72-genesis-apply-manifests.sh", enabled = local.is_init && length(local.genesis_apply_manifest_paths) > 0 },
     { name = "finish", file = "99-finish.sh", enabled = true },
   ]
 
@@ -387,10 +375,6 @@ locals {
     PLATFORM_REQUIRED_FILES = join(" ", local.platform_required_files)
     PLATFORM_APP_ENABLED    = local.platform_app_enabled ? "1" : "0"
     WORKLOADS_APP_ENABLED   = local.workloads_app_enabled ? "1" : "0"
-    # Space-separated because the program word-splits it. The genesis_apply_manifests
-    # validation requires every path to sit under /opt/kube-compute/manifests with no
-    # whitespace, so none can contain a space.
-    GENESIS_APPLY_MANIFESTS = join(" ", local.genesis_apply_manifest_paths)
     # Empty when no CA is set.
     TRUSTED_CA_FILE = local.trusted_ca_present ? local.trusted_ca_path : ""
   }
@@ -536,21 +520,6 @@ locals {
       encoding    = "b64"
       content     = base64encode(local.workloads_app_yaml)
     }],
-    [
-      # gz+b64, unlike every other file here: a genesis manifest is the one
-      # payload large enough to matter against EC2's 25600-byte cap on encoded
-      # user data, and a genesis manifest may itself carry base64 content, which
-      # plain b64 would then encode a second time. Only clusters
-      # that have genesis manifests are affected, so no existing instance's user
-      # data changes.
-      for m in local.effective_genesis_apply_manifests : {
-        path        = m.path
-        permissions = "0600"
-        owner       = "root:root"
-        encoding    = "gz+b64"
-        content     = base64gzip(m.content)
-      }
-    ],
     !local.is_init ? [] : [
       for name in sort(keys(var.extra_server_manifests)) : {
         path        = "/opt/kube-compute/server-manifests/${name}"

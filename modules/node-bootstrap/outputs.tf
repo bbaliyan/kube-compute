@@ -6,24 +6,13 @@ output "cloud_init_user_data" {
 
   precondition {
     condition     = !local.platform_clone_needed || local.boot_platform_repo_url != ""
-    error_message = "gitops_platform_repo_url is required on the first server when gitops_platform_enabled is false and the node still needs Cilium or Argo CD: the first server clones that repo for bootstrap/rendered/. Set it to the platform repo, or use cni = \"default\" and no Application."
+    error_message = "gitops_platform_repo_url is required on the first server when gitops_platform_enabled is false and the node still needs Cilium or Argo CD: the first server clones that repo for bootstrap/rendered/. Set it to the platform repo."
   }
 }
 
 output "node_name" {
   description = "Node name this payload was rendered for — the OS hostname it sets, and therefore the Kubernetes node name RKE2/kubelet will register. Echoed back so a caller can key snippet filenames off the same value without recomputing it."
   value       = var.node_name
-}
-
-output "user_data" {
-  description = "Final user data for this node: cloud_init_user_data alone when there are no boot scripts, otherwise a MIME multipart document with the scripts ahead of the cloud-config. Deliver it verbatim (gzip and base64 for EC2). Sensitive."
-  value       = local.user_data
-
-  precondition {
-    condition     = !local.platform_clone_needed || local.boot_platform_repo_url != ""
-    error_message = "gitops_platform_repo_url is required on the first server when gitops_platform_enabled is false and the node still needs Cilium or Argo CD: the first server clones that repo for bootstrap/rendered/. Set it to the platform repo, or use cni = \"default\" and no Application."
-  }
-  sensitive = true
 }
 
 output "boot_steps" {

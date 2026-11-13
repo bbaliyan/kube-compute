@@ -13,18 +13,12 @@ Ansible, and no `data.external` Helm render at plan time. `cloud_init_user_data`
 is a complete cloud-init document (hostname, RKE2
 `config.yaml`/`registries.yaml`/trusted-CA/manifest payloads as base64
 `write_files`, and a `runcmd` that invokes an on-node bootstrap script). The
-caller attaches the `user_data` output to its VM; this module has no resource
+caller attaches the `cloud_init_user_data` output to its VM; this module has no resource
 to `depends_on`.
 
 ## User data
 
-`user_data` is the final user data of the node. It is `cloud_init_user_data`
-alone, or a MIME multipart/mixed document when shell-script parts run first.
-Each entry of `boot_scripts` becomes a part. The script sees `CLUSTER_NAME`,
-`NODE_ROLE` (`control-plane` or `worker`) and `NODE_NAME`.
-
-cloud-init runs the shell-script parts before the cloud-config's `runcmd`.
-With no parts, `user_data` is the plain cloud-config.
+`cloud_init_user_data` is the final user data of the node. It is a plain `#cloud-config` document.
 
 The image must already hold OS prep, the RKE2 binaries, the SELinux policy, the kernel
 modules, the guest agent and these tools: git, curl, getent, ip, awk, systemctl
@@ -49,7 +43,7 @@ On the first server, before RKE2 starts, the boot program does these steps:
    - For a 40-digit hex commit, it runs `git clone --filter=blob:none --no-checkout` and then `git checkout`.
 3. If `bootstrap/rendered/cilium.yaml` or `bootstrap/rendered/argocd.yaml` is missing, it stops with one line that names the repo, the ref and the path.
 4. It reads `k8sVersion` from `platform/platform-versions/values.yaml`. If the minor version of the RKE2 in the image is newer, it stops. A newer patch of the same minor version is fine.
-5. With `cni = "cilium"`, it copies `cilium.yaml` into the RKE2 manifests directory.
+5. On the first server, it copies `cilium.yaml` into the RKE2 manifests directory.
 6. After the node is Ready and CoreDNS is up, it applies `argocd.yaml` with server-side apply.
 7. It waits for the Argo CD workloads to roll out.
 
@@ -70,8 +64,7 @@ set, the plan fails with a message that names the input. The pinned default
 
 A first server probes `REJOIN_PROBE_ADDRESSES` for a live cluster before it starts etcd
 (the `rejoin_probe_addresses` input). If it finds one, it becomes a joining server. It
-skips Cilium, the extra server manifests, Argo CD, the Applications and
-`genesis_apply_manifests`.
+skips Cilium, the extra server manifests, Argo CD and the Applications.
 
 1. Rebuild the node image with git, and without a baked Cilium or Argo CD manifest.
 2. Move the module to the new version.
@@ -107,7 +100,7 @@ role is never in the file:
   wait steps for servers and the skew check. An agent runs `node-config-agent`,
   `start-agent` and `wait-ready-agent`.
 - Genesis steps (`platform-clone`, `genesis-cilium-manifest`, `genesis-cilium-handoff`,
-  `genesis-argocd`, `genesis-extra-manifests`, `genesis-apply-manifests`) are in the
+  `genesis-argocd`, `genesis-extra-manifests`) are in the
   program only on the first server, and only when the feature is on.
 - Provider steps are not here. The provider modules pass them in `provider_steps` and
   `provider_files`: DNS self-registration and the iSCSI initiator name on Proxmox, SSM
@@ -137,25 +130,6 @@ There is no registry mirror check at boot.
 
 EC2 limits user data to 16384 bytes after gzip. A test renders a heavy AWS genesis
 node and asserts it stays at least 1024 bytes under that limit.
-
-## Genesis-apply manifests
-
-`genesis_apply_manifests` is an ordered list of `{path, content}` entries. This module
-writes each one verbatim under `/opt/kube-compute/manifests/` with `write_files`.
-`bootstrap.sh` then runs `kubectl apply -f` on each one in order. This module does not
-interpret `content` at all.
-
-Every `path` must be absolute, must name a file under `/opt/kube-compute/manifests/`,
-must not contain whitespace and must not contain a `..` segment. `bootstrap.sh` word-splits
-the list of paths, so a path with a space would break the apply. The plan fails with a
-message that names the rule. `proxmox-control-plane` and `proxmox-cluster` check the same
-rules on their own input.
-
-A first server that finds a live cluster before it starts etcd does not apply these
-manifests. It joins the cluster as a joining server.
-
-The input is genesis-only (`server-init` only). It does not depend on
-`gitops_platform_enabled`. `proxmox-control-plane` and `proxmox-cluster` expose it as an input. The AWS modules do not.
 
 ## Workloads repo parameters on the `platform` Application
 
@@ -276,10 +250,9 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 
 ## Interface notes
 
-- `cni` defaults to `"cilium"`. It is the only variant verified on AlmaLinux 10. On a
+- The CNI is always Cilium. On a
   genesis node, the boot program applies the Cilium manifest from the platform ref, and
   `config.yaml` sets `disable: [rke2-cilium]` so RKE2's own Cilium chart never runs.
-  `"default"` is for a consumer-supplied image that ships a different CNI.
 - `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command` and `trusted_ca_pem`
   are `sensitive = true`. They reach the node only in the base64 `write_files` of the
   payload, such as the 0600 `/etc/rancher/rke2/config.yaml`.

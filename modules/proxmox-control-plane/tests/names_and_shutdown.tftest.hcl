@@ -29,60 +29,35 @@ variables {
   tsig_key_secret            = "ZmFrZXNlY3JldA=="
 }
 
-run "without_cluster_dns_name_dns_uses_the_cluster_name" {
+run "dns_uses_the_cluster_name" {
   command = plan
 
   assert {
     condition     = output.cluster_fqdn == "api.app-red.red.lan"
-    error_message = "unset, cluster_dns_name must leave the name as it was: got ${output.cluster_fqdn}"
-  }
-}
-
-run "cluster_dns_name_replaces_the_cluster_name_in_dns" {
-  command = plan
-
-  variables {
-    cluster_dns_name = "app"
-  }
-
-  assert {
-    condition     = output.cluster_fqdn == "api.app.red.lan"
-    error_message = "the FQDN must use cluster_dns_name: got ${output.cluster_fqdn}"
-  }
-  assert {
-    condition     = output.wildcard_dns_name == "*.app.red.lan"
-    error_message = "the wildcard must follow the FQDN: got ${output.wildcard_dns_name}"
-  }
-  assert {
-    condition     = module.dns_registration.fqdn == "api.app.red.lan."
-    error_message = "the published API record must use cluster_dns_name: got ${module.dns_registration.fqdn}"
+    error_message = "the FQDN must use cluster_name: got ${output.cluster_fqdn}"
   }
 }
 
 # The node payloads embed generated tokens, so reading them needs an apply, and an apply
 # would otherwise run nsupdate against the test's DNS server.
-run "genesis_serves_the_join_name_and_vms_keep_the_cluster_name" {
+run "genesis_serves_the_join_name" {
   command = apply
-
-  variables {
-    cluster_dns_name = "app"
-  }
 
   override_module {
     target  = module.dns_registration
-    outputs = { fqdn = "api.app.red.lan.", record_created = true }
+    outputs = { fqdn = "api.app-red.red.lan.", record_created = true }
   }
   override_module {
     target  = module.dns_registration_wildcard
-    outputs = { fqdn = "*.app.red.lan.", record_created = true }
+    outputs = { fqdn = "*.app-red.red.lan.", record_created = true }
   }
 
   assert {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "genesis.app.red.lan")
+      strcontains(base64decode(f.content), "genesis.app-red.red.lan")
     ])
-    error_message = "genesis must serve genesis.<cluster_dns_name>.<cluster_domain>, the name the other nodes join through"
+    error_message = "genesis must serve genesis.<cluster_name>.<cluster_domain>, the name the other nodes join through"
   }
   assert {
     condition     = proxmox_virtual_environment_vm.control_plane["0"].name == "app-red-cp-0"

@@ -22,30 +22,6 @@ variable "registry_mirror_url" {
   default     = null
 }
 
-variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests forwarded verbatim through proxmox-control-plane to node-bootstrap's own identically-named variable, on the genesis control-plane node only. See node-bootstrap's description for the full contract. Empty by default."
-  type = list(object({
-    path    = string
-    content = string
-  }))
-  default = []
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !can(regex("[[:space:]]", m.path))])
-    error_message = "genesis_apply_manifests: a path must not contain whitespace. bootstrap.sh word-splits the list of paths."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : startswith(m.path, "/opt/kube-compute/manifests/") && length(m.path) > length("/opt/kube-compute/manifests/")])
-    error_message = "genesis_apply_manifests: a path must be absolute and name a file under /opt/kube-compute/manifests/."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !contains(split("/", m.path), "..")])
-    error_message = "genesis_apply_manifests: a path must not contain a .. segment."
-  }
-}
-
 variable "extra_server_manifests" {
   description = "RKE2 auto-deploy manifest files (filename => YAML), passed through proxmox-control-plane to node-bootstrap, which writes them to /var/lib/rancher/rke2/server/manifests/ on the genesis node only. Content is not interpreted. Empty (the default) adds none."
   type        = map(string)
@@ -95,16 +71,6 @@ variable "cluster_type" {
   validation {
     condition     = contains(["all_in_one", "dedicated_control_plane"], var.cluster_type)
     error_message = "cluster_type must be 'all_in_one' or 'dedicated_control_plane'."
-  }
-}
-
-variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
-    error_message = "cni must be null, 'default', or 'cilium'."
   }
 }
 
@@ -281,18 +247,8 @@ variable "ingress_ports" {
 
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
-variable "cluster_dns_name" {
-  description = "Name used in DNS in place of cluster_name, so the FQDN is api.<cluster_dns_name>.<cluster_domain>. Null (the default) uses cluster_name."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>; cluster_dns_name replaces cluster_name if set. Required when control_plane_count > 1."
+  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1."
   type        = string
   default     = null
 
@@ -433,12 +389,6 @@ variable "control_plane_node_name_template" {
   description = "Name for each control-plane node: its VM name, hostname and Kubernetes node name. {number} becomes the node's number as two digits (01, 02, ...) and is required. Null keeps <cluster_name>-cp-<n>, counting from 0. Each node_pools entry has its own node_name_template."
   type        = string
   default     = null
-}
-
-variable "boot_scripts" {
-  description = "Bash scripts run on every control-plane and pool node at first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE and NODE_NAME. Autoscaled nodes do not run them. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
 }
 
 variable "cloud_init_upload_mode" {

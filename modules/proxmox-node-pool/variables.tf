@@ -188,16 +188,6 @@ variable "manage_wildcard_dns_record" {
 # null/default = no record published, same "DNS is optional, name-only by
 # default" rule as every other provider module. Mirrors
 # proxmox-control-plane's identical dns_server_address/tsig_* block.
-variable "cluster_dns_name" {
-  description = "Name to use in DNS in place of cluster_name. See proxmox-cluster's own variable."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
   description = "DNS suffix matching the control plane's own cluster_domain (e.g. 'cluster.example'). Required to compute the wildcard record's zone; ignored when dns_server_address is null."
   type        = string
@@ -278,17 +268,6 @@ variable "node_name_template" {
   validation {
     condition     = var.node_name_template == null || (can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", replace(coalesce(var.node_name_template, "-"), "{number}", "00"))) && strcontains(coalesce(var.node_name_template, "-"), "{number}"))
     error_message = "node_name_template must give a valid hostname: lowercase letters, digits and hyphens, not starting or ending with a hyphen, at most 63 characters, with {number} as the only placeholder. It must contain {number}, so every worker gets its own name."
-  }
-}
-
-variable "boot_scripts" {
-  description = "Bash scripts run on each worker of the pool at its first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (worker) and NODE_NAME in its environment. A script that fails is logged by cloud-init and does not stop the node. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for script in var.boot_scripts : !can(regex("(?m)^KUBE_COMPUTE_BOOT_SCRIPT$", script))])
-    error_message = "A boot script must not have a line that is just KUBE_COMPUTE_BOOT_SCRIPT."
   }
 }
 

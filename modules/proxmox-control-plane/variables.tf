@@ -68,16 +68,6 @@ variable "cluster_type" {
   }
 }
 
-variable "cni" {
-  description = "CNI to install: 'default' or 'cilium'. Null (the default) means 'cilium'. 'default' (Canal) does not work on AlmaLinux 10, the only supported OS."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cni == null || contains(["default", "cilium"], var.cni)
-    error_message = "cni must be null, 'default', or 'cilium'."
-  }
-}
-
 variable "cert_mode" {
   description = "Certificate issuer mode deployed by kube-platform. 'selfsigned' (default), 'byo', or 'acme'."
   type        = string
@@ -250,18 +240,8 @@ variable "manage_wildcard_dns_record" {
 
 # DNS: cluster_domain is name-only; this module creates NO DNS records on its own.
 # Real record publication (optional) is the separate dns_server_address/tsig_* block below.
-variable "cluster_dns_name" {
-  description = "Name to use in DNS in place of cluster_name. See proxmox-cluster's own variable."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.cluster_dns_name == null || can(regex("^[a-z][a-z0-9-]{0,30}$", var.cluster_dns_name))
-    error_message = "cluster_dns_name must be lowercase alphanumeric/hyphens, start with a letter, max 31 chars."
-  }
-}
-
 variable "cluster_domain" {
-  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>; cluster_dns_name replaces cluster_name if set. Required when control_plane_count > 1."
+  description = "DNS suffix (e.g. 'cluster.example'). When set, the FQDN is api.<cluster_name>.<cluster_domain> and the wildcard is *.<cluster_name>.<cluster_domain>. Required when control_plane_count > 1."
   type        = string
   default     = null
 
@@ -325,32 +305,8 @@ variable "tsig_key_secret" {
   sensitive   = true
 }
 
-variable "genesis_apply_manifests" {
-  description = "Ordered list of {path, content} manifests forwarded verbatim to node-bootstrap's own identically-named variable — see that module's description for the full contract. This module is a pure pass-through to its own genesis node_bootstrap call."
-  type = list(object({
-    path    = string
-    content = string
-  }))
-  default = []
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !can(regex("[[:space:]]", m.path))])
-    error_message = "genesis_apply_manifests: a path must not contain whitespace. bootstrap.sh word-splits the list of paths."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : startswith(m.path, "/opt/kube-compute/manifests/") && length(m.path) > length("/opt/kube-compute/manifests/")])
-    error_message = "genesis_apply_manifests: a path must be absolute and name a file under /opt/kube-compute/manifests/."
-  }
-
-  validation {
-    condition     = alltrue([for m in var.genesis_apply_manifests : !contains(split("/", m.path), "..")])
-    error_message = "genesis_apply_manifests: a path must not contain a .. segment."
-  }
-}
-
 variable "extra_server_manifests" {
-  description = "Forwarded verbatim to node-bootstrap's own identically-named variable, on the genesis (server-init) node only — matching genesis_apply_manifests' own scope, since RKE2's manifest auto-deploy only needs to apply once per cluster. Empty by default."
+  description = "Forwarded verbatim to node-bootstrap's own identically-named variable, on the genesis (server-init) node only — since RKE2's manifest auto-deploy only needs to apply once per cluster. Empty by default."
   type        = map(string)
   default     = {}
 }
@@ -378,17 +334,6 @@ variable "node_name_template" {
   validation {
     condition     = var.node_name_template == null || (can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", replace(coalesce(var.node_name_template, "-"), "{number}", "00"))) && strcontains(coalesce(var.node_name_template, "-"), "{number}"))
     error_message = "node_name_template must give a valid hostname: lowercase letters, digits and hyphens, not starting or ending with a hyphen, at most 63 characters, with {number} as the only placeholder. It must contain {number}, so every node gets its own name."
-  }
-}
-
-variable "boot_scripts" {
-  description = "Bash scripts run on each control-plane node at its first boot, in order, before RKE2 is installed. Each sees CLUSTER_NAME, NODE_ROLE (control-plane) and NODE_NAME in its environment. A script that fails is logged by cloud-init and does not stop the node. Empty (the default) runs none."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for script in var.boot_scripts : !can(regex("(?m)^KUBE_COMPUTE_BOOT_SCRIPT$", script))])
-    error_message = "A boot script must not have a line that is just KUBE_COMPUTE_BOOT_SCRIPT."
   }
 }
 
