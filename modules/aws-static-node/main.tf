@@ -48,61 +48,18 @@ locals {
 }
 
 # One role per group, not per node: every node reads the same SSM parameter.
-resource "aws_iam_role" "node" {
-  name_prefix = local.node_iam_name_prefix
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "sts:AssumeRole"
-      Principal = { Service = "ec2.amazonaws.com" }
-    }]
-  })
-  tags = local.common_tags
-}
+# One role per group, not per node: every node reads the same SSM parameter.
+module "node_iam" {
+  source = "../aws-node-iam"
 
-resource "aws_iam_role_policy_attachment" "ssm_core" {
-  role       = aws_iam_role.node.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy_attachment" "ebs_csi" {
-  count      = var.attach_ebs_csi_policy ? 1 : 0
-  role       = aws_iam_role.node.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-}
-
-# Inline JSON: mock_provider cannot evaluate data.aws_iam_policy_document.
-resource "aws_iam_role_policy" "agent_token" {
-  name = "kube-compute-${var.cluster_name}-${var.group_name}-agent-token-read"
-  role = aws_iam_role.node.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.agent_token_ssm_parameter}"
-      },
-      {
-        Effect = "Allow"
-        Action = "kms:Decrypt"
-        # By condition, not resource: alias/aws/ssm has no ARN to name here.
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com"
-          }
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_instance_profile" "node" {
-  name_prefix = local.node_iam_name_prefix
-  role        = aws_iam_role.node.name
-  tags        = local.common_tags
+  name_prefix           = local.node_iam_name_prefix
+  tags                  = local.common_tags
+  aws_region            = var.aws_region
+  attach_ebs_csi_policy = var.attach_ebs_csi_policy
+  agent_token = {
+    policy_name   = "kube-compute-${var.cluster_name}-${var.group_name}-agent-token-read"
+    ssm_parameter = var.agent_token_ssm_parameter
+  }
 }
 
 module "boot_steps" {
@@ -147,7 +104,7 @@ resource "aws_instance" "node" {
   instance_type          = var.instance_type
   subnet_id              = var.subnet_id
   vpc_security_group_ids = var.security_group_ids
-  iam_instance_profile   = aws_iam_instance_profile.node.name
+  iam_instance_profile   = module.node_iam.instance_profile_name
 
   # hop_limit 3, not AWS's documented 2. Confirmed live that 2 is one hop short
   # of a pod's IMDSv2 token PUT getting its response back: IMDSv2 caps that

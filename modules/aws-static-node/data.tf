@@ -5,8 +5,6 @@ data "aws_subnet" "selected" {
   id = var.subnet_id
 }
 
-data "aws_caller_identity" "current" {}
-
 # AWS's own API reports supported_architectures for any instance type, so no
 # per-family lookup table has to be maintained here.
 data "aws_ec2_instance_type" "selected" {

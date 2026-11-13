@@ -55,58 +55,16 @@ locals {
   }
 }
 
-resource "aws_iam_role" "node" {
+module "node_iam" {
+  source = "../aws-node-iam"
+
   name_prefix = local.iam_name_prefix
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "sts:AssumeRole"
-      Principal = { Service = "ec2.amazonaws.com" }
-    }]
-  })
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy_attachment" "ssm_core" {
-  role       = aws_iam_role.node.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy_attachment" "ebs_csi" {
-  role       = aws_iam_role.node.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-}
-
-resource "aws_iam_role_policy" "agent_token" {
-  name = "${local.resource_name}-agent-token-read"
-  role = aws_iam_role.node.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.agent_token_ssm_parameter}"
-      },
-      {
-        Effect   = "Allow"
-        Action   = "kms:Decrypt"
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com"
-          }
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_instance_profile" "node" {
-  name_prefix = local.iam_name_prefix
-  role        = aws_iam_role.node.name
   tags        = local.common_tags
+  aws_region  = var.aws_region
+  agent_token = {
+    policy_name   = "${local.resource_name}-agent-token-read"
+    ssm_parameter = var.agent_token_ssm_parameter
+  }
 }
 
 module "boot_steps" {
@@ -145,7 +103,7 @@ resource "aws_launch_template" "node" {
   instance_type = each.key
 
   iam_instance_profile {
-    name = aws_iam_instance_profile.node.name
+    name = module.node_iam.instance_profile_name
   }
 
   vpc_security_group_ids = [var.cluster_security_group_id]

@@ -409,34 +409,12 @@ resource "aws_vpc_security_group_egress_rule" "node_all" {
   tags              = merge(local.common_tags, { Name = "kube-compute-${var.cluster_name}-egress-all" })
 }
 
-# Inline JSON avoids a data.aws_iam_policy_document block that mock_provider cannot evaluate.
-resource "aws_iam_role" "node" {
+module "node_iam" {
+  source = "../aws-node-iam"
+
   name_prefix = local.node_iam_name_prefix
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "sts:AssumeRole"
-      Principal = { Service = "ec2.amazonaws.com" }
-    }]
-  })
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy_attachment" "ssm_core" {
-  role       = aws_iam_role.node.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy_attachment" "ebs_csi" {
-  role       = aws_iam_role.node.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-}
-
-resource "aws_iam_instance_profile" "node" {
-  name_prefix = local.node_iam_name_prefix
-  role        = aws_iam_role.node.name
   tags        = local.common_tags
+  aws_region  = var.aws_region
 }
 
 # One instance per control-plane node; key "0" is genesis. The precondition fails plan
@@ -458,7 +436,7 @@ resource "aws_instance" "control_plane" {
   instance_type          = var.instance_type
   subnet_id              = each.value
   vpc_security_group_ids = [aws_security_group.node.id, aws_security_group.cluster.id]
-  iam_instance_profile   = aws_iam_instance_profile.node.name
+  iam_instance_profile   = module.node_iam.instance_profile_name
 
   # hop_limit 3, not AWS's commonly-documented 2. Confirmed live: with hop_limit 2, a pod's
   # IMDSv2 token PUT completes its TCP handshake (proving pod<->host routing works) but the
