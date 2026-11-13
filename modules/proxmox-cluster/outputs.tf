@@ -68,15 +68,13 @@ output "control_plane_node_refs" {
 }
 
 output "node_pools" {
-  description = "Map of pool name (matching var.node_pools' own keys) -> {node_provider, worker_node_refs, wildcard_dns_registration_enabled, pool_id, cpu_units, cloud_init_upload_mode}, one entry per configured pool. Empty map when var.node_pools is empty."
+  description = "Map of pool name (matching var.node_pools' own keys) -> {node_provider, worker_node_refs, wildcard_dns_registration_enabled, pool_id}, one entry per configured pool. Empty map when var.node_pools is empty."
   value = {
     for name, pool in module.node_pools : name => {
       node_provider                     = pool.node_provider
       worker_node_refs                  = pool.worker_node_refs
       wildcard_dns_registration_enabled = pool.wildcard_dns_registration_enabled
       pool_id                           = pool.pool_id
-      cpu_units                         = pool.cpu_units
-      cloud_init_upload_mode            = pool.cloud_init_upload_mode
     }
   }
 }
@@ -86,12 +84,3 @@ output "pool_id" {
   value       = module.control_plane.pool_id
 }
 
-output "cpu_units" {
-  description = "Proxmox CPU weight set on each control-plane VM, or null for the Proxmox default."
-  value       = module.control_plane.cpu_units
-}
-
-output "cloud_init_upload_mode" {
-  description = "How cloud-init snippets are copied to the Proxmox host for the control plane and every node pool, or null for the provider default (stream)."
-  value       = module.control_plane.cloud_init_upload_mode
-}

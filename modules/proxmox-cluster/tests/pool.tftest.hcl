@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# The cluster-wide cloud_init_upload_mode reaches the control plane and every
-# node pool. Unset changes nothing.
+# The cluster-wide pool_id reaches the control plane and every node
+# pool. A node_pools entry may override it. Unset changes nothing.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/example.yaml" }
@@ -40,45 +40,40 @@ variables {
       desired_count          = 1
       registration_address   = "192.168.1.5"
       pool_id                = "batch"
-      cpu_units              = 50
     }
   }
 }
 
-run "unset_means_the_provider_default" {
+# apply, not plan: the pools read the control plane's token, unknown at plan time.
+run "unset_means_no_pool" {
   command = apply
 
   assert {
-    condition     = output.cloud_init_upload_mode == null
-    error_message = "unset must reach the control plane as null"
+    condition     = output.pool_id == null
+    error_message = "unset pool_id must reach the control plane as null"
   }
   assert {
-    condition     = alltrue([for name, p in output.node_pools : p.cloud_init_upload_mode == null])
-    error_message = "unset must reach every node pool as null"
+    condition     = output.node_pools["inherit"].pool_id == null
+    error_message = "unset pool_id must reach the node pools as null"
   }
 }
 
-run "sftp_reaches_control_plane_and_every_pool" {
+run "cluster_wide_values_reach_control_plane_and_pools" {
   command = apply
   variables {
-    cloud_init_upload_mode = "sftp"
+    pool_id = "kube"
   }
 
   assert {
-    condition     = output.cloud_init_upload_mode == "sftp"
-    error_message = "sftp must reach the control plane"
+    condition     = output.pool_id == "kube"
+    error_message = "pool_id must pass through to the control plane"
   }
   assert {
-    condition     = alltrue([for name, p in output.node_pools : p.cloud_init_upload_mode == "sftp"])
-    error_message = "sftp must reach every node pool, including one that overrides pool_id"
+    condition     = output.node_pools["inherit"].pool_id == "kube"
+    error_message = "a pool that sets none must take the cluster-wide value"
   }
-}
-
-run "a_bad_value_is_rejected" {
-  command = plan
-  variables {
-    cloud_init_upload_mode = "scp"
+  assert {
+    condition     = output.node_pools["override"].pool_id == "batch"
+    error_message = "a node_pools entry's own pool_id must win over the cluster-wide one"
   }
-
-  expect_failures = [var.cloud_init_upload_mode]
 }

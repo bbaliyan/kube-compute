@@ -74,15 +74,13 @@ run "replace_moves_the_single_node_to_the_new_template" {
 
 run "new_control_plane_nodes_use_the_new_template" {
   variables {
-    proxmox_template_vm_id     = 9002
-    control_plane_count        = 3
-    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-    cluster_domain             = "example.com"
-    cluster_network_cidr       = "192.168.1.0/24"
-    vm_gateway                 = "192.168.1.1"
-    dns_server_address         = "192.168.1.53"
-    tsig_key_name              = "kube-compute"
-    tsig_key_secret            = "ZmFrZXNlY3JldA=="
+    proxmox_template_vm_id = 9002
+    control_plane_count    = 3
+    cluster_domain         = "example.com"
+    cluster_network_cidr   = "192.168.1.0/24"
+    dns_server_address     = "192.168.1.53"
+    tsig_key_name          = "kube-compute"
+    tsig_key_secret        = "ZmFrZXNlY3JldA=="
   }
 
   assert {
@@ -97,15 +95,13 @@ run "new_control_plane_nodes_use_the_new_template" {
 
 run "replacing_one_additional_node_moves_only_that_node" {
   variables {
-    proxmox_template_vm_id     = 9003
-    control_plane_count        = 3
-    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-    cluster_domain             = "example.com"
-    cluster_network_cidr       = "192.168.1.0/24"
-    vm_gateway                 = "192.168.1.1"
-    dns_server_address         = "192.168.1.53"
-    tsig_key_name              = "kube-compute"
-    tsig_key_secret            = "ZmFrZXNlY3JldA=="
+    proxmox_template_vm_id = 9003
+    control_plane_count    = 3
+    cluster_domain         = "example.com"
+    cluster_network_cidr   = "192.168.1.0/24"
+    dns_server_address     = "192.168.1.53"
+    tsig_key_name          = "kube-compute"
+    tsig_key_secret        = "ZmFrZXNlY3JldA=="
   }
   plan_options {
     replace = [

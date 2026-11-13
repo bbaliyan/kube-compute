@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# pool_id and cpu_units are optional. Unset must leave the VM in no Proxmox
-# pool and on the provider's default CPU weight, as before they existed.
+# pool_id are optional. Unset must leave the VM in no Proxmox
+# pool, as before it existed.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
     defaults = { id = "local:snippets/example.yaml" }
@@ -34,27 +34,19 @@ variables {
   control_plane_count    = 3
   proxmox_template_vm_id = 9000
 
-  control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-  cluster_domain             = "example.com"
-  cluster_network_cidr       = "192.168.1.0/24"
-  vm_gateway                 = "192.168.1.1"
-  dns_server_address         = "192.168.1.53"
-  tsig_key_name              = "kube-compute"
-  tsig_key_secret            = "ZmFrZXNlY3JldA=="
+  cluster_domain       = "example.com"
+  cluster_network_cidr = "192.168.1.0/24"
+  dns_server_address   = "192.168.1.53"
+  tsig_key_name        = "kube-compute"
+  tsig_key_secret      = "ZmFrZXNlY3JldA=="
 }
 
-run "unset_means_no_pool_and_default_cpu_weight" {
+run "unset_means_no_pool" {
   command = plan
 
   assert {
     condition     = proxmox_virtual_environment_vm.control_plane["0"].pool_id == null
     error_message = "genesis must not join a pool when pool_id is unset"
-  }
-  # The mock reports a computed units as 0, so unset is checked on the output
-  # that carries the input, not on the VM attribute.
-  assert {
-    condition     = output.cpu_units == null
-    error_message = "cpu_units must stay null so the provider keeps its default CPU weight"
   }
   assert {
     condition = alltrue([
@@ -67,8 +59,7 @@ run "unset_means_no_pool_and_default_cpu_weight" {
 run "set_applies_to_every_control_plane_vm" {
   command = plan
   variables {
-    pool_id   = "kube"
-    cpu_units = 100
+    pool_id = "kube"
   }
 
   assert {
@@ -76,13 +67,9 @@ run "set_applies_to_every_control_plane_vm" {
     error_message = "genesis must join the pool named by pool_id"
   }
   assert {
-    condition     = proxmox_virtual_environment_vm.control_plane["0"].cpu[0].units == 100
-    error_message = "genesis must carry cpu_units as its CPU weight"
-  }
-  assert {
     condition = alltrue([
-      for vm in [for k, v in proxmox_virtual_environment_vm.control_plane : v if k != "0"] : vm.pool_id == "kube" && vm.cpu[0].units == 100
+      for vm in [for k, v in proxmox_virtual_environment_vm.control_plane : v if k != "0"] : vm.pool_id == "kube"
     ])
-    error_message = "additional control-plane VMs must join the pool and carry cpu_units"
+    error_message = "additional control-plane VMs must join the pool"
   }
 }

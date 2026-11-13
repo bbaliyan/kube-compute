@@ -21,15 +21,13 @@ locals {
 
   # A replaced genesis node must probe its peers, not registration_address: that address
   # resolves to genesis itself, and genesis rewrites the genesis DNS record to itself before the
-  # probe runs, so the probe would never see the live cluster. With static IPs it probes every
-  # other control-plane node, so one peer being down does not hide the live cluster. With DHCP
-  # no peer IP is known before genesis exists (a DHCP peer IP would close a dependency cycle),
+  # probe runs, so the probe would never see the live cluster. No peer IP is known before
+  # genesis exists (a peer IP would close a dependency cycle),
   # so it probes cluster_fqdn when DNS registration publishes it: the node resolves the name
   # and skips its own IP. This is the same probe the AWS modules make of their registration
   # address.
   genesis_rejoin_probe_addresses = (
     var.control_plane_count == 1 ? [] :
-    local.static_ips ? [for cidr in slice(var.control_plane_ip_addresses, 1, var.control_plane_count) : split("/", cidr)[0]] :
     # Safeguard: the VM precondition already requires a DNS server when count > 1.
     local.dns_registration_enabled ? [local.cluster_fqdn] : []
   )
@@ -56,40 +54,10 @@ locals {
   wildcard_registration_enabled = var.manage_wildcard_dns_record && local.dns_registration_enabled && var.cluster_type == "all_in_one"
   dns_wildcard_record_name      = "*.${var.cluster_name}"
 
-  # One IP per control-plane node; index 0 is genesis. DHCP works at any
-  # control_plane_count — every additional control-plane VM shares the same
-  # network_data_dhcp[0] content, resolved individually post-apply via the Proxmox
-  # guest agent same as genesis.
-  static_ips  = var.control_plane_ip_addresses != null
-  cp_ip_cidrs = local.static_ips ? var.control_plane_ip_addresses : []
-
-  _dns_list = join(", ", var.dns_servers)
-
-  # Netplan v2 network-config, one per control-plane index. OpenTofu forbids heredocs
-  # inside ternaries, so both branches are precomputed and selected per-index below.
-  #
-  # "to: 0.0.0.0/0", not Netplan's "to: default": some cloud-init versions do not parse
-  # "default" in a route's `to:` field. They fall back to NetworkManager's DHCP profile
-  # with no apply-time error. An explicit CIDR works on every version.
-  #
   # "eth0" is the ethernets key itself, not a "primary" alias with a `match` block:
   # cloud-init's NetworkManager renderer ignores `match` and writes the key verbatim as
   # DEVICE=, which leaves an unbindable connection inactive. The guest NIC is named eth0.
-  network_data_static = { for i, cidr in local.cp_ip_cidrs : i => <<-EOT
-    version: 2
-    ethernets:
-      eth0:
-        addresses:
-          - ${cidr}
-        routes:
-          - to: 0.0.0.0/0
-            via: ${var.vm_gateway}
-        nameservers:
-          addresses: [${local._dns_list}]
-        dhcp4: false
-    EOT
-  }
-  network_data_dhcp = <<-EOT
+  network_data = <<-EOT
     version: 2
     ethernets:
       eth0:
@@ -118,7 +86,8 @@ resource "proxmox_virtual_environment_firewall_ipset" "cluster" {
   comment = "kube-compute ${var.cluster_name}: east-west traffic among cluster members (subnet-scoped — see module README)."
 
   cidr {
-    name = coalesce(var.cluster_network_cidr, "${split("/", coalesce(try(var.control_plane_ip_addresses[0], null), "0.0.0.0/32"))[0]}/32")
+    # Only a single-node cluster may leave cluster_network_cidr unset. Then nothing is a member.
+    name = coalesce(var.cluster_network_cidr, "0.0.0.0/32")
   }
 }
 
@@ -132,7 +101,6 @@ resource "proxmox_virtual_environment_file" "vendor_data" {
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
-  upload_mode  = var.cloud_init_upload_mode
 
   source_raw {
     data      = module.vendor_data.data
@@ -205,7 +173,7 @@ module "node_bootstrap" {
 
   extra_server_manifests = each.key == "0" ? var.extra_server_manifests : {}
 
-  # Same list this module's own VM network config (network_data_dhcp above)
+  # Same list this module's own VM network config (network_data above)
   # uses — gives kubelet a resolv-conf with no search domain, avoiding a
   # collision between the node's own hostname-derived search domain and a
   # wildcard cluster DNS record (see node-bootstrap's dns_servers variable).
@@ -222,7 +190,6 @@ resource "proxmox_virtual_environment_file" "node_init" {
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
-  upload_mode  = var.cloud_init_upload_mode
   overwrite    = true
 
   source_raw {
@@ -274,32 +241,14 @@ module "dns_registration_wildcard" {
 }
 
 resource "proxmox_virtual_environment_file" "network_data" {
-  for_each = local.static_ips ? { for i in range(var.control_plane_count) : tostring(i) => i } : {}
-
   content_type = "snippets"
   datastore_id = var.iso_datastore_id
   node_name    = var.proxmox_node
-  upload_mode  = var.cloud_init_upload_mode
-  overwrite    = true
-
-  source_raw {
-    file_name = "${var.cluster_name}-cp-${each.key}-network-data.yaml"
-    data      = local.network_data_static[each.value]
-  }
-}
-
-resource "proxmox_virtual_environment_file" "network_data_dhcp" {
-  count = local.static_ips ? 0 : 1
-
-  content_type = "snippets"
-  datastore_id = var.iso_datastore_id
-  node_name    = var.proxmox_node
-  upload_mode  = var.cloud_init_upload_mode
   overwrite    = true
 
   source_raw {
     file_name = "${var.cluster_name}-cp-0-network-data.yaml"
-    data      = local.network_data_dhcp
+    data      = local.network_data
   }
 }
 
@@ -328,7 +277,6 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   cpu {
     cores = var.vm_cores
     type  = var.vm_cpu_type
-    units = var.cpu_units
   }
 
   memory {
@@ -370,8 +318,8 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     datastore_id        = var.disk_datastore_id
     user_data_file_id   = proxmox_virtual_environment_file.node_init[each.key].id
     vendor_data_file_id = proxmox_virtual_environment_file.vendor_data.id
-    # network_data_dhcp[0] content is identical for every control-plane node.
-    network_data_file_id = local.static_ips ? proxmox_virtual_environment_file.network_data[each.key].id : proxmox_virtual_environment_file.network_data_dhcp[0].id
+    # The network data is identical for every control-plane node.
+    network_data_file_id = proxmox_virtual_environment_file.network_data.id
   }
 
   lifecycle {
@@ -388,10 +336,10 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 }
 
 locals {
-  # Resolved IP per control-plane VM, static or via guest agent — same pattern node-proxmox uses.
+  # Resolved IP per control-plane VM, via the guest agent — same pattern node-proxmox uses.
   cp_ips = {
     for k, vm in proxmox_virtual_environment_vm.control_plane :
-    k => local.static_ips ? split("/", var.control_plane_ip_addresses[tonumber(k)])[0] : try(
+    k => try(
       [for ip in flatten(vm.ipv4_addresses) : ip if !startswith(ip, "127.")][0], null
     )
   }
@@ -405,7 +353,7 @@ resource "proxmox_virtual_environment_firewall_options" "control_plane" {
   node_name = var.proxmox_node
   vm_id     = each.value
   enabled   = true
-  dhcp      = !local.static_ips
+  dhcp      = true
   # IPv6 neighbour discovery and router advertisements, which Proxmox allows
   # by default but bpg turns off unless set: without them the VMs lose IPv6
   # routing once the firewall is enforced.

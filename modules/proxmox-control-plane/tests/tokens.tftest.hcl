@@ -19,14 +19,13 @@ run "server_and_agent_tokens_distinct_and_embedded_via_cloud_init" {
   # so nothing here talks to a real API.
   command = apply
   variables {
-    cluster_name               = "example"
-    proxmox_node               = "pve"
-    vm_cores                   = 4
-    vm_memory_mb               = 8192
-    vm_disk_gb                 = 50
-    control_plane_ip_addresses = null
-    allowed_ingress_cidrs      = ["192.168.1.0/24"]
-    proxmox_template_vm_id     = 9000
+    cluster_name           = "example"
+    proxmox_node           = "pve"
+    vm_cores               = 4
+    vm_memory_mb           = 8192
+    vm_disk_gb             = 50
+    allowed_ingress_cidrs  = ["192.168.1.0/24"]
+    proxmox_template_vm_id = 9000
   }
 
   assert {

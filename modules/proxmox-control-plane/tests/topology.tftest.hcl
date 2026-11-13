@@ -51,10 +51,8 @@ run "single_node_no_endpoint" {
 run "invalid_control_plane_count_rejected" {
   command = plan
   variables {
-    control_plane_count        = 2
-    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24"]
-    cluster_domain             = "example.com"
-    vm_gateway                 = "192.168.1.1"
+    control_plane_count = 2
+    cluster_domain      = "example.com"
   }
   expect_failures = [var.control_plane_count]
 }
@@ -65,14 +63,12 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
   # uniqueness assertions below need the actual rendered strings.
   command = apply
   variables {
-    control_plane_count        = 3
-    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-    cluster_domain             = "example.com"
-    cluster_network_cidr       = "192.168.1.0/24"
-    vm_gateway                 = "192.168.1.1"
-    dns_server_address         = "192.168.1.53"
-    tsig_key_name              = "kube-compute"
-    tsig_key_secret            = "ZmFrZXNlY3JldA=="
+    control_plane_count  = 3
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
   }
 
   assert {
@@ -105,28 +101,6 @@ run "ha_control_plane_creates_n_minus_1_additional_vms" {
   }
 }
 
-run "ha_control_plane_over_dhcp" {
-  command = plan
-  variables {
-    control_plane_count  = 3
-    cluster_domain       = "example.com"
-    cluster_network_cidr = "192.168.1.0/24"
-    dns_server_address   = "192.168.1.53"
-    tsig_key_name        = "kube-compute"
-    tsig_key_secret      = "ZmFrZXNlY3JldA=="
-    # control_plane_ip_addresses / vm_gateway left unset: DHCP for every node,
-    # including the additional (non-genesis) control-plane VMs — regression
-    # coverage for the "Invalid index" plan-time crash this combination
-    # previously hit (control_plane_additional indexed the static-only
-    # network_data map unconditionally, which is empty under DHCP).
-  }
-
-  assert {
-    condition     = length(proxmox_virtual_environment_vm.control_plane) == 3
-    error_message = "control_plane_count = 3 over DHCP must still create exactly 2 additional control-plane VMs"
-  }
-}
-
 # apply, not plan: the rendered payload embeds random_password's result, which is
 # unknown at plan time.
 run "single_node_genesis_has_no_probe_address" {
@@ -142,27 +116,17 @@ run "single_node_genesis_has_no_probe_address" {
   }
 }
 
-run "ha_genesis_probes_every_static_peer" {
+run "joiners_use_the_genesis_name_and_never_probe" {
   command = apply
   variables {
-    control_plane_count        = 3
-    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-    cluster_domain             = "example.com"
-    cluster_network_cidr       = "192.168.1.0/24"
-    vm_gateway                 = "192.168.1.1"
-    dns_server_address         = "192.168.1.53"
-    tsig_key_name              = "kube-compute"
-    tsig_key_secret            = "ZmFrZXNlY3JldA=="
+    control_plane_count  = 3
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
   }
 
-  assert {
-    condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='192.168.1.11 192.168.1.12'") && strcontains(base64decode(f.content), "REGISTRATION_ADDRESS=''")
-      if f.path == "/opt/kube-compute/node.env"
-    ])
-    error_message = "a 3-node genesis must probe both other control-plane nodes, in order: a replaced genesis points its own join name back at itself, and one peer may be down"
-  }
   assert {
     condition = alltrue([
       for k, v in { for k, v in proxmox_virtual_environment_file.node_init : k => v if k != "0" } : anytrue([
@@ -185,30 +149,7 @@ run "ha_genesis_probes_every_static_peer" {
   }
 }
 
-run "five_node_genesis_probes_the_other_four" {
-  command = apply
-  variables {
-    control_plane_count        = 5
-    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24", "192.168.1.13/24", "192.168.1.14/24"]
-    cluster_domain             = "example.com"
-    cluster_network_cidr       = "192.168.1.0/24"
-    vm_gateway                 = "192.168.1.1"
-    dns_server_address         = "192.168.1.53"
-    tsig_key_name              = "kube-compute"
-    tsig_key_secret            = "ZmFrZXNlY3JldA=="
-  }
-
-  assert {
-    condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='192.168.1.11 192.168.1.12 192.168.1.13 192.168.1.14'")
-      if f.path == "/opt/kube-compute/node.env"
-    ])
-    error_message = "a 5-node genesis must probe all four other control-plane nodes, and not its own address"
-  }
-}
-
-run "ha_genesis_over_dhcp_with_dns_probes_the_cluster_name" {
+run "ha_genesis_probes_the_cluster_name" {
   command = apply
   variables {
     control_plane_count  = 3
@@ -222,33 +163,10 @@ run "ha_genesis_over_dhcp_with_dns_probes_the_cluster_name" {
   assert {
     condition = anytrue([
       for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='api.example.example.com'")
+      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='api.example.example.com'") && strcontains(base64decode(f.content), "REGISTRATION_ADDRESS=''")
       if f.path == "/opt/kube-compute/node.env"
     ])
-    error_message = "over DHCP with DNS registration, genesis must probe the cluster name so a replaced first node finds its peers"
-  }
-}
-
-run "ha_genesis_with_static_ips_keeps_peer_ips_even_with_dns" {
-  command = apply
-  variables {
-    control_plane_count        = 3
-    control_plane_ip_addresses = ["192.168.1.10/24", "192.168.1.11/24", "192.168.1.12/24"]
-    vm_gateway                 = "192.168.1.1"
-    cluster_domain             = "example.com"
-    cluster_network_cidr       = "192.168.1.0/24"
-    dns_server_address         = "192.168.1.53"
-    tsig_key_name              = "kube-compute"
-    tsig_key_secret            = "ZmFrZXNlY3JldA=="
-  }
-
-  assert {
-    condition = anytrue([
-      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
-      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='192.168.1.11 192.168.1.12'")
-      if f.path == "/opt/kube-compute/node.env"
-    ])
-    error_message = "static IPs must keep the peer IPs as the probe list, not the cluster name"
+    error_message = "with DNS registration, genesis must probe the cluster name so a replaced first node finds its peers"
   }
 }
 

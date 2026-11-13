@@ -159,17 +159,6 @@ variable "pool_id" {
   default     = null
 }
 
-variable "cpu_units" {
-  description = "Proxmox CPU weight (cpuunits) of each control-plane VM: its share of CPU time when the host is busy, relative to other VMs. A lower value yields CPU to other VMs. Null (default) keeps the Proxmox default."
-  type        = number
-  default     = null
-
-  validation {
-    condition     = var.cpu_units == null ? true : var.cpu_units >= 1 && var.cpu_units <= 262144
-    error_message = "cpu_units must be between 1 and 262144, the range Proxmox accepts."
-  }
-}
-
 variable "proxmox_template_vm_id" {
   description = "VM ID of the kube-images Proxmox template to full-clone every control-plane node from. A new value reaches only new or replaced VMs. Existing VMs keep their disks. To roll nodes one at a time, see 'Rolling to a new template' in the README."
   type        = number
@@ -196,23 +185,6 @@ variable "control_plane_count" {
     condition     = contains([1, 3, 5], var.control_plane_count)
     error_message = "control_plane_count must be 1, 3, or 5."
   }
-}
-
-variable "control_plane_ip_addresses" {
-  description = "Static IPv4 addresses in CIDR form (e.g. '192.168.1.10/24'), one per control-plane node, in order. Null (the default) uses DHCP. Static addresses are advised for HA, because genesis must be reachable before joiners boot."
-  type        = list(string)
-  default     = null
-
-  validation {
-    condition     = var.control_plane_ip_addresses == null || length(var.control_plane_ip_addresses) == var.control_plane_count
-    error_message = "When set, control_plane_ip_addresses must have exactly control_plane_count entries."
-  }
-}
-
-variable "vm_gateway" {
-  description = "IPv4 default gateway for every control-plane VM (e.g. '192.168.1.1'). Required when control_plane_ip_addresses is set; ignored for DHCP."
-  type        = string
-  default     = null
 }
 
 variable "cluster_network_cidr" {
@@ -337,13 +309,3 @@ variable "node_name_template" {
   }
 }
 
-variable "cloud_init_upload_mode" {
-  description = "How the provider copies cloud-init snippets to the Proxmox host over SSH. Null keeps the provider default, 'stream', which uses sudo. 'sftp' needs write access to the snippets directory and no sudo. It does not affect ISO or image downloads."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.cloud_init_upload_mode == null ? true : contains(["stream", "sftp"], var.cloud_init_upload_mode)
-    error_message = "cloud_init_upload_mode must be null, \"stream\" or \"sftp\"."
-  }
-}

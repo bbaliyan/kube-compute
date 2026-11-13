@@ -43,20 +43,16 @@ module "control_plane" {
   proxmox_node                      = var.proxmox_node
   disk_datastore_id                 = var.disk_datastore_id
   iso_datastore_id                  = var.iso_datastore_id
-  cloud_init_upload_mode            = var.cloud_init_upload_mode
   network_bridge                    = var.network_bridge
   vm_cores                          = var.vm_cores
   vm_memory_mb                      = var.vm_memory_mb
   vm_disk_gb                        = var.vm_disk_gb
   vm_cpu_type                       = var.vm_cpu_type
   pool_id                           = var.pool_id
-  cpu_units                         = var.cpu_units
   proxmox_template_vm_id            = var.proxmox_template_vm_id
   ssh_authorized_keys               = var.ssh_authorized_keys
   dns_servers                       = var.dns_servers
   control_plane_count               = var.control_plane_count
-  control_plane_ip_addresses        = var.control_plane_ip_addresses
-  vm_gateway                        = var.vm_gateway
   cluster_network_cidr              = var.cluster_network_cidr
   allowed_ingress_cidrs             = var.allowed_ingress_cidrs
   ingress_ports                     = local.control_plane_ingress_ports
@@ -106,17 +102,13 @@ module "node_pools" {
   proxmox_node           = each.value.proxmox_node
   disk_datastore_id      = each.value.disk_datastore_id
   iso_datastore_id       = each.value.iso_datastore_id
-  cloud_init_upload_mode = var.cloud_init_upload_mode
   network_bridge         = each.value.network_bridge
   vm_cores               = each.value.vm_cores
   vm_memory_mb           = each.value.vm_memory_mb
   vm_disk_gb             = each.value.vm_disk_gb
   vm_cpu_type            = each.value.vm_cpu_type
   pool_id                = each.value.pool_id != null ? each.value.pool_id : var.pool_id
-  cpu_units              = each.value.cpu_units != null ? each.value.cpu_units : var.cpu_units
   proxmox_template_vm_id = coalesce(each.value.proxmox_template_vm_id, var.proxmox_template_vm_id)
-  worker_ip_addresses    = each.value.worker_ip_addresses
-  vm_gateway             = each.value.vm_gateway != null ? each.value.vm_gateway : var.vm_gateway
   desired_count          = each.value.desired_count
   registration_address   = each.value.registration_address
   extra_node_labels      = each.value.extra_node_labels
