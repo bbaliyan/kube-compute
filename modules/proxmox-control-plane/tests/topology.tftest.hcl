@@ -204,3 +204,28 @@ run "multi_node_without_dns_server_is_rejected" {
 
   expect_failures = [proxmox_virtual_environment_vm.control_plane]
 }
+
+run "five_node_control_plane_creates_five_vms" {
+  command = apply
+  variables {
+    control_plane_count  = 5
+    cluster_domain       = "example.com"
+    cluster_network_cidr = "192.168.1.0/24"
+    dns_server_address   = "192.168.1.53"
+    tsig_key_name        = "kube-compute"
+    tsig_key_secret      = "ZmFrZXNlY3JldA=="
+  }
+
+  assert {
+    condition     = length(proxmox_virtual_environment_vm.control_plane) == 5
+    error_message = "control_plane_count = 5 must create exactly 5 control-plane VMs"
+  }
+  assert {
+    condition = anytrue([
+      for f in yamldecode(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data).write_files :
+      strcontains(base64decode(f.content), "REJOIN_PROBE_ADDRESSES='api.example.example.com'")
+      if f.path == "/opt/kube-compute/node.env"
+    ])
+    error_message = "a five-node genesis must probe the cluster name so a replaced first node finds its peers"
+  }
+}

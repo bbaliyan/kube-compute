@@ -45,3 +45,21 @@ run "cluster_ipset_created_and_referenced" {
     error_message = "every control-plane NIC must enable the firewall, or Proxmox never enforces the rules above"
   }
 }
+
+run "single_node_without_network_cidr_has_an_unmatched_ipset_member" {
+  command = plan
+  variables {
+    cluster_name           = "example"
+    proxmox_node           = "pve"
+    vm_cores               = 4
+    vm_memory_mb           = 8192
+    vm_disk_gb             = 50
+    allowed_ingress_cidrs  = ["192.168.1.0/24"]
+    proxmox_template_vm_id = 9000
+  }
+
+  assert {
+    condition     = proxmox_virtual_environment_firewall_ipset.cluster.cidr[0].name == "0.0.0.0/32"
+    error_message = "a single node with no cluster_network_cidr must give the ipset the 0.0.0.0/32 placeholder member, which matches no host"
+  }
+}
