@@ -21,14 +21,6 @@ locals {
   ingress_pools = [for k in keys(var.node_pools) : k if var.platform_node_group == null || k == var.platform_node_group]
 }
 
-removed {
-  from = terraform_data.cluster_network_cidr_set_for_multi_node
-
-  lifecycle {
-    destroy = false
-  }
-}
-
 module "control_plane" {
   source = "../proxmox-control-plane"
 

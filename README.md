@@ -128,6 +128,8 @@ by default).
 CI builds and tests both mirrors on every pull request, so a change that would break a
 release fails there.
 
+Clusters are disposable. A release can change resource addresses, and an upgrade is a rebuild.
+
 **To add a provider**, create `terraform-<provider>-kube-compute` as an empty public repo,
 add it to the `SPLIT_REPO_PAT` token's repositories, and add the provider to the matrix in
 both `release-split.yml` and `ci.yml`. Once the first release has been tagged there, submit

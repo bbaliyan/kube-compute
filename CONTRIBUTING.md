@@ -39,3 +39,6 @@ when you change a required input.
   input or an output, makes a validation stricter, or forces a node to be replaced.
 - Mark a breaking commit with `!`, as in `feat!:` or `refactor!:`, and say in the
   body what a user must change.
+- Clusters are disposable. A release can change resource addresses or replace
+  resources, and an upgrade is a rebuild. The module keeps no state compatibility
+  between releases.
