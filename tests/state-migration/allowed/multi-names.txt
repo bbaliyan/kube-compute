@@ -8,3 +8,4 @@ update module.autoscaled_nodes["workers"].aws_autoscaling_group.node["r6a.large"
 update module.autoscaled_nodes["workers"].aws_launch_template.node["r6a.large"]
 update module.control_plane.aws_instance.control_plane["0"]
 update module.static_nodes["platform"].aws_instance.node["1"]
+forget terraform_data.autoscaling_limits[0]
