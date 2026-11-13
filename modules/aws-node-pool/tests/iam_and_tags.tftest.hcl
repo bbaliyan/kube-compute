@@ -169,14 +169,24 @@ run "the_longest_valid_names_keep_the_iam_prefix_within_38_characters" {
   command = plan
 
   variables {
-    cluster_name = "c012345678901234567890123456789"
-    group_name   = "g0123456789012345678"
+    cluster_name = "cluster-abcdefghijklmnopqrstuvw"
+    group_name   = "group-abcdefghijklmno"
   }
 
   assert {
-    condition     = length(aws_iam_role.node.name_prefix) <= 38 && length(aws_iam_instance_profile.node.name_prefix) <= 38
-    error_message = "an IAM name_prefix must stay within 38 characters"
+    condition     = aws_iam_role.node.name_prefix == "kube-compute-cluster-abcdefghijklmnopq" && aws_iam_instance_profile.node.name_prefix == "kube-compute-cluster-abcdefghijklmnopq"
+    error_message = "the longest cluster and group names must give an IAM name_prefix cut at exactly 38 characters"
   }
+}
+
+run "a_group_name_of_22_characters_is_rejected" {
+  command = plan
+
+  variables {
+    group_name = "group-abcdefghijklmnop"
+  }
+
+  expect_failures = [var.group_name]
 }
 
 run "the_agent_token_is_fetched_with_the_group_region_and_parameter" {
