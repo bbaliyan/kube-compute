@@ -7,6 +7,7 @@
 #   PROVIDERS            providers whose release mirror test-integration builds
 #   TF_PLUGIN_CACHE_DIR  where the platform keeps downloaded providers
 #   JOBS                 parallel jobs of test-commit (default: the CPUs it may use)
+#   WORK                 copy of modules/ and examples/ where validate and tests run
 #
 # test-commit runs its checks, each module and each test file in parallel,
 # and prints the output of one job at a time. For another target, pass -j.
@@ -16,6 +17,9 @@ SHELL := bash
 
 CHECKS    ?= /usr/share/kube-devenv/checks
 MODULES   := $(patsubst %/,%,$(wildcard modules/*/))
+EXAMPLES  := $(patsubst %/,%,$(wildcard examples/*/))
+UNITS     := $(MODULES) $(EXAMPLES)
+WORK      ?= /tmp/kube-compute-work
 TESTS     := $(wildcard modules/*/tests/*.tftest.hcl)
 BOOTSTRAP := modules/node-bootstrap/files/steps
 BASE_REF  ?= $(shell git rev-parse --verify --quiet origin/main)
@@ -36,7 +40,7 @@ endif
 
 .PHONY: test-commit test-fast test-integration hooks fmt lint-bootstrap lint-scripts \
 	lint-pipelines validate validate-tree scan trivyignore-expiry secrets commit-messages \
-	$(MODULES:%=init/%) $(MODULES:%=validate/%) $(TESTS:%=test/%)
+	work $(UNITS:%=init/%) $(UNITS:%=validate/%) $(TESTS:%=test/%)
 
 test-commit:
 	$(MAKE) --jobs=$(JOBS) --output-sync=target --no-print-directory \
@@ -63,18 +67,25 @@ lint-pipelines:
 	$(CHECKS)/pipeline-lint.sh .
 	tests/check-gitlab-ci.sh
 
-validate: $(MODULES:%=validate/%) $(TESTS:%=test/%)
+validate: $(UNITS:%=validate/%) $(TESTS:%=test/%)
 
-$(MODULES:%=init/%): init/%:
-	cd $* && tofu init -backend=false -input=false
+# tofu init writes .terraform and may edit a lock file, so every init, validate
+# and test runs in a copy and the tree stays clean. examples/ reach modules/ by
+# a relative path, so both are copied.
+work:
+	rm -rf $(WORK) && mkdir -p $(WORK)
+	tar --exclude=.terraform -cf - modules examples | tar -xf - -C $(WORK)
 
-$(MODULES:%=validate/%): validate/%: init/%
-	cd $* && tofu validate
+$(UNITS:%=init/%): init/%: work
+	cd $(WORK)/$* && tofu init -backend=false -input=false
+
+$(UNITS:%=validate/%): validate/%: init/%
+	cd $(WORK)/$* && tofu validate
 
 # One target per test file, so the files of one module run in parallel too.
 .SECONDEXPANSION:
 $(TESTS:%=test/%): test/%: init/$$(call module_of,$$*)
-	cd $(call module_of,$*) && tofu test -filter=tests/$(notdir $*)
+	cd $(WORK)/$(call module_of,$*) && tofu test -filter=tests/$(notdir $*)
 
 # Skips .terraform, which a parallel init may be writing while trivy walks the tree.
 scan:
