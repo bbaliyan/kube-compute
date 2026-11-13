@@ -195,11 +195,8 @@ locals {
   worker_vm_ids = { for k, vm in proxmox_virtual_environment_vm.worker : k => vm.vm_id }
 }
 
-# Workers don't need to wait on each other like server-join siblings do (no etcd
-# learner race — each fetches its own agent token and joins independently). RKE2's
-# agent process retries against the join URL, so no explicit depends_on on the
-# control plane's bootstrap is added either; the consumer's root module creates the
-# natural data dependency via var.registration_address.
+# Workers do not wait on each other, because there is no etcd learner race. The RKE2
+# agent retries the join URL, so no depends_on on the control plane is needed.
 module "boot_steps" {
   source = "../proxmox-boot-steps"
 
@@ -238,10 +235,8 @@ module "node_bootstrap" {
   boot_scripts      = var.boot_scripts
 }
 
-# Subsumes the old hostname-only snippet — hostname is now one key inside
-# node-bootstrap's own cloud-config, alongside the RKE2 config, registry mirror
-# config, trusted CA, and the bootstrap runcmd. vendor_data (SSH keys +
-# qemu-guest-agent) and network_data are unrelated to RKE2 and unchanged.
+# The hostname is a key in node-bootstrap's own cloud-config, so it cannot drift from the
+# RKE2 config. vendor_data (SSH keys, guest agent) and network_data are independent of RKE2.
 resource "proxmox_virtual_environment_file" "node_init" {
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
