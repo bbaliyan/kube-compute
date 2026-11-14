@@ -407,9 +407,10 @@ resource "aws_vpc_security_group_egress_rule" "node_all" {
 module "node_iam" {
   source = "../aws-node-iam"
 
-  name_prefix = local.node_iam_name_prefix
-  tags        = local.common_tags
-  aws_region  = var.aws_region
+  name_prefix           = local.node_iam_name_prefix
+  tags                  = local.common_tags
+  aws_region            = var.aws_region
+  attach_ebs_csi_policy = var.attach_ebs_csi_policy
 }
 
 # One instance per control-plane node; key "0" is genesis. The precondition fails plan
@@ -442,7 +443,7 @@ resource "aws_instance" "control_plane" {
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 3
+    http_put_response_hop_limit = var.imds_hop_limit
   }
 
   root_block_device {

@@ -20,6 +20,10 @@ run "node_resources" {
     error_message = "IMDSv2 must be enforced (http_tokens=required)"
   }
   assert {
+    condition     = aws_instance.control_plane["0"].metadata_options[0].http_put_response_hop_limit == 3
+    error_message = "the default hop limit must stay 3 so pods behind Cilium can reach the metadata service"
+  }
+  assert {
     condition     = length(aws_instance.control_plane["0"].user_data_base64) > 0
     error_message = "instance must attach node-bootstrap user-data"
   }
@@ -52,5 +56,22 @@ run "node_resources" {
   assert {
     condition     = length(output.node_iam_role_name) > 0
     error_message = "node_iam_role_name must expose the role of the shared IAM module"
+  }
+}
+
+run "imds_hop_limit_one_reaches_the_instance" {
+  command = apply
+  variables {
+    cluster_name          = "example"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    os_image_ami_id       = "ami-0123456789abcdef0"
+    imds_hop_limit        = 1
+  }
+
+  assert {
+    condition     = aws_instance.control_plane["0"].metadata_options[0].http_put_response_hop_limit == 1 && aws_instance.control_plane["0"].metadata_options[0].http_tokens == "required"
+    error_message = "imds_hop_limit = 1 must reach the instance, and IMDSv2 must stay required"
   }
 }

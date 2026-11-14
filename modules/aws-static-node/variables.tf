@@ -193,3 +193,14 @@ variable "pod_identity_enabled" {
   type        = bool
   default     = false
 }
+
+variable "imds_hop_limit" {
+  description = "IMDSv2 http_put_response_hop_limit of the nodes. 3 lets a pod reach the metadata service through Cilium's two pod-network hops. 1 keeps pods away from it: only host-network processes reach it. AWS only: Proxmox has no metadata service."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.imds_hop_limit >= 1 && var.imds_hop_limit <= 64 && var.imds_hop_limit == floor(var.imds_hop_limit)
+    error_message = "imds_hop_limit must be a whole number from 1 to 64."
+  }
+}

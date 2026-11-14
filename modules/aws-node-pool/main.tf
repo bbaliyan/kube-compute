@@ -57,9 +57,10 @@ locals {
 module "node_iam" {
   source = "../aws-node-iam"
 
-  name_prefix = local.iam_name_prefix
-  tags        = local.common_tags
-  aws_region  = var.aws_region
+  name_prefix           = local.iam_name_prefix
+  tags                  = local.common_tags
+  aws_region            = var.aws_region
+  attach_ebs_csi_policy = var.attach_ebs_csi_policy
   agent_token = {
     policy_name   = "${local.resource_name}-agent-token-read"
     ssm_parameter = var.agent_token_ssm_parameter
@@ -115,7 +116,7 @@ resource "aws_launch_template" "node" {
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 3
+    http_put_response_hop_limit = var.imds_hop_limit
   }
 
   block_device_mappings {

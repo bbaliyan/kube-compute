@@ -113,7 +113,7 @@ resource "aws_instance" "node" {
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 3
+    http_put_response_hop_limit = var.imds_hop_limit
   }
 
   root_block_device {

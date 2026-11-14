@@ -138,6 +138,29 @@ namespace to `imds_allowed_extra_namespaces`. Pods on the host network are never
 To turn the guard off, pass `imdsGuard = { enabled = false }` in
 `platform_helm_values_object`. That key replaces the module's guard values.
 
+### With pod identity
+
+This section is AWS only. Proxmox has no metadata service.
+
+If `pod_identity_enabled` is true, the platform workloads get their credentials from pod
+identity roles and not from the node role. The module then does this:
+
+- It sets the metadata hop limit to 1 on the control plane, static nodes and autoscaled nodes.
+  Only processes on the host network can reach the service. The default is 3.
+- It removes the EBS CSI policy from every node role.
+- It removes the cluster-autoscaler statements from the platform node role.
+- It passes an empty allow list to `imdsGuard`, so the guard blocks every pod. The guard stays
+  on as a second layer. Only `imds_allowed_extra_namespaces` stays on the list.
+
+The node roles keep the SSM core policy and the agent token read. The control-plane role
+keeps the cloud controller manager statements and the key publish permission, because those
+run on the host network.
+
+Warning: a policy that you attach to the node role for external-dns or External Secrets stops
+working at hop limit 1. It fails without a plan error. To keep it working, pass
+`external_dns_hosted_zone_ids` or `external_secrets_ssm_path_prefixes`. The module then
+creates the workload roles.
+
 ## Autoscaling
 
 Each `autoscaled_nodes` entry is a role listing the instance types it may

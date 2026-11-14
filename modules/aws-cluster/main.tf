@@ -30,11 +30,19 @@ locals {
   # extends it.
   imds_guard_platform_namespaces = ["kube-system", "external-secrets", "cluster-autoscaler", "external-dns"]
 
+  # With pod identity the platform workloads no longer use the metadata service, so only the
+  # consumer's extra namespaces stay on the list. An empty list blocks every pod.
+  imds_guard_allowed_namespaces = var.pod_identity_enabled ? var.imds_allowed_extra_namespaces : distinct(concat(local.imds_guard_platform_namespaces, var.imds_allowed_extra_namespaces))
+
+  # Pods reach the metadata service through two pod-network hops. Pod identity makes that
+  # unnecessary, so the nodes answer only host-network callers.
+  imds_hop_limit = var.pod_identity_enabled ? 1 : 3
+
   platform_helm_values_object = merge(
     {
       imdsGuard = {
         enabled           = true
-        allowedNamespaces = distinct(concat(local.imds_guard_platform_namespaces, var.imds_allowed_extra_namespaces))
+        allowedNamespaces = local.imds_guard_allowed_namespaces
       }
     },
     var.platform_helm_values_object,
@@ -213,6 +221,9 @@ module "control_plane" {
   os_auto_updates                   = var.os_auto_updates
   node_name_template                = var.control_plane_node_name_template
 
+  imds_hop_limit        = local.imds_hop_limit
+  attach_ebs_csi_policy = !var.pod_identity_enabled
+
   pod_identity = var.pod_identity_enabled ? {
     issuer_url  = one(module.pod_identity[*].issuer_url)
     keys_bucket = one(module.pod_identity[*].bucket_name)
@@ -254,7 +265,8 @@ module "static_nodes" {
   root_volume_type      = each.value.root_volume_type
   node_labels           = each.value.node_labels
   node_taints           = each.value.node_taints
-  attach_ebs_csi_policy = each.value.attach_ebs_csi_policy
+  attach_ebs_csi_policy = each.value.attach_ebs_csi_policy && !var.pod_identity_enabled
+  imds_hop_limit        = local.imds_hop_limit
 
   # Cluster-wide by default, overridable per group. A ternary rather than coalesce(): all
   # three are commonly null on both sides, and coalesce raises when every argument is null.
@@ -297,12 +309,15 @@ module "autoscaled_nodes" {
   os_auto_updates     = var.os_auto_updates
   extra_tags          = var.extra_tags
 
-  pod_identity_enabled = var.pod_identity_enabled
+  pod_identity_enabled  = var.pod_identity_enabled
+  attach_ebs_csi_policy = !var.pod_identity_enabled
+  imds_hop_limit        = local.imds_hop_limit
 }
 
-# The platform's controllers authenticate as the node they run on.
+# The platform's controllers authenticate as the node they run on. With pod identity the
+# cluster-autoscaler has its own role instead.
 resource "aws_iam_role_policy" "autoscaling" {
-  count = local.autoscaling_enabled ? 1 : 0
+  count = local.autoscaling_enabled && !var.pod_identity_enabled ? 1 : 0
   name  = "kube-compute-${var.cluster_name}-autoscaling"
   role  = local.platform_node_iam_role_name
 
