@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Pins the exact boot steps of every control-plane node on Proxmox. A step that belongs to
 # another provider (SSM Agent, the AWS provider ID) cannot appear here, and the Proxmox
-# steps (the iSCSI initiator name everywhere, DNS self-registration on genesis only) are
+# steps (the iSCSI initiator name when a prefix is set, DNS self-registration on genesis only) are
 # here. Plan only: nothing is created.
 mock_provider "proxmox" {
   mock_resource "proxmox_virtual_environment_file" {
@@ -27,6 +27,7 @@ override_resource {
 
 variables {
   cluster_name           = "steps"
+  iscsi_initiator_prefix = "iqn.2026-01.test.example"
   proxmox_node           = "pve"
   vm_cores               = 4
   vm_memory_mb           = 8192

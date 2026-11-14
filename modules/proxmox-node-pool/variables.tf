@@ -243,3 +243,12 @@ variable "node_name_template" {
   }
 }
 
+variable "iscsi_initiator_prefix" {
+  description = "Prefix of the fixed iSCSI initiator name, in the form iqn.<yyyy-mm>.<reversed domain>, for example iqn.2026-01.test.example. A node writes <prefix>:<cluster_name>-<node label>, so a target can allow-list it before a rebuild. Null keeps the OS name. The image needs iscsi-initiator-utils."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.iscsi_initiator_prefix == null || can(regex("^iqn[.][0-9]{4}-(0[1-9]|1[0-2])[.][a-z0-9]([a-z0-9.-]*[a-z0-9])?$", var.iscsi_initiator_prefix))
+    error_message = "iscsi_initiator_prefix must look like iqn.2026-01.test.example (iqn, year-month, reversed domain in lowercase)."
+  }
+}
