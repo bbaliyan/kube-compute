@@ -33,12 +33,12 @@ run "user_data_is_unchanged" {
   command = plan
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "3b3636327b8ab052bfdb7b76230509d96349ef1949d87b4214dc9bd720c435d8"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data) == "461fc4d55b8a9af893f8f85954c8e2a89bc691e326e17a48d8a6ddf802f9ef6a"
     error_message = "the first worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["0"].source_raw[0].data)), "?")}"
   }
 
   assert {
-    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "8a77e10736855f6a47d9325ce50efc1b9f0e5fb46cbc19959c9ea24e9410cf98"
+    condition     = sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data) == "863f5ecda83fb18a888cf16bda70be49c0d8e5762b87412dd9f79e9ce9b4078f"
     error_message = "the second worker user data must render as before: got ${try(nonsensitive(sha256(proxmox_virtual_environment_file.node_init["1"].source_raw[0].data)), "?")}"
   }
 }

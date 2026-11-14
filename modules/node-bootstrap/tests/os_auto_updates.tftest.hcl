@@ -42,8 +42,8 @@ run "updates_never_reboot_and_never_touch_rke2" {
   }
 
   assert {
-    condition     = strcontains(local.os_auto_updates_script, "yum-utils")
-    error_message = "needs-restarting comes from yum-utils and is what reports a reboot is due"
+    condition     = !strcontains(local.os_auto_updates_script, "dnf install")
+    error_message = "dnf-automatic and yum-utils are baked into the image, so the boot installs no package"
   }
 }
 
