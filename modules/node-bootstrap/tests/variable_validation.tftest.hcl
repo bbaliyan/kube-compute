@@ -22,9 +22,9 @@ run "node_role_accepts_worker" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
   }
 }
 
@@ -126,4 +126,64 @@ run "provider_steps_accepts_unique_names" {
       { name = "route", commands = [["true"]] },
     ]
   }
+}
+
+run "worker_accepts_an_ssm_agent_token" {
+  command = plan
+
+  variables {
+    node_role            = "worker"
+    registration_address = "10.0.0.10"
+    agent_token_ssm = {
+      parameter = "/kube-compute/example/agent-token"
+      region    = "eu-west-1"
+    }
+  }
+
+  assert {
+    condition     = strcontains(local.secrets_env, "AGENT_TOKEN_SSM_PARAMETER='/kube-compute/example/agent-token'") && strcontains(local.secrets_env, "AGENT_TOKEN_SSM_REGION='eu-west-1'") && strcontains(local.secrets_env, "AGENT_TOKEN=''")
+    error_message = "the SSM parameter and region must reach secrets.env, with no literal token"
+  }
+}
+
+run "worker_with_a_literal_token_has_no_ssm_values" {
+  command = plan
+
+  variables {
+    node_role            = "worker"
+    registration_address = "10.0.0.10"
+    agent_token          = "it's-a-token"
+  }
+
+  assert {
+    condition     = strcontains(local.secrets_env, "AGENT_TOKEN='it'\\''s-a-token'") && strcontains(local.secrets_env, "AGENT_TOKEN_SSM_PARAMETER=''")
+    error_message = "a literal token must be single-quoted with the POSIX escape"
+  }
+}
+
+run "worker_without_an_agent_token_is_rejected" {
+  command = plan
+
+  variables {
+    node_role            = "worker"
+    registration_address = "10.0.0.10"
+  }
+
+  expect_failures = [var.agent_token_ssm]
+}
+
+run "worker_with_both_agent_token_forms_is_rejected" {
+  command = plan
+
+  variables {
+    node_role            = "worker"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
+    agent_token_ssm = {
+      parameter = "/p"
+      region    = "eu-west-1"
+    }
+  }
+
+  expect_failures = [var.agent_token_ssm]
 }

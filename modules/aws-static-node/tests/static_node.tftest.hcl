@@ -131,10 +131,10 @@ run "each_node_gets_its_own_hostname_and_the_groups_taints" {
   assert {
     condition = anytrue([
       for f in yamldecode(module.node_bootstrap["1"].cloud_init_user_data).write_files :
-      !strcontains(base64decode(f.content), "/kube-compute/example/agent-token'\nAGENT")
+      strcontains(base64decode(f.content), "AGENT_TOKEN_SSM_PARAMETER='/kube-compute/example/agent-token'") && strcontains(base64decode(f.content), "AGENT_TOKEN=''")
       if f.path == "/opt/kube-compute/secrets.env"
     ])
-    error_message = "the join token itself must never be in user_data -- only the SSM fetch command that retrieves it at boot"
+    error_message = "the join token itself must never be in user_data -- only the SSM parameter name that the node reads it from at boot"
   }
   assert {
     condition     = length(output.node_taints) == 1 && output.node_taints[0] == "dedicated=true:NoSchedule"
