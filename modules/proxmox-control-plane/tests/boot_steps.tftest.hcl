@@ -113,9 +113,9 @@ run "no_aws_step_reaches_a_proxmox_node" {
   assert {
     condition = !anytrue([
       for name in concat(module.node_bootstrap["0"].boot_steps, module.node_bootstrap["1"].boot_steps) :
-      contains(["ssm-agent", "aws-provider-id"], name)
+      contains(["aws-provider-id"], name)
     ])
-    error_message = "SSM Agent and the AWS provider ID are AWS steps"
+    error_message = "the AWS provider ID is an AWS step"
   }
   assert {
     condition     = !strcontains(nonsensitive(module.node_bootstrap["0"].cloud_init_user_data), "169.254.169.254") && !strcontains(nonsensitive(module.node_bootstrap["0"].cloud_init_user_data), "amazon-ssm-agent")

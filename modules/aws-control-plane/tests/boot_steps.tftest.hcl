@@ -40,7 +40,6 @@ run "genesis_and_joining_server_steps" {
 
   assert {
     condition = module.node_bootstrap["0"].boot_steps == [
-      "ssm-agent",
       "kubelet-reserved",
       "graceful-shutdown",
       "prelude",
@@ -63,7 +62,6 @@ run "genesis_and_joining_server_steps" {
 
   assert {
     condition = module.node_bootstrap["1"].boot_steps == [
-      "ssm-agent",
       "kubelet-reserved",
       "graceful-shutdown",
       "prelude",
@@ -92,8 +90,8 @@ run "the_provider_id_step_is_added_when_asked_for" {
   }
 
   assert {
-    condition     = slice(module.node_bootstrap["0"].boot_steps, 0, 3) == ["ssm-agent", "aws-provider-id", "kubelet-reserved"]
-    error_message = "aws_provider_id must add its step after SSM Agent and before the module's own commands"
+    condition     = slice(module.node_bootstrap["0"].boot_steps, 0, 2) == ["aws-provider-id", "kubelet-reserved"]
+    error_message = "aws_provider_id must add its step first, before the module's own commands"
   }
 }
 

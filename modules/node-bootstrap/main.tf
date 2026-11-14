@@ -604,7 +604,6 @@ locals {
   os_auto_updates_script = <<-EOT
     set -eu
     test -e /run/kube-compute-boot-complete || { echo 'kube-compute: the boot program did not complete' >&2; exit 1; }
-    dnf install -y dnf-automatic yum-utils
     dnf config-manager --save --setopt=excludepkgs=rke2-server,rke2-agent,rke2-common
     install -d -m 0755 /etc/systemd/system/dnf-automatic-install.timer.d
     printf '[Timer]\nOnBootSec=15min\n' >/etc/systemd/system/dnf-automatic-install.timer.d/10-on-boot.conf

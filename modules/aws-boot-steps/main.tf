@@ -2,10 +2,6 @@
 # The boot steps that only an AWS node needs. They are cloud-init commands for
 # node-bootstrap's provider_steps input. This module renders text and creates nothing.
 locals {
-  # AlmaLinux AMIs likely ship SSM Agent but do not always start it. SSM is the
-  # operator's access path to an AWS node, not only a bootstrap transport.
-  ssm_agent_script = "systemctl enable --now amazon-ssm-agent 2>/dev/null || true"
-
   # A config.yaml.d drop-in, because only the node itself knows its instance.
   provider_id_script = <<-EOT
     set -eu
@@ -17,8 +13,5 @@ locals {
     printf 'kubelet-arg+:\n  - "provider-id=aws:///%s/%s"\nnode-label+:\n  - "node.kubernetes.io/instance-type=%s"\n' "$ZONE" "$INSTANCE_ID" "$INSTANCE_TYPE" >/etc/rancher/rke2/config.yaml.d/50-aws-instance.yaml
   EOT
 
-  steps = concat(
-    [{ name = "ssm-agent", commands = [["/bin/sh", "-c", local.ssm_agent_script]] }],
-    var.aws_provider_id ? [{ name = "aws-provider-id", commands = [["/bin/sh", "-c", local.provider_id_script]] }] : [],
-  )
+  steps = var.aws_provider_id ? [{ name = "aws-provider-id", commands = [["/bin/sh", "-c", local.provider_id_script]] }] : []
 }
