@@ -25,4 +25,15 @@ Pass `module.vendor_data.data` to the `source_raw.data` of a `proxmox_virtual_en
 ## Inputs and outputs
 
 <!-- BEGIN_TF_DOCS -->
+### Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_ssh_authorized_keys"></a> [ssh\_authorized\_keys](#input\_ssh\_authorized\_keys) | SSH public keys for the default cloud user. Null writes no ssh\_authorized\_keys key. | `list(string)` | `null` | no |
+
+### Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_data"></a> [data](#output\_data) | The '#cloud-config' vendor data document, for a proxmox\_virtual\_environment\_file snippet wired to initialization.vendor\_data\_file\_id. |
 <!-- END_TF_DOCS -->

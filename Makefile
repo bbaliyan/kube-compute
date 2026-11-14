@@ -84,7 +84,8 @@ $(DOC_MODULES:%=docs/%): docs/%:
 docs-check: $(DOC_MODULES:%=docs-check/%)
 
 $(DOC_MODULES:%=docs-check/%): docs-check/%:
-	@terraform-docs --config $(CURDIR)/.terraform-docs.yml --output-check $* 		|| { echo "$*/README.md has stale tables: run make docs"; exit 1; }
+	@terraform-docs --config $(CURDIR)/.terraform-docs.yml --output-check $* \
+		|| { echo "$*/README.md has stale tables: run make docs"; exit 1; }
 
 # tofu init writes .terraform and may edit a lock file, so every init, validate
 # and test runs in a copy and the tree stays clean. examples/ reach modules/ by

@@ -79,4 +79,26 @@ alone wouldn't rerun `nsupdate` with the new values.
 ## Inputs and outputs
 
 <!-- BEGIN_TF_DOCS -->
+### Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_dns_server_address"></a> [dns\_server\_address](#input\_dns\_server\_address) | Hostname or IPv4 address of the RFC2136-compliant DNS server to publish to. | `string` | n/a | yes |
+| <a name="input_dns_server_port"></a> [dns\_server\_port](#input\_dns\_server\_port) | Port the DNS server accepts dynamic updates on. | `number` | `53` | no |
+| <a name="input_dns_transport"></a> [dns\_transport](#input\_dns\_transport) | Transport for the dynamic update: 'udp', 'tcp', 'udp4', 'udp6', 'tcp4', or 'tcp6'. | `string` | `"udp"` | no |
+| <a name="input_dns_zone"></a> [dns\_zone](#input\_dns\_zone) | DNS zone the record belongs to. Must be an FQDN including the trailing dot (e.g. 'lan.'). | `string` | n/a | yes |
+| <a name="input_enabled"></a> [enabled](#input\_enabled) | Whether to publish the record. false is a no-op (no resource created). | `bool` | `true` | no |
+| <a name="input_record_addresses"></a> [record\_addresses](#input\_record\_addresses) | IPv4 addresses this record should resolve to. A record set, not one record per address — every address is published under the same name. | `list(string)` | n/a | yes |
+| <a name="input_record_name"></a> [record\_name](#input\_record\_name) | Record name, relative to dns\_zone (e.g. 'api.my-cluster' for zone 'example.test.' registers 'api.my-cluster.example.test.'). | `string` | n/a | yes |
+| <a name="input_record_ttl"></a> [record\_ttl](#input\_record\_ttl) | TTL in seconds for the record. | `number` | `300` | no |
+| <a name="input_tsig_key_algorithm"></a> [tsig\_key\_algorithm](#input\_tsig\_key\_algorithm) | TSIG key algorithm: 'hmac-md5', 'hmac-sha1', 'hmac-sha256', or 'hmac-sha512'. Must match how the key was created on the DNS server. | `string` | n/a | yes |
+| <a name="input_tsig_key_name"></a> [tsig\_key\_name](#input\_tsig\_key\_name) | Name of the TSIG key configured on the DNS server, used to authenticate the dynamic update. | `string` | n/a | yes |
+| <a name="input_tsig_key_secret"></a> [tsig\_key\_secret](#input\_tsig\_key\_secret) | Base64-encoded TSIG shared secret. Sensitive — supply via a TF\_VAR\_* environment variable, never committed. Deliberately kept out of every tracked resource attribute (see README) so it never lands in state; passed to nsupdate only as a process environment variable at apply/destroy time. | `string` | n/a | yes |
+
+### Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_fqdn"></a> [fqdn](#output\_fqdn) | The fully-qualified name this module registered (record\_name + dns\_zone). |
+| <a name="output_record_created"></a> [record\_created](#output\_record\_created) | Whether the record was actually published this run (mirrors var.enabled). |
 <!-- END_TF_DOCS -->
