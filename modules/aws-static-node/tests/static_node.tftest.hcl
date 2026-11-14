@@ -212,3 +212,22 @@ run "an_image_is_required" {
   }
   expect_failures = [var.os_image_name]
 }
+
+run "imds_hop_limit_can_drop_to_one" {
+  command = plan
+
+  override_data {
+    target = data.aws_subnet.selected
+    values = { availability_zone = "eu-west-1a", vpc_id = "vpc-mock" }
+  }
+
+  variables {
+    group_name     = "platform"
+    imds_hop_limit = 1
+  }
+
+  assert {
+    condition     = alltrue([for k, i in aws_instance.node : i.metadata_options[0].http_tokens == "required" && i.metadata_options[0].http_put_response_hop_limit == 1])
+    error_message = "imds_hop_limit = 1 must reach every instance, and IMDSv2 must stay required"
+  }
+}

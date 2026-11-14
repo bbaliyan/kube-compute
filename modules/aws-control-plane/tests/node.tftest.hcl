@@ -54,3 +54,25 @@ run "node_resources" {
     error_message = "node_iam_role_name must expose the role of the shared IAM module"
   }
 }
+
+run "imds_hop_limit_defaults_to_three_and_can_drop_to_one" {
+  command = plan
+
+  assert {
+    condition     = aws_instance.control_plane["0"].metadata_options[0].http_put_response_hop_limit == 3
+    error_message = "the default hop limit must stay 3 so pods behind Cilium can reach the metadata service"
+  }
+}
+
+run "imds_hop_limit_one_reaches_the_instance" {
+  command = plan
+
+  variables {
+    imds_hop_limit = 1
+  }
+
+  assert {
+    condition     = aws_instance.control_plane["0"].metadata_options[0].http_put_response_hop_limit == 1 && aws_instance.control_plane["0"].metadata_options[0].http_tokens == "required"
+    error_message = "imds_hop_limit = 1 must reach the instance, and IMDSv2 must stay required"
+  }
+}

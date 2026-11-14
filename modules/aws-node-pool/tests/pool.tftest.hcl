@@ -156,3 +156,16 @@ run "an_image_is_required" {
   }
   expect_failures = [var.os_image_name]
 }
+
+run "imds_hop_limit_can_drop_to_one" {
+  command = plan
+
+  variables {
+    imds_hop_limit = 1
+  }
+
+  assert {
+    condition     = alltrue([for lt in aws_launch_template.node : lt.metadata_options[0].http_tokens == "required" && lt.metadata_options[0].http_put_response_hop_limit == 1])
+    error_message = "imds_hop_limit = 1 must reach every launch template, and IMDSv2 must stay required"
+  }
+}
