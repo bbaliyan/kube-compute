@@ -322,10 +322,11 @@ resource "aws_route53_record" "platform_wildcard" {
   records = values(module.static_nodes[var.platform_node_group].private_ips)
 }
 
-# The token issuer and per-workload roles for pod identity. Nothing uses them yet: the node role
-# keeps every permission it has.
+# The token issuer and per-workload roles for pod identity, off by default. Nothing uses them yet:
+# the node role keeps every permission it has.
 module "pod_identity" {
   source = "../aws-pod-identity"
+  count  = var.pod_identity_enabled ? 1 : 0
 
   cluster_name = var.cluster_name
   aws_region   = var.aws_region

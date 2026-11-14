@@ -401,3 +401,9 @@ variable "external_secrets_ssm_path_prefixes" {
   type        = list(string)
   default     = []
 }
+
+variable "pod_identity_enabled" {
+  description = "Create the pod identity token issuer (a private S3 bucket behind CloudFront) and one IAM role per platform workload. False creates nothing. Later changes that use pod identity depend on this input."
+  type        = bool
+  default     = false
+}

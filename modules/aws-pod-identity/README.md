@@ -18,6 +18,10 @@ AWS only. Proxmox has no instance metadata service, so it has nothing to replace
   - `external_dns`: only when `external_dns_hosted_zone_ids` is not empty.
   - `external_secrets`: only when `external_secrets_ssm_path_prefixes` is not empty.
 
+## Cost
+
+Anyone can request the public files. A long cache (1 hour to 24 hours) caps the requests that reach the bucket. You should set an AWS Budget alert on the account. That is the job of the consumer.
+
 ## The signing keys
 
 The module does not create `keys.json`. A later step must publish the public signing keys of the cluster to that one object.

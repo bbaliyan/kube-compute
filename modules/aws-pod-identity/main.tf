@@ -17,9 +17,6 @@ locals {
 
   account_id = data.aws_caller_identity.pod_identity.account_id
 
-  # CachingOptimized, a policy that AWS manages and shares across accounts.
-  cloudfront_caching_optimized_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
-
   ssm_parameter_arns = [for prefix in var.external_secrets_ssm_path_prefixes : "arn:aws:ssm:${var.aws_region}:${local.account_id}:parameter${prefix}*"]
 
   # Inline JSON: mock_provider cannot evaluate data.aws_iam_policy_document.
@@ -210,6 +207,28 @@ resource "aws_cloudfront_origin_access_control" "issuer" {
   signing_protocol                  = "sigv4"
 }
 
+# Anyone can request the public files, so a long cache caps the requests that reach the bucket.
+resource "aws_cloudfront_cache_policy" "issuer" {
+  name        = "kube-compute-${var.cluster_name}-oidc"
+  min_ttl     = 3600
+  default_ttl = 86400
+  max_ttl     = 86400
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_gzip   = true
+    enable_accept_encoding_brotli = true
+    cookies_config {
+      cookie_behavior = "none"
+    }
+    headers_config {
+      header_behavior = "none"
+    }
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "issuer" {
   enabled         = true
   is_ipv6_enabled = true
@@ -229,8 +248,19 @@ resource "aws_cloudfront_distribution" "issuer" {
     viewer_protocol_policy = "https-only"
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = local.cloudfront_caching_optimized_policy_id
+    cache_policy_id        = aws_cloudfront_cache_policy.issuer.id
     compress               = true
+  }
+
+  # Before keys.json is published the bucket answers 403. Cache that for seconds only.
+  custom_error_response {
+    error_code            = 403
+    error_caching_min_ttl = 10
+  }
+
+  custom_error_response {
+    error_code            = 404
+    error_caching_min_ttl = 10
   }
 
   restrictions {
