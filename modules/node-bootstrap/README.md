@@ -122,8 +122,10 @@ The module also writes the files the program reads:
   that the rejoin probe found and, on an agent, the fetched token.
 - **`node.env`** (0644) — configuration for the program. Every key is always defined,
   empty where a role does not use it, so the program runs under `set -u`.
-- **`secrets.env`** (0600), on an agent only — the agent token fetch command. The
-  program deletes it when the boot succeeds. If the boot fails, it stays for diagnosis.
+- **`secrets.env`** (0600), on an agent only — the agent token, or the SSM parameter name
+  and region the node reads it from. The program deletes it when the boot succeeds. If the
+  boot fails, it stays for diagnosis. cloud-init keeps its own copy of the user data, so
+  the token is not gone from the node.
 
 The trusted CA is a `write_files` entry and a `runcmd` entry (`update-ca-trust extract`).
 There is no registry mirror check at boot.
