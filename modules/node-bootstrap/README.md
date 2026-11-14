@@ -260,3 +260,8 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
   runs `agent_token_fetch_command`, to read the agent token from the provider's secret store.
 - `aws-node-pool` sets `set_hostname = false`, because every member of a pool shares one
   rendered payload.
+
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

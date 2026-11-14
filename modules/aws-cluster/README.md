@@ -299,6 +299,11 @@ it is `Ready`.
 Autoscaled nodes are not affected: an Auto Scaling group gives new user data only to
 the instances it launches later.
 
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->
+
 ## Testing
 
     cd modules/aws-cluster

@@ -75,3 +75,8 @@ alone wouldn't rerun `nsupdate` with the new values.
   `dns_zone`/`record_name` from a cluster's naming convention — the caller's
   job (e.g. `proxmox-control-plane` derives these from its own
   `cluster_fqdn`/`cluster_domain` locals).
+
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

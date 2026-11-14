@@ -142,3 +142,7 @@ Inside `proxmox-cluster`, put `module.control_plane.` before the resource type.
 
 Do not replace several VMs in one apply: etcd loses its quorum.
 
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

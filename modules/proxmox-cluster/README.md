@@ -240,3 +240,8 @@ exactly as before, applied as separate Terragrunt units with a `dependency` bloc
 carrying `cluster_agent_token` between them. `proxmox-cluster` is an additional
 option for consumers who want a single directory/state per cluster — it does not
 deprecate, replace, or require migrating the split layout.
+
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

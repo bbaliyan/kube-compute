@@ -55,6 +55,11 @@ security group; ingress runs on the platform node.
 Pass the control plane's `subnet_id`: an EBS volume cannot cross availability
 zones.
 
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->
+
 ## Testing
 
     cd modules/aws-node-pool

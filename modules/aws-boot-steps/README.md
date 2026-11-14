@@ -13,7 +13,5 @@ cluster-autoscaler and the AWS cloud controller manager find the instance of a n
 
 ## Inputs and outputs
 
-| Name | Purpose |
-|------|---------|
-| `aws_provider_id` | Turns on the `aws-provider-id` step. Default `false`. |
-| `steps` | A list of `{ name, commands }` for `provider_steps`. |
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

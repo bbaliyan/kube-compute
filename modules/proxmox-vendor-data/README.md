@@ -21,3 +21,8 @@ module "vendor_data" {
 ```
 
 Pass `module.vendor_data.data` to the `source_raw.data` of a `proxmox_virtual_environment_file` snippet.
+
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

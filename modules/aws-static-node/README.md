@@ -122,3 +122,8 @@ replace the node on purpose.
 
 Inside `aws-cluster`, the address is
 `module.<name>.module.static_nodes["<group>"].aws_instance.node["1"]`.
+
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

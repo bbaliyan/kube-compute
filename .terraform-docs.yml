@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# Run by `make docs` and `make docs-check` for each module that has a README.
+# The tables go between the BEGIN_TF_DOCS and END_TF_DOCS markers in the README.
+formatter: "markdown table"
+
+sort:
+  enabled: true
+  by: name
+
+content: |-
+  {{ .Inputs }}
+
+  {{ .Outputs }}
+
+output:
+  file: README.md
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+settings:
+  indent: 3
+  escape: true
+  default: true
+  required: true
+  type: true

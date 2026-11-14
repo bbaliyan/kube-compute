@@ -13,21 +13,8 @@ The `files` output carries the TSIG key, so it is sensitive.
 
 ## Inputs
 
-| Name | Purpose |
-|------|---------|
-| `cluster_name` | Required. Part of the iSCSI initiator name. |
-| `node_name` | Required. Names the iSCSI initiator when `node_fqdn_label` is null. |
-| `node_fqdn_label` | Short label that names the iSCSI initiator. Default `null`, which uses `node_name`. |
-| `iscsi_initiator_enabled` | Turns on the `iscsi-initiator` step. Default `true`. |
-| `dns_self_register_zone` | DNS zone, with a trailing dot, for the self-registered record. Default `null`, which turns the step off. |
-| `dns_self_register_record_name` | Record name, relative to the zone. Required when the zone is set. |
-| `dns_self_register_ttl` | TTL of the record, in seconds. Default `30`. |
-| `dns_server_address` | Address of the RFC2136 DNS server. Required when the zone is set. |
-| `dns_server_port` | Port of the DNS server. Default `53`. |
-| `dns_transport` | Transport of `nsupdate`: `udp`, `tcp`, `udp4`, `udp6`, `tcp4` or `tcp6`. Default `udp`. |
-| `tsig_key_name` | Name of the TSIG key. Required when the zone is set. |
-| `tsig_key_algorithm` | Algorithm of the TSIG key. Default `hmac-sha256`. |
-| `tsig_key_secret` | Base64 TSIG key secret. Sensitive. Required when the zone is set. |
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->
 
 The `steps` and `files` outputs are described above.
 

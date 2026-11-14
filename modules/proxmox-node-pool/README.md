@@ -71,3 +71,8 @@ Changing any of `node-bootstrap`'s inputs after a worker's first boot has no eff
 that already-running worker — cloud-init reads its user-data once, on first boot, and
 the rendered snippet is stable/reused rather than triggering a VM replacement. Day-2
 config changes need a new worker (replace).
+
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->

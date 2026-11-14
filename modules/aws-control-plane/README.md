@@ -202,6 +202,11 @@ Team-specific operational policy is **not** in this module — e.g. a schedule t
 starts the nodes. `aws-cluster` has one, `power_schedule`. Used on its own, this module needs an
 `aws_scheduler_schedule` in your own config referencing the `instance_id` output.
 
+## Inputs and outputs
+
+<!-- BEGIN_TF_DOCS -->
+<!-- END_TF_DOCS -->
+
 ## Testing
 
     cd modules/aws-control-plane
