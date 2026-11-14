@@ -28,12 +28,12 @@ run "user_data_is_unchanged" {
   command = plan
 
   assert {
-    condition     = sha256(aws_instance.node["1"].user_data_base64) == "b375d5b8b0b2ce5563a74a1f3665175323d7ce4127976e0b402affdc8469c9f7"
+    condition     = sha256(aws_instance.node["1"].user_data_base64) == "868e80703a1fa1cfebfe3e296f8a95125896bdc816faf70e537545d480a478ca"
     error_message = "the first node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.node["1"].user_data_base64)), "?")}"
   }
 
   assert {
-    condition     = sha256(aws_instance.node["2"].user_data_base64) == "5ea251dfcbd8d0cbe871c3d97ad550049310759a80c216dc87cfcbd3679594c0"
+    condition     = sha256(aws_instance.node["2"].user_data_base64) == "599811906a93f2b6ac493b0579c2ee51690c00a0798a0769b31feecf667896cb"
     error_message = "the second node user data must render as before: got ${try(nonsensitive(sha256(aws_instance.node["2"].user_data_base64)), "?")}"
   }
 }

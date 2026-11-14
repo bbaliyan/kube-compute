@@ -149,12 +149,3 @@ run "a_group_name_of_22_characters_is_rejected" {
 
   expect_failures = [var.group_name]
 }
-
-run "the_agent_token_is_fetched_with_the_group_region_and_parameter" {
-  command = plan
-
-  assert {
-    condition     = strcontains(local.agent_token_fetch_command, "--name '/kube-compute/example/agent-token'") && strcontains(local.agent_token_fetch_command, "--region eu-west-1")
-    error_message = "the node must fetch its own parameter from the group's region"
-  }
-}

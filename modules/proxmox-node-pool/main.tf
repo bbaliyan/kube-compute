@@ -22,10 +22,6 @@ locals {
   # rejected, duplicate hostname".
   fqdn_suffix = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
 
-  # Proxmox-native delivery: the token is embedded verbatim into this pool's own
-  # cloud-init snippet (no secret store to fetch from), unlike AWS's SSM fetch command.
-  agent_token_fetch_command = "echo '${var.cluster_agent_token}'"
-
   # Computed independently — see proxmox-control-plane's identical local for the full
   # reasoning. effective_registration_address below falls back to this when the caller
   # didn't pass var.registration_address explicitly (the no-DNS case). Guards
@@ -189,17 +185,17 @@ module "node_bootstrap" {
 
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
-  cluster_name              = var.cluster_name
-  node_name                 = local.worker_names[each.key]
-  node_fqdn_label           = "${var.pool_name}-${each.key}"
-  cluster_fqdn_suffix       = local.fqdn_suffix
-  node_role                 = "worker"
-  registration_address      = local.effective_registration_address
-  agent_token_fetch_command = local.agent_token_fetch_command
-  node_labels               = merge({ "kube-compute.io/node-group" = var.pool_name }, var.extra_node_labels)
-  node_taints               = var.node_taints
-  trusted_ca_pem            = var.trusted_ca_pem
-  registry_mirror_url       = var.registry_mirror_url
+  cluster_name         = var.cluster_name
+  node_name            = local.worker_names[each.key]
+  node_fqdn_label      = "${var.pool_name}-${each.key}"
+  cluster_fqdn_suffix  = local.fqdn_suffix
+  node_role            = "worker"
+  registration_address = local.effective_registration_address
+  agent_token          = var.cluster_agent_token
+  node_labels          = merge({ "kube-compute.io/node-group" = var.pool_name }, var.extra_node_labels)
+  node_taints          = var.node_taints
+  trusted_ca_pem       = var.trusted_ca_pem
+  registry_mirror_url  = var.registry_mirror_url
   # Same list this module's own VM network config uses — see node-bootstrap's
   # dns_servers variable for why a worker's kubelet needs this too (every
   # pod scheduled on it inherits the same node-search-domain collision).

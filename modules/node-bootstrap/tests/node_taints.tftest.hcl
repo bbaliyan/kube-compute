@@ -11,10 +11,10 @@ run "worker_renders_every_taint_quoted" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
-    node_labels               = { "kube-compute.io/role" = "dedicated" }
+    node_role            = "worker"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
+    node_labels          = { "kube-compute.io/role" = "dedicated" }
     node_taints = [
       "dedicated=true:NoSchedule",
       "kube-compute.io/drain=pending:NoExecute",
@@ -47,9 +47,9 @@ run "empty_list_renders_no_taint_key" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
   }
 
   assert {

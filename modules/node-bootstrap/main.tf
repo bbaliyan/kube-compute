@@ -417,10 +417,12 @@ locals {
     "",
   ])
 
-  # Worker only. The fetch command can hold a literal token, so the file is 0600.
+  # Worker only. The file can hold the token itself, so it is 0600. The boot step only reads it.
   secrets_env = join("\n", [
     "# SPDX-License-Identifier: Apache-2.0",
-    "AGENT_TOKEN_FETCH_COMMAND='${replace(var.agent_token_fetch_command != null ? var.agent_token_fetch_command : "", "'", "'\\''")}'",
+    "AGENT_TOKEN='${replace(var.agent_token != null ? var.agent_token : "", "'", "'\\''")}'",
+    "AGENT_TOKEN_SSM_PARAMETER='${replace(var.agent_token_ssm != null ? var.agent_token_ssm.parameter : "", "'", "'\\''")}'",
+    "AGENT_TOKEN_SSM_REGION='${replace(var.agent_token_ssm != null ? var.agent_token_ssm.region : "", "'", "'\\''")}'",
     "",
   ])
 

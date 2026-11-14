@@ -28,7 +28,6 @@ locals {
   }
 
   # Run on the node at join time, so the token is never in user_data.
-  agent_token_fetch_command = "aws ssm get-parameter --name '${var.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
 
   # node-group is derived from group_name so a nodeSelector needs no separately
   # passed label duplicating a name the caller already gave.
@@ -73,22 +72,25 @@ module "node_bootstrap" {
   source   = "../node-bootstrap"
   for_each = local.node_keys
 
-  cluster_name              = var.cluster_name
-  node_name                 = local.node_names[each.key]
-  node_fqdn_label           = "${var.group_name}-${each.key}"
-  cluster_fqdn_suffix       = var.cluster_fqdn_suffix
-  node_role                 = "worker"
-  registration_address      = var.registration_address
-  agent_token_fetch_command = local.agent_token_fetch_command
-  node_labels               = local.node_labels
-  node_taints               = var.node_taints
-  trusted_ca_pem            = var.trusted_ca_pem
-  trusted_ca_in_image       = var.trusted_ca_in_image
-  registry_mirror_url       = var.registry_mirror_url
-  dns_servers               = var.dns_servers
-  provider_steps            = module.boot_steps.steps
-  graceful_shutdown         = var.graceful_shutdown
-  os_auto_updates           = var.os_auto_updates
+  cluster_name         = var.cluster_name
+  node_name            = local.node_names[each.key]
+  node_fqdn_label      = "${var.group_name}-${each.key}"
+  cluster_fqdn_suffix  = var.cluster_fqdn_suffix
+  node_role            = "worker"
+  registration_address = var.registration_address
+  agent_token_ssm = {
+    parameter = var.agent_token_ssm_parameter
+    region    = var.aws_region
+  }
+  node_labels         = local.node_labels
+  node_taints         = var.node_taints
+  trusted_ca_pem      = var.trusted_ca_pem
+  trusted_ca_in_image = var.trusted_ca_in_image
+  registry_mirror_url = var.registry_mirror_url
+  dns_servers         = var.dns_servers
+  provider_steps      = module.boot_steps.steps
+  graceful_shutdown   = var.graceful_shutdown
+  os_auto_updates     = var.os_auto_updates
 }
 
 # No depends_on: RKE2's agent retries its join indefinitely, so a worker booting
