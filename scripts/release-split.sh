@@ -183,6 +183,41 @@ EOF
   fi
 } > "$target_dir/README.md"
 
+# A README links to a sibling module as "../<module>/", which is where that
+# module sits in kube-compute. Point each link at the module's new path.
+for mod in "${modules[@]}"; do
+  from="${dest[$mod]}"
+  [[ -f "$target_dir/$from/README.md" ]] || continue
+  for other in "${modules[@]}"; do
+    [[ "$other" == "$mod" ]] && continue
+    to="${dest[$other]}"
+    if [[ "$from" == "." ]]; then
+      new="./$to"
+    elif [[ "$to" == "." ]]; then
+      new="../.."
+    else
+      new="../${to#modules/}"
+    fi
+    OLD="../$other/" NEW="$new/" perl -pi -e \
+      's{\]\(\Q$ENV{OLD}\E}{"](" . $ENV{NEW}}ge' "$target_dir/$from/README.md"
+  done
+done
+
+# Every relative link in a README must now resolve inside the tree.
+unresolved=0
+for mod in "${modules[@]}"; do
+  from="$target_dir/${dest[$mod]}"
+  [[ -f "$from/README.md" ]] || continue
+  while read -r link; do
+    [[ -z "$link" ]] && continue
+    if [[ ! -e "$from/$link" ]]; then
+      echo "error: ${dest[$mod]}/README.md links to \"$link\", which does not exist in the tree" >&2
+      unresolved=1
+    fi
+  done < <(grep -oE '\]\(\.{1,2}/[^)#]*' "$from/README.md" | sed -E 's|^\]\(||' | sort -u || true)
+done
+[[ "$unresolved" -eq 0 ]] || exit 1
+
 # variables.tf and outputs.tf must be byte-identical to kube-compute's for
 # every module: that is what lets a consumer swap a kube-compute source for
 # the split repo's or the registry's without touching its inputs.
