@@ -43,6 +43,10 @@ when you change a required input.
 - A release is a tag `vX.Y.Z` on `main`. The release workflow publishes it to the
   provider mirrors, with notes built from the commits since the last release.
   There is no CHANGELOG file. The commit subject is the release note.
+  Before it publishes, the workflow builds each provider's tree and runs
+  `make validate-tree` on a copy of it. That runs `tofu fmt -check`, `tofu init`,
+  `tofu validate` and every `tofu test` file in the root module and in each module
+  under `modules/`. One failure stops the release for that provider.
 - The version is 0.x. A breaking change raises the minor number. Any other change
   raises the patch number.
 - A change is breaking if it removes or renames a module, an input or an output,
