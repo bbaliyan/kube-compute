@@ -17,7 +17,9 @@ locals {
 
   account_id = data.aws_caller_identity.pod_identity.account_id
 
-  ssm_parameter_arns = [for prefix in var.external_secrets_ssm_path_prefixes : "arn:aws:ssm:${var.aws_region}:${local.account_id}:parameter${prefix}*"]
+  ssm_region = coalesce(var.external_secrets_ssm_region, var.aws_region)
+
+  ssm_parameter_arns = [for prefix in var.external_secrets_ssm_path_prefixes : "arn:aws:ssm:${local.ssm_region}:${local.account_id}:parameter${prefix}*"]
 
   # Inline JSON: mock_provider cannot evaluate data.aws_iam_policy_document.
   keys_put_policy_json = jsonencode({
@@ -112,7 +114,7 @@ locals {
             Resource = "*"
             Condition = {
               StringEquals = {
-                "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com"
+                "kms:ViaService" = "ssm.${local.ssm_region}.amazonaws.com"
               }
             }
           },

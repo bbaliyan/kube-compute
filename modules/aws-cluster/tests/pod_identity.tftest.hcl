@@ -104,3 +104,25 @@ run "pod_identity_off_adds_no_platform_parameter_and_no_policy" {
     error_message = "with pod identity off the platform parameters and the roles are as before"
   }
 }
+
+# An ARN is unknown at plan time. The keys must come from the input flags, so the plan can
+# count them. This fails with "unknown" if a key depends on an ARN.
+run "the_platform_parameter_keys_come_from_inputs" {
+  command = plan
+
+  variables {
+    pod_identity_enabled         = true
+    external_dns_hosted_zone_ids = ["Z0123456789ABC"]
+  }
+
+  assert {
+    condition = (
+      sort(keys(local.pod_identity_helm_parameters)) == sort([
+        "awsPodIdentity.enabled",
+        "awsPodIdentity.roles.ebsCsi",
+        "awsPodIdentity.roles.externalDns",
+      ])
+    )
+    error_message = "the keys must follow the flags: the always-on roles and the external-dns zones"
+  }
+}

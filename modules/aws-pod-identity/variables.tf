@@ -11,7 +11,7 @@ variable "cluster_name" {
 }
 
 variable "aws_region" {
-  description = "Region of the SSM parameters that the External Secrets role reads."
+  description = "Region of the cluster. The External Secrets role reads SSM parameters here, unless external_secrets_ssm_region is set."
   type        = string
 }
 
@@ -48,6 +48,12 @@ variable "external_secrets_ssm_path_prefixes" {
     condition     = alltrue([for prefix in var.external_secrets_ssm_path_prefixes : startswith(prefix, "/")])
     error_message = "Every external_secrets_ssm_path_prefixes entry must start with a slash."
   }
+}
+
+variable "external_secrets_ssm_region" {
+  description = "Region of the SSM parameters that the External Secrets role may read. Null uses aws_region."
+  type        = string
+  default     = null
 }
 
 variable "service_accounts" {
