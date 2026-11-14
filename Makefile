@@ -43,7 +43,7 @@ export TF_PLUGIN_CACHE_DIR
 endif
 
 .PHONY: test-commit test-fast test-integration hooks fmt lint-bootstrap lint-scripts \
-	lint-pipelines validate validate-tree scan trivyignore-expiry secrets commit-messages \
+	lint-pipelines validate validate-tree tree-checks scan trivyignore-expiry secrets commit-messages \
 	docs docs-check work $(DOC_MODULES:%=docs/%) $(DOC_MODULES:%=docs-check/%) $(UNITS:%=init/%) $(UNITS:%=validate/%) $(TESTS:%=test/%)
 
 	lint-pipelines lint-tf validate validate-tree scan trivyignore-expiry secrets commit-messages \
@@ -128,11 +128,34 @@ secrets:
 commit-messages:
 	$(CHECKS)/commit-messages.sh "$(BASE_REF)"
 
-# Validates a copy, so tofu init cannot add anything (a lock file hash for this
-# platform, say) to a tree that is about to be committed.
+# Validates a copy of a release tree, so tofu init cannot add anything (a lock
+# file hash for this platform, say) to a tree that is about to be committed.
+# The root and every module under modules/ get init, validate and each test file,
+# in parallel like `validate`. Any failure fails the target and names the unit.
 validate-tree:
-	rm -rf /tmp/validate && cp -r $(TREE) /tmp/validate
-	cd /tmp/validate && tofu fmt -check -recursive && tofu init -backend=false -input=false && tofu validate && tofu test
+	work=$$(mktemp -d) && trap 'rm -rf "$$work"' EXIT && cp -r $(TREE)/. "$$work" && \
+	(cd "$$work" && tofu fmt -check -recursive) && \
+	$(MAKE) --jobs=$(JOBS) --keep-going --output-sync=target --no-print-directory \
+		TREE_WORK="$$work" tree-checks
+
+ifneq ($(TREE_WORK),)
+TREE_UNITS := . $(patsubst $(TREE_WORK)/%/,%,$(wildcard $(TREE_WORK)/modules/*/))
+TREE_TESTS := $(patsubst $(TREE_WORK)/%,%,$(wildcard $(TREE_WORK)/tests/*.tftest.hcl $(TREE_WORK)/modules/*/tests/*.tftest.hcl))
+tree_unit_of = $(if $(filter tests/,$(dir $(1))),.,$(patsubst %/tests/,%,$(dir $(1))))
+
+.PHONY: tree-checks $(TREE_UNITS:%=tree-validate/%) $(TREE_TESTS:%=tree-test/%)
+
+tree-checks: $(TREE_UNITS:%=tree-validate/%) $(TREE_TESTS:%=tree-test/%)
+
+$(TREE_UNITS:%=tree-validate/%): tree-validate/%:
+	@cd $(TREE_WORK)/$* && tofu init -backend=false -input=false >/dev/null && tofu validate \
+		|| { echo "FAILED: validate in $*"; exit 1; }
+
+# One target per test file, so the files of one module run in parallel too.
+$(TREE_TESTS:%=tree-test/%): tree-test/%: tree-validate/$$(call tree_unit_of,$$*)
+	@cd $(TREE_WORK)/$(call tree_unit_of,$*) && tofu test -filter=tests/$(notdir $*) \
+		|| { echo "FAILED: test $*"; exit 1; }
+endif
 
 test-integration: $(addprefix mirror-,$(PROVIDERS))
 
