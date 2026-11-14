@@ -321,3 +321,22 @@ resource "aws_route53_record" "platform_wildcard" {
   ttl     = 60
   records = values(module.static_nodes[var.platform_node_group].private_ips)
 }
+
+# The token issuer and per-workload roles for pod identity, off by default. Nothing uses them yet:
+# the node role keeps every permission it has.
+module "pod_identity" {
+  source = "../aws-pod-identity"
+  count  = var.pod_identity_enabled ? 1 : 0
+
+  cluster_name = var.cluster_name
+  aws_region   = var.aws_region
+  tags = merge(var.extra_tags, {
+    ClusterName = var.cluster_name
+    ManagedBy   = "kube-compute"
+  })
+
+  autoscaling_enabled                = local.autoscaling_enabled
+  autoscaling_group_arns             = local.autoscaling_group_arns
+  external_dns_hosted_zone_ids       = var.external_dns_hosted_zone_ids
+  external_secrets_ssm_path_prefixes = var.external_secrets_ssm_path_prefixes
+}

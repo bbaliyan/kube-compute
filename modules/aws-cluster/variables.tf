@@ -389,3 +389,21 @@ variable "control_plane_node_name_template" {
   default     = null
 }
 
+
+variable "external_dns_hosted_zone_ids" {
+  description = "Route53 hosted zone IDs that external-dns may change through its own pod identity role. An empty list creates no role: external-dns keeps using the node role."
+  type        = list(string)
+  default     = []
+}
+
+variable "external_secrets_ssm_path_prefixes" {
+  description = "SSM parameter path prefixes, such as /platform/, that External Secrets may read through its own pod identity role. Each starts with a slash. An empty list creates no role: External Secrets keeps using the node role."
+  type        = list(string)
+  default     = []
+}
+
+variable "pod_identity_enabled" {
+  description = "Create the pod identity token issuer (a private S3 bucket behind CloudFront) and one IAM role per platform workload. False creates nothing. Later changes that use pod identity depend on this input."
+  type        = bool
+  default     = false
+}

@@ -147,3 +147,18 @@ output "hosted_zone_id" {
   description = "Route53 zone the cluster's records live in, or null when no domain is configured."
   value       = module.control_plane.hosted_zone_id
 }
+
+output "pod_identity_issuer_url" {
+  description = "Null unless pod_identity_enabled. The service account token issuer URL: a CloudFront domain with no trailing slash. The IAM OIDC provider and every pod identity role trust it."
+  value       = one(module.pod_identity[*].issuer_url)
+}
+
+output "pod_identity_role_arns" {
+  description = "Null unless pod_identity_enabled. Map of workload to pod identity IAM role ARN, with the keys ebs_csi, cluster_autoscaler, external_dns and external_secrets. A role that was not created is null."
+  value       = one(module.pod_identity[*].role_arns)
+}
+
+output "pod_identity_keys_put_policy_json" {
+  description = "Null unless pod_identity_enabled. IAM policy that allows s3:PutObject on the one signing keys object. Nothing attaches it yet."
+  value       = one(module.pod_identity[*].keys_put_policy_json)
+}
