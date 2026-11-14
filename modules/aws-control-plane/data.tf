@@ -2,8 +2,6 @@
 # Read-only AWS lookups. No resource blocks belong in this file, ever.
 # The module NEVER creates network fabric — it only reads a subnet (given or default-VPC).
 
-data "aws_caller_identity" "current" {}
-
 data "aws_vpc" "default" {
   count   = local.has_explicit_subnet ? 0 : 1
   default = true
