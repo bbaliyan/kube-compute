@@ -42,13 +42,13 @@ export TF_PLUGIN_CACHE_DIR
 endif
 
 .PHONY: test-commit test-fast test-integration hooks fmt lint-bootstrap lint-scripts \
-	lint-pipelines validate validate-tree scan trivyignore-expiry secrets commit-messages \
-	work $(UNITS:%=init/%) $(UNITS:%=validate/%) $(TESTS:%=test/%)
+	lint-pipelines lint-tf validate validate-tree scan trivyignore-expiry secrets commit-messages \
+	work $(UNITS:%=tflint/%) $(UNITS:%=init/%) $(UNITS:%=validate/%) $(TESTS:%=test/%)
 
 test-commit:
 	work=$$(mktemp -d) && trap 'rm -rf "$$work"' EXIT && \
 	$(MAKE) --jobs=$(JOBS) --output-sync=target --no-print-directory WORK="$$work" \
-		validate scan test-fast lint-scripts lint-pipelines trivyignore-expiry commit-messages
+		validate scan test-fast lint-tf lint-scripts lint-pipelines trivyignore-expiry commit-messages
 
 test-fast: fmt lint-bootstrap secrets
 
@@ -73,6 +73,12 @@ lint-pipelines:
 	tests/check-gitlab-ci.sh
 
 validate: $(UNITS:%=validate/%) $(TESTS:%=test/%)
+
+# Reads the source tree and needs no init (call_module_type is none in .tflint.hcl).
+lint-tf: $(UNITS:%=tflint/%)
+
+$(UNITS:%=tflint/%): tflint/%:
+	tflint --config=$(CURDIR)/.tflint.hcl --chdir=$* --format=compact
 
 # tofu init writes .terraform and may edit a lock file, so every init, validate
 # and test runs in a copy and the tree stays clean. examples/ reach modules/ by

@@ -344,6 +344,7 @@ locals {
     { name = "finish", file = "99-finish.sh", enabled = true },
   ]
 
+  # tflint-ignore: terraform_unused_declarations # read by tests/boot_steps.tftest.hcl
   boot_step_files_on_disk = fileset("${path.module}/files/steps", "*.sh")
 
   boot_steps_enabled = [for step in local.boot_step_catalog : step if step.enabled]
