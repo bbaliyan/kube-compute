@@ -8,6 +8,23 @@
 # removed to save space. A step that does not apply to the role is never in the file.
 # Per-cluster values reach the program as data, in node.env. A heredoc body in a step
 # must never start with "#", because the comment strip would remove that line.
+#
+# Why each step is a script and not cloud-init or an RKE2 manifest. cloud-init runs a list
+# of commands once, in order, and cannot branch on what a command found or wait for a
+# condition. Every step below needs one of these:
+#   - A fact only the booted node has: its IP for node-ip and tls-san (20-node-config-*).
+#   - A choice made from live cluster state. The rejoin probe (10) decides whether this node
+#     starts a new etcd cluster or joins a live one, and may change NODE_ROLE. The steps
+#     that apply to the genesis node only (30, 40, 41, 50, 70, 71) run after that choice.
+#     The skew checks (01, 31) compare the image with a running API server.
+#   - A retry or a wait. A joining server wipes its local state and retries when etcd
+#     refuses a second learner (51). The readiness waits (60, 61) and the CoreDNS wait
+#     before Argo CD (71) poll until the cluster is ready, so a log line means success.
+#   - An ordering that cloud-init cannot hold: the Cilium render comes from the platform
+#     ref cloned at boot (30, 40), and RKE2 reads server/manifests only at its first start.
+# The service starts (50, 52) and the cleanup (99) are here so that they run in that order,
+# after the steps above. Declarative work is not here: files, the trusted CA and the
+# package settings are cloud-init write_files and runcmd entries.
 
 set -euo pipefail
 exec > >(tee -a /var/log/kube-compute-bootstrap.log) 2>&1

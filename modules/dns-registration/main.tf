@@ -5,14 +5,9 @@
 # same operation via nsupdate succeeds. node-bootstrap's genesis self-registration
 # also uses nsupdate.
 # Requires nsupdate (bind-utils/dnsutils) on the machine running `tofu apply`.
-locals {
-  # Same derivation as node-bootstrap's local.nsupdate_flags: -v forces TCP,
-  # -4/-6 pin the address family.
-  nsupdate_flags = trimspace(join(" ", compact([
-    startswith(var.dns_transport, "tcp") ? "-v" : "",
-    endswith(var.dns_transport, "4") ? "-4" : "",
-    endswith(var.dns_transport, "6") ? "-6" : "",
-  ])))
+module "nsupdate_flags" {
+  source    = "../nsupdate-flags"
+  transport = var.dns_transport
 }
 
 # One record set, every address under the same name — not one record per
@@ -48,7 +43,7 @@ resource "terraform_data" "this" {
     record_ttl         = var.record_ttl
     dns_server_address = var.dns_server_address
     dns_server_port    = var.dns_server_port
-    nsupdate_flags     = local.nsupdate_flags
+    nsupdate_flags     = module.nsupdate_flags.flags
     tsig_key_name      = var.tsig_key_name
     tsig_key_algorithm = var.tsig_key_algorithm
   }
