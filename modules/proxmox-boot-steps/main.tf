@@ -2,6 +2,11 @@
 # The boot steps that only a Proxmox node needs. They are cloud-init files and commands
 # for node-bootstrap's provider_steps and provider_files inputs. This module renders text
 # and creates nothing.
+module "nsupdate_flags" {
+  source    = "../nsupdate-flags"
+  transport = var.dns_transport
+}
+
 locals {
   iscsi_enabled  = var.iscsi_initiator_prefix != null
   initiator_name = local.iscsi_enabled ? "${var.iscsi_initiator_prefix}:${var.cluster_name}-${coalesce(var.node_fqdn_label, var.node_name)}" : ""
@@ -11,13 +16,6 @@ locals {
   # nsupdate's `zone` directive requires a fully-qualified (trailing-dot) name, but
   # callers commonly pass a bare zone (e.g. "lan"). Either form works here.
   dns_zone = local.dns_self_register_enabled ? "${trimsuffix(var.dns_self_register_zone, ".")}." : ""
-
-  # nsupdate transport flags: -v forces TCP, -4/-6 pin the address family.
-  nsupdate_flags = trimspace(join(" ", compact([
-    startswith(var.dns_transport, "tcp") ? "-v" : "",
-    endswith(var.dns_transport, "4") ? "-4" : "",
-    endswith(var.dns_transport, "6") ? "-6" : "",
-  ])))
 
   nsupdate_key_path     = "/run/kube-compute-nsupdate.key"
   nsupdate_request_path = "/run/kube-compute-nsupdate.txt"
@@ -50,7 +48,7 @@ locals {
     trap 'rc=$?; rm -f ${local.nsupdate_key_path} ${local.nsupdate_request_path}; [ "$rc" -eq 0 ] || touch /run/kube-compute-step-failed' EXIT
     NODE_IP=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')
     test -n "$NODE_IP"
-    sed "s/@NODE_IP@/$NODE_IP/" ${local.nsupdate_request_path} | nsupdate ${local.nsupdate_flags} -k ${local.nsupdate_key_path}
+    sed "s/@NODE_IP@/$NODE_IP/" ${local.nsupdate_request_path} | nsupdate ${module.nsupdate_flags.flags} -k ${local.nsupdate_key_path}
   EOT
 
   # The iSCSI file replaces the OS-generated random InitiatorName with one derived from
