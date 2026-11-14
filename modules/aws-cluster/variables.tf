@@ -402,6 +402,12 @@ variable "external_secrets_ssm_path_prefixes" {
   default     = []
 }
 
+variable "external_secrets_ssm_region" {
+  description = "Region of the SSM parameters that the External Secrets role may read. Null uses aws_region. The platform secret stores must use the same region."
+  type        = string
+  default     = null
+}
+
 variable "pod_identity_enabled" {
   description = "Create the pod identity token issuer (a private S3 bucket behind CloudFront) and one IAM role per platform workload. False creates nothing. Later changes that use pod identity depend on this input."
   type        = bool

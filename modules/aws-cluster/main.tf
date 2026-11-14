@@ -89,12 +89,21 @@ locals {
     external_secrets   = "externalSecrets"
   }
 
+  # Which roles exist follows the input flags that aws-pod-identity reads, not the ARNs. An ARN
+  # is unknown at plan time, so a filter on it would make the map keys unknown.
+  pod_identity_role_exists = {
+    ebs_csi            = true
+    cluster_autoscaler = local.autoscaling_enabled
+    external_dns       = length(var.external_dns_hosted_zone_ids) > 0
+    external_secrets   = length(var.external_secrets_ssm_path_prefixes) > 0
+  }
+
   pod_identity_helm_parameters = var.pod_identity_enabled ? merge(
     { "awsPodIdentity.enabled" = "true" },
     {
-      for key, arn in one(module.pod_identity[*].role_arns) :
-      "awsPodIdentity.roles.${local.pod_identity_role_parameter_names[key]}" => arn
-      if arn != null
+      for key, name in local.pod_identity_role_parameter_names :
+      "awsPodIdentity.roles.${name}" => module.pod_identity[0].role_arns[key]
+      if local.pod_identity_role_exists[key]
     },
   ) : {}
 
@@ -384,4 +393,5 @@ module "pod_identity" {
   autoscaling_group_arns             = local.autoscaling_group_arn_patterns
   external_dns_hosted_zone_ids       = var.external_dns_hosted_zone_ids
   external_secrets_ssm_path_prefixes = var.external_secrets_ssm_path_prefixes
+  external_secrets_ssm_region        = var.external_secrets_ssm_region
 }
