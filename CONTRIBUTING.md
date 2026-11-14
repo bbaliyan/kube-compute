@@ -16,6 +16,17 @@ commits are blocked by CI. The same check rejects AI-attribution lines
 Run `make test-commit` inside the kube-devenv image. CI runs the same target. Run
 `make hooks` once to run the fast subset (`make test-fast`) before each commit.
 
+## Regenerating the docs
+
+The Inputs and Outputs tables in each module README come from the `.tf` files. They sit between the
+`<!-- BEGIN_TF_DOCS -->` and `<!-- END_TF_DOCS -->` markers. Do not edit them by hand.
+
+1. After you change a variable or an output, run `make docs`.
+2. Commit the changed README files.
+
+If the tables are stale, `make docs-check` fails and tells you to run `make docs`. `make test-commit`
+runs `make docs-check`.
+
 ## Conventions
 
 - OpenTofu: run `tofu fmt` before committing.

@@ -13,7 +13,16 @@ cluster-autoscaler and the AWS cloud controller manager find the instance of a n
 
 ## Inputs and outputs
 
-| Name | Purpose |
-|------|---------|
-| `aws_provider_id` | Turns on the `aws-provider-id` step. Default `false`. |
-| `steps` | A list of `{ name, commands }` for `provider_steps`. |
+<!-- BEGIN_TF_DOCS -->
+### Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_aws_provider_id"></a> [aws\_provider\_id](#input\_aws\_provider\_id) | Registers the node with providerID aws:///<zone>/<instance-id> and the label node.kubernetes.io/instance-type, both read from EC2 metadata before RKE2 starts. cluster-autoscaler and the AWS cloud controller manager find the instance by providerID. | `bool` | `false` | no |
+
+### Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_steps"></a> [steps](#output\_steps) | Value for node-bootstrap's provider\_steps: a list of { name, commands } objects, one per enabled step. |
+<!-- END_TF_DOCS -->

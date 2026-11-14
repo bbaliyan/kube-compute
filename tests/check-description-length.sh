@@ -6,8 +6,8 @@
 # Usage: check-description-length.sh [max-length [directory...]]   (default 300, modules/)
 #
 # Why a script: tofu cannot read the descriptions of a module's own variables,
-# and tflint is not in the kube-devenv image yet. Perl is in the image and
-# reads the quoted strings and heredocs safely.
+# and neither tflint nor terraform-docs checks the length of a description.
+# Perl is in the image and reads the quoted strings and heredocs safely.
 # The script also fails when a description is in a form it cannot read, so a
 # new form cannot hide a long text.
 set -euo pipefail

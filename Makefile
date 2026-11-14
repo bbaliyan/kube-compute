@@ -20,6 +20,7 @@ SHELL := bash
 
 CHECKS    ?= /usr/share/kube-devenv/checks
 MODULES   := $(patsubst %/,%,$(wildcard modules/*/))
+DOC_MODULES := $(foreach m,$(MODULES),$(if $(and $(wildcard $(m)/README.md),$(wildcard $(m)/variables.tf)),$(m)))
 EXAMPLES  := $(patsubst %/,%,$(wildcard examples/*/))
 UNITS     := $(MODULES) $(EXAMPLES)
 WORK      ?= /tmp/kube-compute-work
@@ -42,13 +43,16 @@ export TF_PLUGIN_CACHE_DIR
 endif
 
 .PHONY: test-commit test-fast test-integration hooks fmt lint-bootstrap lint-scripts \
+	lint-pipelines validate validate-tree scan trivyignore-expiry secrets commit-messages \
+	docs docs-check work $(DOC_MODULES:%=docs/%) $(DOC_MODULES:%=docs-check/%) $(UNITS:%=init/%) $(UNITS:%=validate/%) $(TESTS:%=test/%)
+
 	lint-pipelines lint-tf validate validate-tree scan trivyignore-expiry secrets commit-messages \
 	work $(UNITS:%=tflint/%) $(UNITS:%=init/%) $(UNITS:%=validate/%) $(TESTS:%=test/%)
 
 test-commit:
 	work=$$(mktemp -d) && trap 'rm -rf "$$work"' EXIT && \
 	$(MAKE) --jobs=$(JOBS) --output-sync=target --no-print-directory WORK="$$work" \
-		validate scan test-fast lint-tf lint-scripts lint-pipelines trivyignore-expiry commit-messages
+		validate scan test-fast lint-tf docs-check lint-scripts lint-pipelines trivyignore-expiry commit-messages
 
 test-fast: fmt lint-bootstrap secrets
 
@@ -73,6 +77,18 @@ lint-pipelines:
 	tests/check-gitlab-ci.sh
 
 validate: $(UNITS:%=validate/%) $(TESTS:%=test/%)
+
+# The Inputs and Outputs tables of a module README come from its .tf files.
+docs: $(DOC_MODULES:%=docs/%)
+
+$(DOC_MODULES:%=docs/%): docs/%:
+	terraform-docs --config $(CURDIR)/.terraform-docs.yml $*
+
+docs-check: $(DOC_MODULES:%=docs-check/%)
+
+$(DOC_MODULES:%=docs-check/%): docs-check/%:
+	@terraform-docs --config $(CURDIR)/.terraform-docs.yml --output-check $* >/dev/null \
+		|| { echo "$*/README.md has stale tables: run make docs"; exit 1; }
 
 # Reads the source tree and needs no init (call_module_type is none in .tflint.hcl).
 lint-tf: $(UNITS:%=tflint/%)
