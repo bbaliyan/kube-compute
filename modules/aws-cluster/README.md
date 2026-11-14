@@ -124,6 +124,20 @@ After Cilium is Ready, the first server removes the Cilium file from the RKE2 ma
 
 Without it, all of that stays on the control plane.
 
+## Instance metadata service
+
+The instance metadata service serves the node's user data, which holds the cluster join
+token, and the node role's credentials. The platform Application turns on kube-platform's
+`imdsGuard`, a Cilium policy that blocks the service for pods outside an allow list. It
+also always passes `awsRegion`, which the guard needs.
+
+The allow list is the platform's own namespaces: `kube-system`, `external-secrets`,
+`cluster-autoscaler` and `external-dns`. If a workload of yours uses the service, add its
+namespace to `imds_allowed_extra_namespaces`. Pods on the host network are never blocked.
+
+To turn the guard off, pass `imdsGuard = { enabled = false }` in
+`platform_helm_values_object`. That key replaces the module's guard values.
+
 ## Autoscaling
 
 Each `autoscaled_nodes` entry is a role listing the instance types it may
@@ -320,6 +334,7 @@ the instances it launches later.
 | <a name="input_graceful_shutdown"></a> [graceful\_shutdown](#input\_graceful\_shutdown) | How long kubelet delays an OS shutdown to evict pods. critical\_seconds is the part reserved for critical pods and must leave room for an ordinary pod's terminationGracePeriodSeconds. Null disables it. Keep the total well under 2 minutes. | <pre>object({<br/>    seconds          = optional(number, 90)<br/>    critical_seconds = optional(number, 30)<br/>  })</pre> | `{}` | no |
 | <a name="input_hosted_zone_id"></a> [hosted\_zone\_id](#input\_hosted\_zone\_id) | Route53 hosted zone ID. Alternative to hosted\_zone\_name. Requires cluster\_domain to be set. Null = create no record; register DNS yourself using the wildcard\_dns\_name output. | `string` | `null` | no |
 | <a name="input_hosted_zone_name"></a> [hosted\_zone\_name](#input\_hosted\_zone\_name) | Name of the Route53 private hosted zone. Alternative to hosted\_zone\_id. Requires cluster\_domain to be set. | `string` | `null` | no |
+| <a name="input_imds_allowed_extra_namespaces"></a> [imds\_allowed\_extra\_namespaces](#input\_imds\_allowed\_extra\_namespaces) | Namespaces whose pods may reach the instance metadata service, on top of the platform's own (kube-system, external-secrets, cluster-autoscaler, external-dns). Other pods are blocked. A pod in the list can read the node's user data and role credentials. | `list(string)` | `[]` | no |
 | <a name="input_ingress_ports"></a> [ingress\_ports](#input\_ingress\_ports) | TCP ports opened on the control-plane security group: 443/80 Traefik, 6443 Kubernetes API. Never add 22 (SSH). | `list(number)` | <pre>[<br/>  80,<br/>  443,<br/>  6443<br/>]</pre> | no |
 | <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | EC2 instance type (bundles vCPU + memory) for the control-plane node(s). CPU arch (arm64/x86\_64) is derived from the family prefix for AMI selection. | `string` | `"m7g.medium"` | no |
 | <a name="input_orphan_volume_cleanup"></a> [orphan\_volume\_cleanup](#input\_orphan\_volume\_cleanup) | Delete the cluster's dynamically provisioned EBS volumes on destroy, found by their ClusterName tag. Turn it off where a volume must outlive the cluster, for example a Retain PersistentVolume. With it off, a destroy keeps every data volume. | `bool` | `true` | no |

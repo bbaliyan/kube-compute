@@ -26,7 +26,17 @@ locals {
     [for role in module.autoscaled_nodes : role.node_iam_role_name],
   )
 
+  # kube-platform's own allow list, restated: Helm replaces a list in the values, it never
+  # extends it.
+  imds_guard_platform_namespaces = ["kube-system", "external-secrets", "cluster-autoscaler", "external-dns"]
+
   platform_helm_values_object = merge(
+    {
+      imdsGuard = {
+        enabled           = true
+        allowedNamespaces = distinct(concat(local.imds_guard_platform_namespaces, var.imds_allowed_extra_namespaces))
+      }
+    },
     var.platform_helm_values_object,
     {
       for group in var.platform_node_group == null ? [] : [var.platform_node_group] :
@@ -61,12 +71,13 @@ locals {
 
   autoscaling_group_arns = flatten([for role in module.autoscaled_nodes : [for group in values(role.autoscaling_groups) : group.arn]])
 
+  # The metadata service guard refuses to render without awsRegion.
   platform_extra_helm_parameters = merge(
     var.platform_extra_helm_parameters,
+    { awsRegion = var.aws_region },
     local.autoscaling_enabled ? {
       clusterAutoscalerEnabled       = "true"
       clusterAutoscalerCloudProvider = "aws"
-      awsRegion                      = var.aws_region
       clusterAutoscalerCoresTotal    = "0:${local.fixed_cpu_cores + local.autoscaled_cpu_cores}"
       clusterAutoscalerMemoryTotal   = "0:${ceil(local.fixed_memory_mib / 1024) + local.autoscaled_memory_gib}"
     } : {},
