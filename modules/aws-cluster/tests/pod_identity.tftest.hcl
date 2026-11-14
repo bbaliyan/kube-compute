@@ -126,3 +126,20 @@ run "the_platform_parameter_keys_come_from_inputs" {
     error_message = "the keys must follow the flags: the always-on roles and the external-dns zones"
   }
 }
+
+# A root test cannot read the policy inside the module. This run verifies that the input is
+# accepted and planned through the module. The policy itself is tested in aws-pod-identity.
+run "external_dns_record_name_patterns_reach_the_pod_identity_module" {
+  command = plan
+
+  variables {
+    pod_identity_enabled              = true
+    external_dns_hosted_zone_ids      = ["Z0123456789ABC"]
+    external_dns_record_name_patterns = ["sql*.example.com"]
+  }
+
+  assert {
+    condition     = length(module.pod_identity) == 1
+    error_message = "valid patterns must plan with pod identity on"
+  }
+}

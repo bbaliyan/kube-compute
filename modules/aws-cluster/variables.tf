@@ -396,6 +396,17 @@ variable "external_dns_hosted_zone_ids" {
   default     = []
 }
 
+variable "external_dns_record_name_patterns" {
+  description = "Record names that external-dns may change through its own pod identity role. Matched with StringLike, so * works inside a pattern, such as sql*.example.com. Use lower case, no trailing dot, and \\052 for a wildcard label. An empty list allows every record in the zones."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for pattern in var.external_dns_record_name_patterns : length(trimspace(pattern)) > 0])
+    error_message = "Every external_dns_record_name_patterns entry must be a non-empty string."
+  }
+}
+
 variable "external_secrets_ssm_path_prefixes" {
   description = "SSM parameter path prefixes, such as /platform/, that External Secrets may read through its own pod identity role. Each starts with a slash. An empty list creates no role: External Secrets keeps using the node role."
   type        = list(string)

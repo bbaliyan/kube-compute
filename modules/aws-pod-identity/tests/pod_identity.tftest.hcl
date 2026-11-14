@@ -258,3 +258,41 @@ run "the_ssm_region_can_differ_from_the_cluster_region" {
     error_message = "the SSM region input must reach the policy"
   }
 }
+
+run "external_dns_has_no_condition_by_default" {
+  command = plan
+
+  variables {
+    external_dns_hosted_zone_ids = ["Z0123456789ABC"]
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(aws_iam_role_policy.workload["external_dns"].policy).Statement[0]), "Condition")
+    error_message = "with no record name patterns the statement must carry no Condition"
+  }
+}
+
+run "external_dns_record_name_patterns_become_a_condition" {
+  command = plan
+
+  variables {
+    external_dns_hosted_zone_ids      = ["Z0123456789ABC"]
+    external_dns_record_name_patterns = ["app.example.com", "sql*.example.com", "\\052.apps.example.com"]
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.workload["external_dns"].policy).Statement[0].Condition["ForAllValues:StringLike"]["route53:ChangeResourceRecordSetsNormalizedRecordNames"] == ["app.example.com", "sql*.example.com", "\\052.apps.example.com"]
+    error_message = "the patterns must reach the ForAllValues:StringLike condition unchanged"
+  }
+}
+
+run "external_dns_record_name_patterns_reject_an_empty_string" {
+  command = plan
+
+  variables {
+    external_dns_hosted_zone_ids      = ["Z0123456789ABC"]
+    external_dns_record_name_patterns = [""]
+  }
+
+  expect_failures = [var.external_dns_record_name_patterns]
+}

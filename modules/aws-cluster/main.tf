@@ -407,6 +407,7 @@ module "pod_identity" {
   autoscaling_enabled                = local.autoscaling_enabled
   autoscaling_group_arns             = local.autoscaling_group_arn_patterns
   external_dns_hosted_zone_ids       = var.external_dns_hosted_zone_ids
+  external_dns_record_name_patterns  = var.external_dns_record_name_patterns
   external_secrets_ssm_path_prefixes = var.external_secrets_ssm_path_prefixes
   external_secrets_ssm_region        = var.external_secrets_ssm_region
 }

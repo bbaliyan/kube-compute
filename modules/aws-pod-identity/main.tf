@@ -81,12 +81,19 @@ locals {
       external_dns = {
         Version = "2012-10-17"
         Statement = [
-          {
-            Sid      = "ChangeRecords"
-            Effect   = "Allow"
-            Action   = "route53:ChangeResourceRecordSets"
-            Resource = [for id in var.external_dns_hosted_zone_ids : "arn:aws:route53:::hostedzone/${id}"]
-          },
+          merge(
+            {
+              Sid      = "ChangeRecords"
+              Effect   = "Allow"
+              Action   = "route53:ChangeResourceRecordSets"
+              Resource = [for id in var.external_dns_hosted_zone_ids : "arn:aws:route53:::hostedzone/${id}"]
+            },
+            length(var.external_dns_record_name_patterns) > 0 ? {
+              Condition = {
+                "ForAllValues:StringLike" = { "route53:ChangeResourceRecordSetsNormalizedRecordNames" = var.external_dns_record_name_patterns }
+              }
+            } : {},
+          ),
           {
             Sid      = "ReadZones"
             Effect   = "Allow"
