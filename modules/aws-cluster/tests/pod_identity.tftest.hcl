@@ -59,4 +59,48 @@ run "pod_identity_can_be_turned_on" {
     condition     = output.pod_identity_issuer_url == "https://d111111abcdef8.cloudfront.net"
     error_message = "the issuer URL must reach the output"
   }
+  assert {
+    condition     = length(aws_iam_role_policy.pod_identity_keys) == 1 && aws_iam_role_policy.pod_identity_keys[0].policy == output.pod_identity_keys_put_policy_json
+    error_message = "the control-plane role must carry the keys put policy"
+  }
+  assert {
+    condition = (
+      local.platform_extra_helm_parameters["awsPodIdentity.enabled"] == "true" &&
+      contains(keys(local.platform_extra_helm_parameters), "awsPodIdentity.roles.ebsCsi") &&
+      !contains(keys(local.platform_extra_helm_parameters), "awsPodIdentity.roles.clusterAutoscaler") &&
+      !contains(keys(local.platform_extra_helm_parameters), "awsPodIdentity.roles.externalDns") &&
+      !contains(keys(local.platform_extra_helm_parameters), "awsPodIdentity.roles.externalSecrets")
+    )
+    error_message = "the platform gets the switch and only the roles that exist"
+  }
+}
+
+run "the_optional_roles_reach_the_platform" {
+  command = plan
+
+  variables {
+    pod_identity_enabled               = true
+    external_dns_hosted_zone_ids       = ["Z0123456789ABC"]
+    external_secrets_ssm_path_prefixes = ["/platform/"]
+    autoscaled_nodes = {
+      burst = { instance_types = ["m6i.large"], max_cpu_cores = 8, max_memory_gib = 32 }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for name in ["ebsCsi", "clusterAutoscaler", "externalDns", "externalSecrets"] :
+      contains(keys(local.platform_extra_helm_parameters), "awsPodIdentity.roles.${name}")
+    ])
+    error_message = "every role that exists must be a platform parameter"
+  }
+}
+
+run "pod_identity_off_adds_no_platform_parameter_and_no_policy" {
+  command = plan
+
+  assert {
+    condition     = !anytrue([for key in keys(local.platform_extra_helm_parameters) : startswith(key, "awsPodIdentity")]) && length(aws_iam_role_policy.pod_identity_keys) == 0
+    error_message = "with pod identity off the platform parameters and the roles are as before"
+  }
 }

@@ -335,3 +335,12 @@ variable "node_name_template" {
   }
 }
 
+
+variable "pod_identity" {
+  description = "Pod identity. issuer_url is the service-account-issuer flag of every server. keys_bucket is the S3 bucket where the genesis node publishes keys.json. Every node then sets its providerID and zone, region and instance-type labels. Null leaves it off. Changing it replaces the nodes."
+  type = object({
+    issuer_url  = string
+    keys_bucket = string
+  })
+  default = null
+}

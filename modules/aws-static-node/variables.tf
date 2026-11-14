@@ -187,3 +187,9 @@ variable "node_name_template" {
   }
 }
 
+
+variable "pod_identity_enabled" {
+  description = "Run the node with what pod identity needs: always the providerID, and the zone, region and instance-type labels. The EBS CSI driver reads them from the node. Changing it replaces the nodes."
+  type        = bool
+  default     = false
+}

@@ -211,7 +211,8 @@ resource "aws_vpc_security_group_egress_rule" "cluster_all" {
 module "boot_steps" {
   source = "../aws-boot-steps"
 
-  aws_provider_id = var.aws_provider_id
+  aws_provider_id      = var.aws_provider_id
+  pod_identity_enabled = var.pod_identity != null
 }
 
 module "node_bootstrap" {
@@ -247,6 +248,8 @@ module "node_bootstrap" {
   platform_helm_values_object     = each.key == "0" ? var.platform_helm_values_object : null
   extra_tags                      = var.extra_tags
   provider_steps                  = module.boot_steps.steps
+  service_account_issuer_url      = try(var.pod_identity.issuer_url, null)
+  service_account_keys_s3         = each.key == "0" && var.pod_identity != null ? { bucket = var.pod_identity.keys_bucket, region = var.aws_region } : null
   graceful_shutdown               = var.graceful_shutdown
   os_auto_updates                 = var.os_auto_updates
 }

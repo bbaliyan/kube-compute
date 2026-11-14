@@ -282,3 +282,28 @@ variable "provider_files" {
   }))
   default = []
 }
+
+variable "service_account_issuer_url" {
+  description = "Service account token issuer for every server. Sets the kube-apiserver flag service-account-issuer to this exact URL, with no trailing slash. Null keeps the RKE2 default issuer."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.service_account_issuer_url == null || (startswith(coalesce(var.service_account_issuer_url, "-"), "https://") && !endswith(coalesce(var.service_account_issuer_url, "-"), "/"))
+    error_message = "service_account_issuer_url must start with https:// and must not end with a slash: it has to equal the iss claim of the tokens."
+  }
+}
+
+variable "service_account_keys_s3" {
+  description = "Where the genesis node publishes the public signing keys of the service account issuer: an S3 bucket and its region. It uploads keys.json after the node is Ready. Needs service_account_issuer_url and an AWS node role that may put that one object. Null publishes nothing."
+  type = object({
+    bucket = string
+    region = string
+  })
+  default = null
+
+  validation {
+    condition     = var.service_account_keys_s3 == null || var.service_account_issuer_url != null
+    error_message = "service_account_keys_s3 needs service_account_issuer_url."
+  }
+}
