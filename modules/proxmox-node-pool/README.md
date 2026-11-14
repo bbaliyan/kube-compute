@@ -10,7 +10,7 @@ pin pods to. Pools of the same cluster need distinct names, or their VMs and sni
 collide. `node_taints` keeps every pod without a matching toleration off the pool.
 
 The pool that runs ingress sets `allowed_ingress_cidrs` and `ingress_ports`, which open
-those ports on its workers, and keeps `manage_wildcard_dns_record` on so the wildcard
+those ports on its workers. It also keeps `manage_wildcard_dns_record` on so the wildcard
 record points at them. Every other pool of the cluster turns the record off.
 
 ## Rolling to a new template
@@ -36,8 +36,8 @@ Terragrunt config. There is no Terraform-level dependency between the two siblin
 modules, and this pool never generates or owns a token itself.
 
 The cluster-wide firewall ipset name it references (`kube-compute-<cluster_name>-cluster`)
-is a plain deterministic-string convention computed locally from `cluster_name`,
-identical to the formula `proxmox-control-plane` computes to name the ipset it actually
+is a plain deterministic-string convention computed locally from `cluster_name`. It is
+identical to the formula `proxmox-control-plane` uses to name the ipset it actually
 creates. This pool never creates the ipset itself, only references it by name.
 
 ## Proxmox pool
@@ -48,11 +48,13 @@ creates. This pool never creates the ipset itself, only references it by name.
 
 ## Operational note: SSH connection bursts on apply
 
-See [proxmox-control-plane's README](../proxmox-control-plane/README.md#operational-note-ssh-connection-bursts-on-apply)
+See [proxmox-control-plane's
+README](../proxmox-control-plane/README.md#operational-note-ssh-connection-bursts-on-apply)
 — this module uploads the same kind of cloud-init snippets via the same `bpg/proxmox`
-SSH mechanism, and is equally subject to the SSH connection burst / `MaxStartups`
-interaction described there. It's most likely to surface when this module's apply
-overlaps with `proxmox-control-plane`'s for the same cluster.
+SSH mechanism. It is equally subject to the SSH connection burst / `MaxStartups`
+interaction described there. It's most likely to surface when this module's apply overlaps
+with `proxmox-control-plane`'s for the same cluster.
+
 
 ### Booting from a kube-images template
 
@@ -68,6 +70,6 @@ worker after `tofu apply` returns — tail `/var/log/kube-compute-bootstrap.log`
 node to watch it.
 
 Changing any of `node-bootstrap`'s inputs after a worker's first boot has no effect on
-that already-running worker — cloud-init reads its user-data once, on first boot, and
-the rendered snippet is stable/reused rather than triggering a VM replacement. Day-2
-config changes need a new worker (replace).
+that already-running worker. Cloud-init reads its user-data once, on first boot, and the
+rendered snippet is stable/reused rather than triggering a VM replacement. Day-2 config
+changes need a new worker (replace).

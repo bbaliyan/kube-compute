@@ -5,13 +5,13 @@ Provisions the control-plane node(s) for a single-cluster RKE2 deployment on Pro
 ## Join tokens and firewall ipset naming
 
 This module generates its own cluster join tokens (`random_password` resources) and
-exposes them as the `cluster_token`/`cluster_agent_token` outputs — there is no
-separate cluster-facts unit to pre-generate them. `cluster_token` is consumed by this
-module's own `node-bootstrap` calls (server-init and server-join alike);
-`cluster_agent_token` is meant to be handed to `proxmox-node-pool`'s own
-`cluster_agent_token` input by the consumer's Terragrunt config. There is no
-Terraform-level dependency between the two sibling modules — only a value passed
-through at that layer.
+exposes them as the `cluster_token`/`cluster_agent_token` outputs. There is no separate
+cluster-facts unit to pre-generate them. `cluster_token` is consumed by this module's own
+`node-bootstrap` calls (server-init and server-join alike). The consumer's Terragrunt
+config is meant to hand `cluster_agent_token` to `proxmox-node-pool`'s own
+`cluster_agent_token` input. There is no Terraform-level dependency between the two
+sibling modules — only a value passed through at that layer.
+
 
 Similarly, the cluster-wide firewall ipset name
 (`kube-compute-<cluster_name>-cluster`) is a plain deterministic-string
@@ -28,7 +28,7 @@ This matches the AWS modules, where the first node probes `registration_address`
 
 The first node repeats the probe for about 60 seconds. A slow DNS answer or a booting peer then does not hide the live cluster. The node writes the IP that answered into its join address, not the name.
 
-The wait costs time on every fresh multi-node boot, not only on a replacement. A new cluster has no live peer, so the first node waits the full 60 seconds before it starts etcd. The wait is bounded. A pass can run past 60 seconds, because a stale IP costs up to 10 seconds and a resolver can time out, but it cannot loop forever.
+The wait costs time on every fresh multi-node boot, not only on a replacement. A new cluster has no live peer, so the first node waits the full 60 seconds before it starts etcd. The wait is bounded. A pass can run past 60 seconds, because a stale IP costs up to 10 seconds and a resolver can time out. It cannot loop forever.
 
 If no peer answers, the first node starts a new cluster. This happens when you replace the first node while every peer is down. Replace the first node last, with every peer healthy.
 
@@ -77,19 +77,18 @@ Roll the control plane before the workers: a kubelet must not be newer than the 
 ## Operational note: SSH connection bursts on apply
 
 The `proxmox_virtual_environment_file` resources here (`vendor_data`, `node_init`,
-`network_data`) upload cloud-init snippets via SSH — this is how the `bpg/proxmox`
-provider handles snippet uploads, not something this module controls. Each upload opens
-its own SSH connection, and OpenTofu's default per-unit parallelism (10) means a single
-`apply` can already burst close to that many connections at once.
+`network_data`) upload cloud-init snippets via SSH. This is how the `bpg/proxmox` provider
+handles snippet uploads, not something this module controls. Each upload opens its own SSH
+connection. OpenTofu's default per-unit parallelism (10) means a single `apply` can
+already burst close to that many connections at once.
 
-If a consumer applies this module concurrently with another unit that also does SSH
-uploads — most commonly `proxmox-node-pool` against the same cluster — the combined
-burst can exceed the Proxmox host's SSH daemon `MaxStartups` (OpenSSH default
-`10:30:100`: begin randomly dropping unauthenticated connections once 10 are open at
-once). The failure surfaces as a `bpg/proxmox` SSH auth error on an otherwise-valid
-key/token (`ssh: unable to authenticate ... no supported methods remain`), lands on an
-arbitrary resource, and is non-deterministic — some uploads in the same apply succeed,
-others don't.
+Another unit that also does SSH uploads can run at the same time as this module. The most
+common case is `proxmox-node-pool` against the same cluster. Then the combined burst can
+exceed the Proxmox host's SSH daemon `MaxStartups`. The OpenSSH default is `10:30:100`,
+which begins randomly dropping unauthenticated connections once 10 are open at once. The
+failure surfaces as a `bpg/proxmox` SSH auth error on an otherwise-valid key/token (`ssh:
+unable to authenticate ... no supported methods remain`). It lands on an arbitrary
+resource and is non-deterministic. Some uploads in the same apply succeed, others don't.
 
 Two independent mitigations, not mutually exclusive:
 
@@ -111,13 +110,14 @@ only configures and starts it, assuming the binaries are already on disk. A stoc
 image has no RKE2, so the node would fail at `systemctl enable --now rke2-server.service`
 while `tofu apply` reported success.
 
-Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID. Nodes are **full**-cloned from it, so they never
-depend on the template surviving. The template carries OS prep, the RKE2 binaries
-(both server and agent units — the role is chosen at launch), the SELinux policy, the
-kernel modules, and the guest agent; this module supplies only per-cluster identity,
-secrets, and join logic, as a cloud-init payload rendered by `node-bootstrap`.
-Bootstrap runs asynchronously after `tofu apply` returns — tail
-`/var/log/kube-compute-bootstrap.log` on the node to watch it.
+Set `proxmox_template_vm_id` to a pre-baked kube-images VM template's ID. Nodes are
+**full**-cloned from it, so they never depend on the template surviving. The template
+carries OS prep, the RKE2 binaries, the SELinux policy, the kernel modules, and the guest
+agent. It holds both the server and agent units, because the role is chosen at launch.
+This module supplies only per-cluster identity, secrets, and join logic, as a cloud-init
+payload rendered by `node-bootstrap`. Bootstrap runs asynchronously after `tofu apply`
+returns — tail `/var/log/kube-compute-bootstrap.log` on the node to watch it.
+
 
 The first control-plane node clones the platform ref (`gitops_platform_repo_url` at `gitops_platform_revision`) before RKE2 starts. It takes the Cilium and Argo CD manifests from `bootstrap/rendered/` in the clone. The template holds neither, but it must hold git. See [`node-bootstrap`](../node-bootstrap/README.md).
 
@@ -131,12 +131,11 @@ the new content, and the VM keeps the file id it references. cloud-init reads us
 data only at the first boot, so the running node does not apply the change.
 
 To apply a change, replace the VM on purpose. The replaced VM boots with the current
-snippet. Use the steps of "Rolling to a new template", from step 3: they drain the
-node, replace an additional VM, verify it, and replace the first VM last. The
-addresses are `module.<name>.proxmox_virtual_environment_vm.control_plane["0"]` for
-the first VM and `module.<name>.proxmox_virtual_environment_vm.control_plane["1"]`
-for the second.
-Inside `proxmox-cluster`, put `module.control_plane.` before the resource type.
+snippet. Use the steps of "Rolling to a new template", from step 3. They drain the node,
+replace an additional VM, verify it, and replace the first VM last. The addresses are
+`module.<name>.proxmox_virtual_environment_vm.control_plane["0"]` for the first VM and
+`module.<name>.proxmox_virtual_environment_vm.control_plane["1"]` for the second. Inside
+`proxmox-cluster`, put `module.control_plane.` before the resource type.
 
 > **Warning:** Replacing a single-node cluster loses the cluster.
 
