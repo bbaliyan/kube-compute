@@ -159,6 +159,6 @@ output "pod_identity_role_arns" {
 }
 
 output "pod_identity_keys_put_policy_json" {
-  description = "Null unless pod_identity_enabled. IAM policy that allows s3:PutObject on the one signing keys object. Nothing attaches it yet."
+  description = "Null unless pod_identity_enabled. IAM policy that allows s3:PutObject on the one signing keys object. It is attached to the control-plane role."
   value       = one(module.pod_identity[*].keys_put_policy_json)
 }

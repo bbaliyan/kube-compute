@@ -243,6 +243,13 @@ locals {
     "  - rke2-cilium",
   ]))
 
+  # Every server signs and validates tokens, so every server needs the same issuer. A value here
+  # replaces RKE2's default issuer.
+  service_account_issuer_block = var.service_account_issuer_url == null ? "" : join("\n", [
+    "kube-apiserver-arg:",
+    "  - \"service-account-issuer=${var.service_account_issuer_url}\"",
+  ])
+
   node_label_block = length(var.node_labels) == 0 ? "" : join("\n", concat(
     ["node-label:"],
     [for k, v in var.node_labels : "  - \"${k}=${v}\""],
@@ -339,6 +346,7 @@ locals {
     { name = "start-agent", file = "52-start-agent.sh", enabled = local.is_agent },
     { name = "wait-ready-server", file = "60-wait-ready-server.sh", enabled = local.is_server },
     { name = "wait-ready-agent", file = "61-wait-ready-agent.sh", enabled = local.is_agent },
+    { name = "genesis-publish-service-account-keys", file = "65-genesis-publish-service-account-keys.sh", enabled = local.is_init && var.service_account_keys_s3 != null },
     { name = "genesis-cilium-handoff", file = "70-genesis-cilium-handoff.sh", enabled = local.render_cilium },
     { name = "genesis-argocd", file = "71-genesis-argocd.sh", enabled = local.render_argocd },
     { name = "finish", file = "99-finish.sh", enabled = true },
@@ -365,7 +373,7 @@ locals {
   #
   # Every key is always defined (empty where a role does not use it) so the
   # program can run under `set -u`.
-  node_config_values = {
+  node_config_values = merge({
     NODE_ROLE            = var.node_role
     REGISTRATION_ADDRESS = var.registration_address != null ? var.registration_address : ""
     # Space-separated because the program word-splits it. Addresses are IPs or
@@ -378,7 +386,12 @@ locals {
     WORKLOADS_APP_ENABLED   = local.workloads_app_enabled ? "1" : "0"
     # Empty when no CA is set.
     TRUSTED_CA_FILE = local.trusted_ca_present ? local.trusted_ca_path : ""
-  }
+    }, var.service_account_keys_s3 == null ? {} : {
+    # Only with the publish step, so a node without it renders the same file as before.
+    SERVICE_ACCOUNT_ISSUER_URL  = coalesce(var.service_account_issuer_url, "")
+    SERVICE_ACCOUNT_KEYS_BUCKET = var.service_account_keys_s3.bucket
+    SERVICE_ACCOUNT_KEYS_REGION = var.service_account_keys_s3.region
+  })
 
   # Single-quoted with the POSIX '\'' escape, the same way secrets.env is, so
   # any character in a value is safe to embed.
@@ -407,15 +420,16 @@ locals {
     local.node_taint_block,
     local.kubelet_resolv_conf_block,
     "",
-    ]) : join("\n", [
-    local.is_join ? local.join_server_line : "",
-    var.cluster_token != null ? "token: ${jsonencode(var.cluster_token)}" : "",
-    local.is_init && var.cluster_agent_token != null ? "agent-token: ${jsonencode(var.cluster_agent_token)}" : "",
-    local.tls_san_section,
-    local.server_static_block,
-    local.kubelet_resolv_conf_block,
-    "",
-  ])
+    ]) : join("\n", concat([
+      local.is_join ? local.join_server_line : "",
+      var.cluster_token != null ? "token: ${jsonencode(var.cluster_token)}" : "",
+      local.is_init && var.cluster_agent_token != null ? "agent-token: ${jsonencode(var.cluster_agent_token)}" : "",
+      local.tls_san_section,
+      local.server_static_block,
+      ], local.service_account_issuer_block == "" ? [] : [local.service_account_issuer_block], [
+      local.kubelet_resolv_conf_block,
+      "",
+  ]))
 
   # Worker only. The file can hold the token itself, so it is 0600. The boot step only reads it.
   secrets_env = join("\n", [

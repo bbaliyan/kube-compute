@@ -224,3 +224,37 @@ run "the_keys_policy_allows_one_object_and_is_not_attached" {
     error_message = "the policy must allow s3:PutObject on keys.json only"
   }
 }
+
+run "the_ssm_region_defaults_to_the_cluster_region" {
+  command = plan
+
+  variables {
+    external_secrets_ssm_path_prefixes = ["/platform/"]
+  }
+
+  assert {
+    condition = (
+      aws_iam_role_policy.workload["external_secrets"].policy == jsonencode(local.role_policies["external_secrets"]) &&
+      alltrue([for arn in local.ssm_parameter_arns : startswith(arn, "arn:aws:ssm:eu-west-1:")]) &&
+      local.role_policies["external_secrets"].Statement[1].Condition.StringEquals["kms:ViaService"] == "ssm.eu-west-1.amazonaws.com"
+    )
+    error_message = "the SSM region must default to aws_region"
+  }
+}
+
+run "the_ssm_region_can_differ_from_the_cluster_region" {
+  command = plan
+
+  variables {
+    external_secrets_ssm_path_prefixes = ["/platform/"]
+    external_secrets_ssm_region        = "eu-central-1"
+  }
+
+  assert {
+    condition = (
+      alltrue([for arn in local.ssm_parameter_arns : startswith(arn, "arn:aws:ssm:eu-central-1:")]) &&
+      local.role_policies["external_secrets"].Statement[1].Condition.StringEquals["kms:ViaService"] == "ssm.eu-central-1.amazonaws.com"
+    )
+    error_message = "the SSM region input must reach the policy"
+  }
+}

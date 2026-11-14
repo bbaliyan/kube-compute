@@ -71,10 +71,47 @@ locals {
 
   autoscaling_group_arns = flatten([for role in module.autoscaled_nodes : [for group in values(role.autoscaling_groups) : group.arn]])
 
+  # The same groups by name, from inputs only. The pod identity roles feed the control plane's
+  # user data, which the nodes of every group wait for. The real ARNs would close a loop. The
+  # group name is fixed by aws-node-pool, and the ARN carries an id in place of the wildcard.
+  autoscaling_group_arn_patterns = flatten([
+    for group, config in var.autoscaled_nodes : [
+      for type in config.instance_types :
+      "arn:aws:autoscaling:${var.aws_region}:${data.aws_caller_identity.kube_compute.account_id}:autoScalingGroup:*:autoScalingGroupName/kube-compute-${var.cluster_name}-${group}-${replace(type, ".", "-")}"
+    ]
+  ])
+
+  # The roles that exist, for the platform chart. A role that was not created has no parameter.
+  pod_identity_role_parameter_names = {
+    ebs_csi            = "ebsCsi"
+    cluster_autoscaler = "clusterAutoscaler"
+    external_dns       = "externalDns"
+    external_secrets   = "externalSecrets"
+  }
+
+  # Which roles exist follows the input flags that aws-pod-identity reads, not the ARNs. An ARN
+  # is unknown at plan time, so a filter on it would make the map keys unknown.
+  pod_identity_role_exists = {
+    ebs_csi            = true
+    cluster_autoscaler = local.autoscaling_enabled
+    external_dns       = length(var.external_dns_hosted_zone_ids) > 0
+    external_secrets   = length(var.external_secrets_ssm_path_prefixes) > 0
+  }
+
+  pod_identity_helm_parameters = var.pod_identity_enabled ? merge(
+    { "awsPodIdentity.enabled" = "true" },
+    {
+      for key, name in local.pod_identity_role_parameter_names :
+      "awsPodIdentity.roles.${name}" => module.pod_identity[0].role_arns[key]
+      if local.pod_identity_role_exists[key]
+    },
+  ) : {}
+
   # The metadata service guard refuses to render without awsRegion.
   platform_extra_helm_parameters = merge(
     var.platform_extra_helm_parameters,
     { awsRegion = var.aws_region },
+    local.pod_identity_helm_parameters,
     local.autoscaling_enabled ? {
       clusterAutoscalerEnabled       = "true"
       clusterAutoscalerCloudProvider = "aws"
@@ -175,6 +212,11 @@ module "control_plane" {
   graceful_shutdown                 = var.graceful_shutdown
   os_auto_updates                   = var.os_auto_updates
   node_name_template                = var.control_plane_node_name_template
+
+  pod_identity = var.pod_identity_enabled ? {
+    issuer_url  = one(module.pod_identity[*].issuer_url)
+    keys_bucket = one(module.pod_identity[*].bucket_name)
+  } : null
 }
 
 # See modules/aws-static-node/README.md for why named instances suit fixed roles.
@@ -190,6 +232,7 @@ module "static_nodes" {
   agent_token_ssm_parameter = module.control_plane.agent_token_ssm_parameter
   cluster_fqdn_suffix       = var.cluster_domain != null ? "${var.cluster_name}.${var.cluster_domain}" : null
   aws_provider_id           = local.autoscaling_enabled
+  pod_identity_enabled      = var.pod_identity_enabled
   graceful_shutdown         = var.graceful_shutdown
   os_auto_updates           = var.os_auto_updates
   node_name_template        = each.value.node_name_template
@@ -253,6 +296,8 @@ module "autoscaled_nodes" {
   graceful_shutdown   = var.graceful_shutdown
   os_auto_updates     = var.os_auto_updates
   extra_tags          = var.extra_tags
+
+  pod_identity_enabled = var.pod_identity_enabled
 }
 
 # The platform's controllers authenticate as the node they run on.
@@ -322,8 +367,17 @@ resource "aws_route53_record" "platform_wildcard" {
   records = values(module.static_nodes[var.platform_node_group].private_ips)
 }
 
-# The token issuer and per-workload roles for pod identity, off by default. Nothing uses them yet:
-# the node role keeps every permission it has.
+# The control plane's boot publishes the signing keys with this one permission. The bucket policy
+# makes the object write-once.
+resource "aws_iam_role_policy" "pod_identity_keys" {
+  count  = var.pod_identity_enabled ? 1 : 0
+  name   = "kube-compute-${var.cluster_name}-pod-identity-keys"
+  role   = module.control_plane.node_iam_role_name
+  policy = one(module.pod_identity[*].keys_put_policy_json)
+}
+
+# The token issuer and per-workload roles for pod identity, off by default. The servers sign tokens
+# with this issuer. The node role keeps every permission it has.
 module "pod_identity" {
   source = "../aws-pod-identity"
   count  = var.pod_identity_enabled ? 1 : 0
@@ -336,7 +390,8 @@ module "pod_identity" {
   })
 
   autoscaling_enabled                = local.autoscaling_enabled
-  autoscaling_group_arns             = local.autoscaling_group_arns
+  autoscaling_group_arns             = local.autoscaling_group_arn_patterns
   external_dns_hosted_zone_ids       = var.external_dns_hosted_zone_ids
   external_secrets_ssm_path_prefixes = var.external_secrets_ssm_path_prefixes
+  external_secrets_ssm_region        = var.external_secrets_ssm_region
 }

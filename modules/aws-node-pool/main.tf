@@ -69,7 +69,8 @@ module "node_iam" {
 module "boot_steps" {
   source = "../aws-boot-steps"
 
-  aws_provider_id = true
+  aws_provider_id      = true
+  pod_identity_enabled = var.pod_identity_enabled
 }
 
 # Every instance of a type boots the same render, so EC2 names the host rather than cloud-init.

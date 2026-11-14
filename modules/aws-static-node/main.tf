@@ -63,7 +63,8 @@ module "node_iam" {
 module "boot_steps" {
   source = "../aws-boot-steps"
 
-  aws_provider_id = var.aws_provider_id
+  aws_provider_id      = var.aws_provider_id
+  pod_identity_enabled = var.pod_identity_enabled
 }
 
 # One render per node, which is what lets set_hostname stay true here: an ASG's

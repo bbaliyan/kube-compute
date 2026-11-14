@@ -20,6 +20,7 @@ cluster-autoscaler and the AWS cloud controller manager find the instance of a n
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_aws_provider_id"></a> [aws\_provider\_id](#input\_aws\_provider\_id) | Registers the node with providerID aws:///<zone>/<instance-id> and the label node.kubernetes.io/instance-type, both read from EC2 metadata before RKE2 starts. cluster-autoscaler and the AWS cloud controller manager find the instance by providerID. | `bool` | `false` | no |
+| <a name="input_pod_identity_enabled"></a> [pod\_identity\_enabled](#input\_pod\_identity\_enabled) | Always register the node with its providerID and label it with its zone, region and instance type, read from EC2 metadata before RKE2 starts. The EBS CSI driver reads them from the node, so it needs no metadata service. Implies aws\_provider\_id. | `bool` | `false` | no |
 
 ### Outputs
 
