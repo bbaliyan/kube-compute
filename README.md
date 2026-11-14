@@ -1,19 +1,19 @@
 # kube-compute
 
-Reusable OpenTofu/Terragrunt modules for the compute layer of an RKE2 cluster —
-control-plane and worker nodes, the load balancer/VIP and DNS needed to reach them,
-and node-scoped firewalling — on the provider of choice (AWS, Proxmox, or Azure) with
-minimal per-provider code. Not a single node: a cluster is a **control plane**
+Reusable OpenTofu/Terragrunt modules for the compute layer of an RKE2 cluster. They cover
+control-plane and worker nodes, the load balancer/VIP and DNS needed to reach them, and
+node-scoped firewalling. They run on the provider of your choice (AWS, Proxmox, or Azure)
+with minimal per-provider code. Not a single node: a cluster is a **control plane**
 (control-plane node(s) plus cluster-wide resources) optionally joined by one or more
-**node pools**; `control_plane_count = 1` with no node pools is a complete
-single-node cluster.
+**node pools**. `control_plane_count = 1` with no node pools is a complete single-node
+cluster.
 
 This is the compute half of the stack — what runs *on top* (GitOps, platform services)
 is [`kube-platform`](https://github.com/bbaliyan/kube-platform).
 
 This repo contains **no environment-specific values**. Consumers supply their own inputs
-(VPC names, CA certs, registry mirrors, domains) and take each provider's cluster module
-from the OpenTofu Registry, from its mirror repo, or from here by git SHA -- see
+(VPC names, CA certs, registry mirrors, domains). They take each provider's cluster module
+from the OpenTofu Registry, from its mirror repo, or from here by git SHA. See
 [Releases](#releases).
 
 ## Modules
@@ -41,20 +41,22 @@ Both cluster modules exist because each registry mirror needs a root module, and
 
 ## Concepts
 
-- **Control plane and node pools** — a cluster is a **control plane** (its control-plane
-  node(s), plus cluster-wide resources: join tokens, cluster firewall, registration endpoint,
-  DNS) optionally joined by one or more **node pools**. `control_plane_count` sets how many
-  control-plane nodes it has — 1, 3, or 5. `control_plane_count = 1` with no node pools is a
-  complete single-node cluster on its own.
-- **`cluster_type`** — whether control-plane nodes run user workloads. `all_in_one` (default)
-  keeps them schedulable; every single-node cluster uses this. `dedicated_control_plane` taints
-  them so user workloads run only on node pools.
-- **Datastore** — every cluster, including single-node, runs RKE2 with embedded etcd (RKE2's
-  only supported datastore — no SQLite option), for one consistent datastore across topologies.
-- **Join flow** — a control plane generates a server token for control-plane nodes joining the
-  same control plane, and a separate agent token for node pools (SSM `SecureString` on AWS,
-  cloud-init on Proxmox, Key Vault once Azure exists). A compromised worker can rejoin only as a
-  worker, never as a control-plane/etcd member.
+- **Control plane and node pools** — a cluster is a **control plane**, optionally
+  joined by one or more **node pools**. The control plane holds its control-plane node(s)
+  and the cluster-wide resources: join tokens, cluster firewall, registration endpoint,
+  DNS. `control_plane_count` sets how many control-plane nodes it has — 1, 3, or 5.
+  `control_plane_count = 1` with no node pools is a complete single-node cluster on its
+  own.
+- **`cluster_type`** — whether control-plane nodes run user workloads. `all_in_one`
+  (default) keeps them schedulable; every single-node cluster uses this.
+  `dedicated_control_plane` taints them so user workloads run only on node pools.
+- **Datastore** — every cluster, including single-node, runs RKE2 with embedded etcd
+  (RKE2's only supported datastore — no SQLite option), for one consistent datastore
+  across topologies.
+- **Join flow** — a control plane generates a server token for control-plane nodes
+  joining the same control plane. It also generates a separate agent token for node pools
+  (SSM `SecureString` on AWS, cloud-init on Proxmox, Key Vault once Azure exists). A
+  compromised worker can rejoin only as a worker, never as a control-plane/etcd member.
 
 ### High availability (`control_plane_count = 3` or `5`)
 
@@ -65,22 +67,24 @@ Joining nodes use a stable `registration_address`. The providers differ in where
 
 The address comes from the provider:
 
-- **AWS** — an internal Network Load Balancer on port 6443; `registration_address` is its DNS
-  name.
-- **Azure** — not implemented (see `modules/azure-control-plane`'s README); an internal Standard
-  `azurerm_lb` on port 6443 is the intended design.
-- **Proxmox** — no managed load-balancer primitive, so joining control-plane nodes dial the
-  `genesis.<cluster>.<cluster_domain>` DNS name (`registration_address`). DNS is required for
-  more than one control-plane node, so set `cluster_domain` and `dns_server_address`.
-  `cluster_fqdn` is the stable multi-node address for clients outside the join flow. See
-  `modules/dns-registration`'s README. `tofu test` against a mocked provider and a rolling template
-  update of a three-node cluster on DHCP have validated the join flow and the DNS registration.
+- **AWS** — an internal Network Load Balancer on port 6443; `registration_address` is
+  its DNS name.
+- **Azure** — not implemented (see `modules/azure-control-plane`'s README); an internal
+  Standard `azurerm_lb` on port 6443 is the intended design.
+- **Proxmox** — no managed load-balancer primitive, so joining control-plane nodes dial
+  the `genesis.<cluster>.<cluster_domain>` DNS name (`registration_address`). DNS is
+  required for more than one control-plane node, so set `cluster_domain` and
+  `dns_server_address`. `cluster_fqdn` is the stable multi-node address for clients
+  outside the join flow. See `modules/dns-registration`'s README. `tofu test` against a
+  mocked provider has validated the join flow and the DNS registration. So has a rolling
+  template update of a three-node cluster on DHCP.
 
-On a multi-node cluster, the first control-plane node probes the live cluster at boot. If the
-cluster answers, the node joins it. If not, the node initializes a new cluster. On AWS it probes
-`registration_address`. On Proxmox its own join address points back at itself, so the first node
-resolves the cluster name `api.<cluster>.<cluster_domain>` and probes each IP that remains after
-it skips its own. It repeats the probe for about 60 seconds.
+
+On a multi-node cluster, the first control-plane node probes the live cluster at boot. If
+the cluster answers, the node joins it. If not, the node initializes a new cluster. On AWS
+it probes `registration_address`. On Proxmox its own join address points back at itself.
+So the first node resolves the cluster name `api.<cluster>.<cluster_domain>`, skips its
+own IP and probes each IP that remains. It repeats the probe for about 60 seconds.
 
 If no probed address answers, the node initializes a new cluster. So do not replace the first
 node in the same apply as every other control-plane node. Any HTTPS service that answers at a
@@ -94,9 +98,9 @@ also keeps its nodes on a new AMI.
 
 ### Endpoint options (AWS)
 
-`endpoint_mode` picks how joining nodes reach the registration endpoint: `loadbalancer`
-(the NLB above, default), `dns` (cheaper Route53 multivalue-answer records with
-CloudWatch-alarm-backed health checks), or `static` (bring your own address).
+`endpoint_mode` picks how joining nodes reach the registration endpoint. `loadbalancer` is
+the NLB above, and the default. `dns` uses cheaper Route53 multivalue-answer records with
+CloudWatch-alarm-backed health checks. `static` means you bring your own address.
 
 ## Releases
 
@@ -116,22 +120,22 @@ to the ones here, so a consumer can switch between the three sources without cha
 inputs.
 
 **To release, push a `vX.Y.Z` tag.** The `Release split` workflow builds each provider's
-tree, validates and tests it, and compares it with what the mirror already has. Where it
-differs, the workflow commits it to the mirror under the same tag and creates a GitHub
-release. The registry picks up the new tag by itself. A tag that changes only AWS modules
-releases only AWS, so a mirror's versions can skip numbers. To re-run a tag, or build one
-without pushing anything, run the workflow by hand from the Actions tab (`dry_run` is on
-by default).
+tree and validates and tests it. It then compares the tree with what the mirror already
+has. Where it differs, the workflow commits it to the mirror under the same tag and
+creates a GitHub release. The registry picks up the new tag by itself. A tag that changes
+only AWS modules releases only AWS, so a mirror's versions can skip numbers. To re-run a
+tag, or build one without pushing anything, run the workflow by hand from the Actions tab
+(`dry_run` is on by default).
 
 CI builds and tests both mirrors on every pull request, so a change that would break a
 release fails there.
 
 Clusters are disposable. A release can change resource addresses, and an upgrade is a rebuild.
 
-**To add a provider**, create `terraform-<provider>-kube-compute` as an empty public repo,
-add it to the `SPLIT_REPO_PAT` token's repositories, and add the provider to the matrix in
-both `release-split.yml` and `ci.yml`. Once the first release has been tagged there, submit
-it to the OpenTofu Registry by opening a "Submit new Module" issue on
+**To add a provider**, create `terraform-<provider>-kube-compute` as an empty public repo.
+Add it to the `SPLIT_REPO_PAT` token's repositories. Add the provider to the matrix in
+both `release-split.yml` and `ci.yml`. After the first release is tagged there, submit it
+to the OpenTofu Registry. To do this, open a "Submit new Module" issue on
 [opentofu/registry](https://github.com/opentofu/registry/issues/new/choose) that names the
 repo.
 
