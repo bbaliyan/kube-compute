@@ -3,7 +3,8 @@
 # for node-bootstrap's provider_steps and provider_files inputs. This module renders text
 # and creates nothing.
 locals {
-  initiator_name = "iqn.2026.lan.${var.cluster_name}:${coalesce(var.node_fqdn_label, var.node_name)}"
+  iscsi_enabled  = var.iscsi_initiator_prefix != null
+  initiator_name = local.iscsi_enabled ? "${var.iscsi_initiator_prefix}:${var.cluster_name}-${coalesce(var.node_fqdn_label, var.node_name)}" : ""
 
   dns_self_register_enabled = var.dns_self_register_zone != null && var.dns_self_register_zone != ""
 
@@ -55,12 +56,12 @@ locals {
   # The iSCSI file replaces the OS-generated random InitiatorName with one derived from
   # the node's identity, so the target-side allow-list is registered once, ahead of time.
   steps = concat(
-    var.iscsi_initiator_enabled ? [{ name = "iscsi-initiator", commands = [["systemctl", "restart", "iscsid"]] }] : [],
+    local.iscsi_enabled ? [{ name = "iscsi-initiator", commands = [["systemctl", "restart", "iscsid"]] }] : [],
     local.dns_self_register_enabled ? [{ name = "dns-self-register", commands = [["/bin/sh", "-c", local.dns_self_register_script]] }] : [],
   )
 
   files = concat(
-    var.iscsi_initiator_enabled ? [{
+    local.iscsi_enabled ? [{
       path        = "/etc/iscsi/initiatorname.iscsi"
       content     = "InitiatorName=${local.initiator_name}\n"
       permissions = "0644"

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 variables {
-  cluster_name = "demo"
-  node_name    = "demo-cp-0"
+  cluster_name           = "demo"
+  node_name              = "demo-cp-0"
+  iscsi_initiator_prefix = "iqn.2026-01.test.example"
 }
 
 run "the_iscsi_initiator_is_a_file_and_a_restart" {
@@ -23,7 +24,7 @@ run "the_iscsi_initiator_is_a_file_and_a_restart" {
     condition = (
       length(nonsensitive(output.files)) == 1 &&
       nonsensitive(output.files)[0].path == "/etc/iscsi/initiatorname.iscsi" &&
-      nonsensitive(output.files)[0].content == "InitiatorName=iqn.2026.lan.demo:cp-0\n" &&
+      nonsensitive(output.files)[0].content == "InitiatorName=iqn.2026-01.test.example:demo-cp-0\n" &&
       nonsensitive(output.files)[0].permissions == "0644"
     )
     error_message = "cloud-init must write the deterministic initiator name"
@@ -34,7 +35,7 @@ run "the_initiator_label_falls_back_to_the_node_name" {
   command = plan
 
   assert {
-    condition     = nonsensitive(output.files)[0].content == "InitiatorName=iqn.2026.lan.demo:demo-cp-0\n"
+    condition     = nonsensitive(output.files)[0].content == "InitiatorName=iqn.2026-01.test.example:demo-demo-cp-0\n"
     error_message = "without node_fqdn_label the node name names the initiator"
   }
 }
@@ -90,15 +91,25 @@ run "dns_self_registration_needs_its_server_and_key" {
   expect_failures = [var.dns_server_address, var.tsig_key_name, var.tsig_key_secret]
 }
 
-run "iscsi_can_be_turned_off" {
+run "without_a_prefix_the_os_keeps_its_initiator_name" {
   command = plan
 
   variables {
-    iscsi_initiator_enabled = false
+    iscsi_initiator_prefix = null
   }
 
   assert {
     condition     = length(output.steps) == 0 && length(nonsensitive(output.files)) == 0
-    error_message = "with iSCSI off and no DNS self-registration the module has no step"
+    error_message = "with no prefix and no DNS self-registration the module has no step"
   }
+}
+
+run "a_prefix_that_is_not_an_iqn_is_rejected" {
+  command = plan
+
+  variables {
+    iscsi_initiator_prefix = "iqn.2026.lan"
+  }
+
+  expect_failures = [var.iscsi_initiator_prefix]
 }

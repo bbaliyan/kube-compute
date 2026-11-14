@@ -22,7 +22,8 @@ locals {
 }
 
 module "control_plane" {
-  source = "../proxmox-control-plane"
+  source                 = "../proxmox-control-plane"
+  iscsi_initiator_prefix = var.iscsi_initiator_prefix
 
   cluster_name                      = var.cluster_name
   trusted_ca_pem                    = var.trusted_ca_pem
@@ -73,8 +74,9 @@ module "control_plane" {
 }
 
 module "node_pools" {
-  source   = "../proxmox-node-pool"
-  for_each = var.node_pools
+  source                 = "../proxmox-node-pool"
+  iscsi_initiator_prefix = var.iscsi_initiator_prefix
+  for_each               = var.node_pools
 
   cluster_name        = var.cluster_name
   pool_name           = each.key

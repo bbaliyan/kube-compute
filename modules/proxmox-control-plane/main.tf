@@ -121,9 +121,10 @@ module "boot_steps" {
 
   source = "../proxmox-boot-steps"
 
-  cluster_name    = var.cluster_name
-  node_name       = local.control_plane_names[each.key]
-  node_fqdn_label = "cp-${each.key}"
+  cluster_name           = var.cluster_name
+  node_name              = local.control_plane_names[each.key]
+  node_fqdn_label        = "cp-${each.key}"
+  iscsi_initiator_prefix = var.iscsi_initiator_prefix
 
   dns_self_register_zone        = each.key == "0" && var.dns_server_address != null ? local.dns_zone : null
   dns_self_register_record_name = each.key == "0" ? "genesis.${var.cluster_name}" : null

@@ -175,9 +175,10 @@ module "boot_steps" {
 
   for_each = { for i in range(var.desired_count) : tostring(i) => i }
 
-  cluster_name    = var.cluster_name
-  node_name       = local.worker_names[each.key]
-  node_fqdn_label = "${var.pool_name}-${each.key}"
+  cluster_name           = var.cluster_name
+  node_name              = local.worker_names[each.key]
+  node_fqdn_label        = "${var.pool_name}-${each.key}"
+  iscsi_initiator_prefix = var.iscsi_initiator_prefix
 }
 
 module "node_bootstrap" {
