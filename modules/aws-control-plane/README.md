@@ -177,24 +177,20 @@ endpoint at all.
 - **`static`** — creates no load balancer or DNS record; `static_registration_address` is used
   verbatim. For a consumer that already runs its own front end.
 
-## Inputs
+## Input notes
 
-See `variables.tf`. Environment-specific values are inputs — none are baked in. Compute sizing
+See the generated tables below. Environment-specific values are inputs — none are baked in. Compute sizing
 is AWS-native: `instance_type` (bundles vCPU+memory), `root_volume_size_gb`, `root_volume_type`.
 `os_image_ami_id` or `os_image_name` is required (see "Boot flow"). Join tokens and the cluster security group are **not** inputs — this
 module generates and owns them directly (see "Join flow").
 
-## Outputs
+## Outputs for workers
 
-Standardized across provider modules: `instance_id`, `cluster_ip`, `cluster_fqdn` (null when
-IP-only), `node_provider` (`"aws"`), `node_control_ref`. Plus `wildcard_dns_name`, `aws_region`,
-`node_arch`, `effective_ami_id`, `vpc_id`, `subnet_id`, `node_iam_role_name`. Join flow:
-`registration_address` (a node's private IP for `control_plane_count = 1`, otherwise shaped by
-`endpoint_mode`), `control_plane_node_refs` (every control-plane node, not just the first),
-`cluster_security_group_id`, and `agent_token_ssm_parameter`. An `aws-node-pool` unit reads
-the last two via a `dependency "control_plane"` block to attach workers to the cluster SG and
-fetch the agent token. Raw join token values are never outputs — workers only need the SSM
-parameter name.
+`registration_address` is a node's private IP for `control_plane_count = 1`. Otherwise `endpoint_mode`
+shapes it. `control_plane_node_refs` lists every control-plane node, not just the first.
+An `aws-node-pool` unit reads `cluster_security_group_id` and `agent_token_ssm_parameter` through a
+`dependency "control_plane"` block. It attaches workers to the cluster security group and fetches the
+agent token. Raw join token values are never outputs. Workers only need the SSM parameter name.
 
 ## Out of scope (lives in the consumer repo)
 

@@ -11,7 +11,7 @@ Pass the `steps` output to `provider_steps` and the `files` output to `provider_
 
 The `files` output carries the TSIG key, so it is sensitive.
 
-## Inputs
+## Inputs and outputs
 
 <!-- BEGIN_TF_DOCS -->
 ### Inputs
@@ -39,8 +39,6 @@ The `files` output carries the TSIG key, so it is sensitive.
 | <a name="output_files"></a> [files](#output\_files) | Value for node-bootstrap's provider\_files. Sensitive: it carries the TSIG key. |
 | <a name="output_steps"></a> [steps](#output\_steps) | Value for node-bootstrap's provider\_steps. |
 <!-- END_TF_DOCS -->
-
-The `steps` and `files` outputs are described above.
 
 The `dns_server_*` and `tsig_*` inputs configure the DNS update. They are ignored while `dns_self_register_zone` is null.
 

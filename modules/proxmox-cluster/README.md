@@ -16,7 +16,7 @@ depends on applying a worker pool while a separate control-plane change is in
 flight, stay on the split `proxmox-control-plane` + `proxmox-node-pool` layout
 instead (see below).
 
-## Inputs
+## Inputs of the control plane
 
 Every input `proxmox-control-plane` accepts is available unchanged — same name,
 type, default, and validation — at this module's own top level. See

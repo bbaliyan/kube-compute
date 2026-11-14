@@ -24,6 +24,5 @@ cluster-autoscaler and the AWS cloud controller manager find the instance of a n
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_steps"></a> [steps](#output\_steps) | Value for node-bootstrap's provider\_steps. |
+| <a name="output_steps"></a> [steps](#output\_steps) | Value for node-bootstrap's provider\_steps: a list of { name, commands } objects, one per enabled step. |
 <!-- END_TF_DOCS -->
-x
