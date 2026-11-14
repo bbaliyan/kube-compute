@@ -20,6 +20,10 @@ run "node_resources" {
     error_message = "IMDSv2 must be enforced (http_tokens=required)"
   }
   assert {
+    condition     = aws_instance.control_plane["0"].metadata_options[0].http_put_response_hop_limit == 3
+    error_message = "the default hop limit must stay 3 so pods behind Cilium can reach the metadata service"
+  }
+  assert {
     condition     = length(aws_instance.control_plane["0"].user_data_base64) > 0
     error_message = "instance must attach node-bootstrap user-data"
   }
@@ -55,20 +59,15 @@ run "node_resources" {
   }
 }
 
-run "imds_hop_limit_defaults_to_three_and_can_drop_to_one" {
-  command = plan
-
-  assert {
-    condition     = aws_instance.control_plane["0"].metadata_options[0].http_put_response_hop_limit == 3
-    error_message = "the default hop limit must stay 3 so pods behind Cilium can reach the metadata service"
-  }
-}
-
 run "imds_hop_limit_one_reaches_the_instance" {
-  command = plan
-
+  command = apply
   variables {
-    imds_hop_limit = 1
+    cluster_name          = "example"
+    aws_region            = "eu-west-1"
+    allowed_ingress_cidrs = ["10.0.0.0/8"]
+    subnet_id             = "subnet-abc"
+    os_image_ami_id       = "ami-0123456789abcdef0"
+    imds_hop_limit        = 1
   }
 
   assert {
