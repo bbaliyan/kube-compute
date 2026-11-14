@@ -74,11 +74,24 @@ variable "rejoin_probe_addresses" {
   default     = []
 }
 
-variable "agent_token_fetch_command" {
-  description = "Shell command that prints the rke2 agent join token to stdout on the node, for example a cloud CLI call that reads a secrets store. Required for node_role worker; ignored otherwise. Sensitive: it is written to the 0600 /opt/kube-compute/secrets.env."
+variable "agent_token" {
+  description = "The rke2 agent join token, used as it is. Set exactly one of agent_token and agent_token_ssm for node_role worker; ignored for other roles. Sensitive: it is written to the 0600 /opt/kube-compute/secrets.env."
   type        = string
   default     = null
   sensitive   = true
+}
+
+variable "agent_token_ssm" {
+  description = "Where the node reads the rke2 agent join token: the name of an SSM Parameter Store SecureString and its region. The node role must be allowed to read it. Set exactly one of agent_token and agent_token_ssm for node_role worker; ignored for other roles."
+  type = object({
+    parameter = string
+    region    = string
+  })
+  default = null
+  validation {
+    condition     = var.node_role != "worker" || (var.agent_token != null) != (var.agent_token_ssm != null)
+    error_message = "node_role worker needs exactly one of agent_token and agent_token_ssm."
+  }
 }
 
 variable "extra_tls_sans" {

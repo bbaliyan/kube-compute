@@ -84,7 +84,8 @@ run "a_joining_server_clones_nothing" {
 run "a_worker_clones_nothing" {
   command = plan
   variables {
-    node_role = "worker"
+    node_role   = "worker"
+    agent_token = "tok"
   }
   assert {
     condition = anytrue([

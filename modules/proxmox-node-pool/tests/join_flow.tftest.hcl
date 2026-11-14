@@ -46,7 +46,7 @@ run "worker_pool_wiring" {
       for k, snippet in proxmox_virtual_environment_file.node_init :
       anytrue([
         for f in yamldecode(snippet.source_raw[0].data).write_files :
-        strcontains(base64decode(f.content), "AGENT_TOKEN_FETCH_COMMAND='echo '\\''agent-secret-abc123'\\'''")
+        strcontains(base64decode(f.content), "AGENT_TOKEN='agent-secret-abc123'")
         if f.path == "/opt/kube-compute/secrets.env"
       ])
     ])
@@ -57,7 +57,7 @@ run "worker_pool_wiring" {
       for k, snippet in proxmox_virtual_environment_file.node_init :
       alltrue([
         for f in yamldecode(snippet.source_raw[0].data).write_files :
-        !strcontains(base64decode(f.content), "aws ssm") && !strcontains(base64decode(f.content), "amazon.aws")
+        !strcontains(base64decode(f.content), "AGENT_TOKEN_SSM_PARAMETER='/") && !strcontains(base64decode(f.content), "amazon.aws")
       ])
     ])
     error_message = "no part of a Proxmox worker's payload may reference an AWS SSM transport — there is no secret store here, so the token is embedded verbatim in an echo"

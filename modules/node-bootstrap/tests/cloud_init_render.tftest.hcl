@@ -234,11 +234,11 @@ run "worker_payload_skips_genesis_only_content" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    node_name                 = "test-worker-0"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
-    node_labels               = { "topology.kubernetes.io/zone" = "eu-west-1a" }
+    node_role            = "worker"
+    node_name            = "test-worker-0"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
+    node_labels          = { "topology.kubernetes.io/zone" = "eu-west-1a" }
   }
 
   # A worker's program has no genesis step at all, and its server URL is in config.yaml.
@@ -293,12 +293,12 @@ run "provider_steps_run_before_the_boot_program" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    node_name                 = "test-worker-0"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
-    provider_steps            = [{ name = "provider-one", commands = [["/bin/sh", "-c", "echo one"]] }]
-    provider_files            = [{ path = "/etc/provider-one", content = "one\n", permissions = "0600" }]
+    node_role            = "worker"
+    node_name            = "test-worker-0"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
+    provider_steps       = [{ name = "provider-one", commands = [["/bin/sh", "-c", "echo one"]] }]
+    provider_files       = [{ path = "/etc/provider-one", content = "one\n", permissions = "0600" }]
   }
 
   assert {
@@ -326,7 +326,8 @@ run "provider_step_names_must_be_unique" {
   command = plan
 
   variables {
-    node_role = "worker"
+    node_role   = "worker"
+    agent_token = "tok"
     provider_steps = [
       { name = "same", commands = [] },
       { name = "same", commands = [] },
@@ -340,10 +341,10 @@ run "no_provider_logic_in_the_module" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    node_name                 = "test-worker-0"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    node_name            = "test-worker-0"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
   }
 
   assert {
@@ -356,10 +357,10 @@ run "kubelet_reserves_resources_for_the_node_before_rke2_starts" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    node_name                 = "test-worker-0"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    node_name            = "test-worker-0"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
   }
 
   assert {
@@ -410,12 +411,12 @@ run "registry_mirror_pins_containerd_tls_to_the_trusted_ca" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    node_name                 = "test-worker-0"
-    registration_address      = "10.0.0.10"
-    agent_token_fetch_command = "echo tok"
-    registry_mirror_url       = "https://mirror.test"
-    trusted_ca_pem            = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
+    node_role            = "worker"
+    node_name            = "test-worker-0"
+    registration_address = "10.0.0.10"
+    agent_token          = "tok"
+    registry_mirror_url  = "https://mirror.test"
+    trusted_ca_pem       = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
   }
 
   assert {

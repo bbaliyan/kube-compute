@@ -20,7 +20,6 @@ locals {
 
   availability_zone = data.aws_subnet.selected.availability_zone
 
-  agent_token_fetch_command = "aws ssm get-parameter --name '${var.agent_token_ssm_parameter}' --with-decryption --query Parameter.Value --output text --region ${var.aws_region}"
 
   node_labels = merge(
     {
@@ -78,21 +77,24 @@ module "node_bootstrap" {
   source   = "../node-bootstrap"
   for_each = var.instance_type_max_sizes
 
-  cluster_name              = var.cluster_name
-  node_name                 = local.node_name
-  set_hostname              = false
-  node_role                 = "worker"
-  registration_address      = var.registration_address
-  agent_token_fetch_command = local.agent_token_fetch_command
-  node_labels               = local.node_labels
-  node_taints               = var.node_taints
-  trusted_ca_pem            = var.trusted_ca_pem
-  trusted_ca_in_image       = var.trusted_ca_in_image
-  registry_mirror_url       = var.registry_mirror_url
-  dns_servers               = var.dns_servers
-  provider_steps            = module.boot_steps.steps
-  graceful_shutdown         = var.graceful_shutdown
-  os_auto_updates           = var.os_auto_updates
+  cluster_name         = var.cluster_name
+  node_name            = local.node_name
+  set_hostname         = false
+  node_role            = "worker"
+  registration_address = var.registration_address
+  agent_token_ssm = {
+    parameter = var.agent_token_ssm_parameter
+    region    = var.aws_region
+  }
+  node_labels         = local.node_labels
+  node_taints         = var.node_taints
+  trusted_ca_pem      = var.trusted_ca_pem
+  trusted_ca_in_image = var.trusted_ca_in_image
+  registry_mirror_url = var.registry_mirror_url
+  dns_servers         = var.dns_servers
+  provider_steps      = module.boot_steps.steps
+  graceful_shutdown   = var.graceful_shutdown
+  os_auto_updates     = var.os_auto_updates
 }
 
 resource "aws_launch_template" "node" {

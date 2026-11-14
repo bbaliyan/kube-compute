@@ -123,9 +123,9 @@ run "agent_steps" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "api.test.example"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    registration_address = "api.test.example"
+    agent_token          = "tok"
   }
 
   assert {
@@ -156,7 +156,7 @@ run "a_server_program_has_no_agent_logic" {
   }
 
   assert {
-    condition     = !strcontains(local.bootstrap_program, "rke2-agent") && !strcontains(local.bootstrap_program, "AGENT_TOKEN_FETCH_COMMAND")
+    condition     = !strcontains(local.bootstrap_program, "rke2-agent") && !strcontains(local.bootstrap_program, "AGENT_TOKEN")
     error_message = "a server's program must hold no agent logic"
   }
 }
@@ -165,10 +165,10 @@ run "the_ca_is_a_file_and_a_command_not_shell_logic" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "api.test.example"
-    agent_token_fetch_command = "echo tok"
-    trusted_ca_pem            = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
+    node_role            = "worker"
+    registration_address = "api.test.example"
+    agent_token          = "tok"
+    trusted_ca_pem       = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
   }
 
   assert {
@@ -192,11 +192,11 @@ run "an_image_ca_is_checked_before_the_trust_store_is_rebuilt" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "api.test.example"
-    agent_token_fetch_command = "echo tok"
-    trusted_ca_pem            = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
-    trusted_ca_in_image       = true
+    node_role            = "worker"
+    registration_address = "api.test.example"
+    agent_token          = "tok"
+    trusted_ca_pem       = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
+    trusted_ca_in_image  = true
   }
 
   assert {
@@ -242,10 +242,10 @@ run "a_failed_earlier_step_or_a_missing_ca_stops_the_boot_program" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "api.test.example"
-    agent_token_fetch_command = "echo tok"
-    trusted_ca_pem            = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
+    node_role            = "worker"
+    registration_address = "api.test.example"
+    agent_token          = "tok"
+    trusted_ca_pem       = "-----BEGIN CERTIFICATE-----\nZHVtbXk=\n-----END CERTIFICATE-----\n"
   }
 
   assert {
@@ -273,9 +273,9 @@ run "without_a_ca_the_boot_needs_no_ca_tool_or_file" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "api.test.example"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    registration_address = "api.test.example"
+    agent_token          = "tok"
   }
 
   assert {
@@ -296,9 +296,9 @@ run "a_failed_boot_program_fails_cloud_init_even_with_os_updates" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "api.test.example"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    registration_address = "api.test.example"
+    agent_token          = "tok"
   }
 
   assert {
@@ -323,9 +323,9 @@ run "the_agent_token_is_written_as_a_quoted_scalar" {
   command = plan
 
   variables {
-    node_role                 = "worker"
-    registration_address      = "api.test.example"
-    agent_token_fetch_command = "echo tok"
+    node_role            = "worker"
+    registration_address = "api.test.example"
+    agent_token          = "tok"
   }
 
   assert {

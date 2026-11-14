@@ -251,12 +251,12 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 - The CNI is always Cilium. On a genesis node, the boot program applies the Cilium
   manifest from the platform ref. `config.yaml` sets `disable: [rke2-cilium]` so RKE2's
   own Cilium chart never runs.
-- `cluster_token`, `cluster_agent_token`, `agent_token_fetch_command` and
+- `cluster_token`, `cluster_agent_token`, `agent_token` and
   `trusted_ca_pem` are `sensitive = true`. They reach the node only in the base64
   `write_files` of the payload, such as the 0600 `/etc/rancher/rke2/config.yaml`.
   `server-join` receives `cluster_token` the same way `server-init` does. Only `worker`
-  runs `agent_token_fetch_command`, to read the agent token from the provider's secret
-  store.
+  reads the agent token: from `agent_token` as it is, or from the SSM parameter in
+  `agent_token_ssm` with its node role. It never evaluates a command.
 - `aws-node-pool` sets `set_hostname = false`, because every member of a pool shares one
   rendered payload.
 
@@ -267,7 +267,8 @@ reads to report that a node needs a reboot. False leaves the node's packages as 
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_agent_token_fetch_command"></a> [agent\_token\_fetch\_command](#input\_agent\_token\_fetch\_command) | Shell command that prints the rke2 agent join token to stdout on the node, for example a cloud CLI call that reads a secrets store. Required for node\_role worker; ignored otherwise. Sensitive: it is written to the 0600 /opt/kube-compute/secrets.env. | `string` | `null` | no |
+| <a name="input_agent_token"></a> [agent\_token](#input\_agent\_token) | The rke2 agent join token, used as it is. Set exactly one of agent\_token and agent\_token\_ssm for node\_role worker; ignored for other roles. Sensitive: it is written to the 0600 /opt/kube-compute/secrets.env. | `string` | `null` | no |
+| <a name="input_agent_token_ssm"></a> [agent\_token\_ssm](#input\_agent\_token\_ssm) | Where the node reads the rke2 agent join token: the name of an SSM Parameter Store SecureString and its region. The node role must be allowed to read it. Set exactly one of agent\_token and agent\_token\_ssm for node\_role worker; ignored for other roles. | <pre>object({<br/>    parameter = string<br/>    region    = string<br/>  })</pre> | `null` | no |
 | <a name="input_cert_mode"></a> [cert\_mode](#input\_cert\_mode) | Certificate issuer mode deployed by kube-platform. 'selfsigned' needs no dependencies. 'byo' expects a Secret named byo-ca-tls in the cert-manager namespace. 'acme' requires DNS-01 config (separate setup). | `string` | `"selfsigned"` | no |
 | <a name="input_cluster_agent_token"></a> [cluster\_agent\_token](#input\_cluster\_agent\_token) | Separate secret accepted only from agents (config.yaml agent-token), so a worker can join as an agent but never as a server. Used only for server-init. Sensitive: written to the 0600 /etc/rancher/rke2/config.yaml. | `string` | `null` | no |
 | <a name="input_cluster_fqdn"></a> [cluster\_fqdn](#input\_cluster\_fqdn) | Optional DNS name for the API/kubeconfig server and an extra TLS SAN. Null = use the node IP only. | `string` | `null` | no |
