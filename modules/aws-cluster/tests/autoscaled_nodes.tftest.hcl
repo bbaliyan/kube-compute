@@ -30,8 +30,8 @@ run "no_roles_means_no_autoscaling" {
     error_message = "without autoscaled_nodes nothing may be created for autoscaling"
   }
   assert {
-    condition     = length(local.platform_extra_helm_parameters) == 0
-    error_message = "without autoscaled_nodes the platform Application must be unchanged, or every existing control plane is replaced"
+    condition     = length(local.platform_extra_helm_parameters) == 1 && local.platform_extra_helm_parameters.awsRegion == "eu-west-1"
+    error_message = "without autoscaled_nodes the platform Application must carry only the region, which the metadata service guard needs"
   }
 }
 

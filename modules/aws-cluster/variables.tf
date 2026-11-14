@@ -114,6 +114,12 @@ variable "platform_helm_values_object" {
   default     = null
 }
 
+variable "imds_allowed_extra_namespaces" {
+  description = "Namespaces whose pods may reach the instance metadata service, on top of the platform's own (kube-system, external-secrets, cluster-autoscaler, external-dns). Other pods are blocked. A pod in the list can read the node's user data and role credentials."
+  type        = list(string)
+  default     = []
+}
+
 variable "extra_tags" {
   description = "Additional tags applied to every AWS resource this module creates (EC2 instance, root EBS volume, security group, IAM role), and forwarded to node-bootstrap so platform-managed resources (e.g. CSI-provisioned storage) can tag themselves consistently."
   type        = map(string)
