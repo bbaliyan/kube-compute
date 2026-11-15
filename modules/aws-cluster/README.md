@@ -15,7 +15,7 @@ module "cluster" {
   aws_region            = "eu-west-1"
   allowed_ingress_cidrs = ["10.0.0.0/24"]
   subnet_names          = ["private-az1", "private-az2"]
-  os_image_name         = "almalinux10-*-kube-image-v1.36.2-*"
+  os_image_name         = "almalinux10-*-kube-node-v1.36.2-*"
   instance_type         = "t4g.large"
 
   static_nodes = {
